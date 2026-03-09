@@ -1,0 +1,308 @@
+-- Song table
+CREATE TABLE Song (
+    id TEXT NOT NULL PRIMARY KEY,
+    title TEXT NOT NULL,
+    duration INTEGER NOT NULL DEFAULT -1,
+    thumbnailUrl TEXT,
+    albumId TEXT,
+    albumName TEXT,
+    explicit INTEGER NOT NULL DEFAULT 0,
+    year INTEGER,
+    liked INTEGER NOT NULL DEFAULT 0,
+    likedDate TEXT,
+    totalPlayTime INTEGER NOT NULL DEFAULT 0,
+    inLibrary TEXT,
+    dateDownload TEXT,
+    isLocal INTEGER NOT NULL DEFAULT 0,
+    isDownloaded INTEGER NOT NULL DEFAULT 0,
+    localPath TEXT
+);
+
+CREATE INDEX song_album_idx ON Song(albumId);
+CREATE INDEX song_liked_idx ON Song(liked);
+CREATE INDEX song_inLibrary_idx ON Song(inLibrary);
+
+-- Album table
+CREATE TABLE Album (
+    id TEXT NOT NULL PRIMARY KEY,
+    playlistId TEXT,
+    title TEXT NOT NULL,
+    year INTEGER,
+    thumbnailUrl TEXT,
+    songCount INTEGER NOT NULL DEFAULT 0,
+    duration INTEGER NOT NULL DEFAULT 0,
+    explicit INTEGER NOT NULL DEFAULT 0,
+    lastUpdateTime TEXT NOT NULL,
+    bookmarkedAt TEXT,
+    inLibrary TEXT
+);
+
+CREATE INDEX album_bookmarked_idx ON Album(bookmarkedAt);
+
+-- Artist table
+CREATE TABLE Artist (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    thumbnailUrl TEXT,
+    channelId TEXT,
+    lastUpdateTime TEXT NOT NULL,
+    bookmarkedAt TEXT
+);
+
+CREATE INDEX artist_bookmarked_idx ON Artist(bookmarkedAt);
+
+-- Playlist table
+CREATE TABLE Playlist (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    browseId TEXT,
+    createdAt TEXT,
+    lastUpdateTime TEXT,
+    isEditable INTEGER NOT NULL DEFAULT 1,
+    bookmarkedAt TEXT,
+    remoteSongCount INTEGER,
+    thumbnailUrl TEXT
+);
+
+CREATE INDEX playlist_bookmarked_idx ON Playlist(bookmarkedAt);
+
+-- Song-Artist mapping
+CREATE TABLE SongArtistMap (
+    songId TEXT NOT NULL,
+    artistId TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (songId, artistId),
+    FOREIGN KEY (songId) REFERENCES Song(id) ON DELETE CASCADE,
+    FOREIGN KEY (artistId) REFERENCES Artist(id) ON DELETE CASCADE
+);
+
+CREATE INDEX song_artist_song_idx ON SongArtistMap(songId);
+CREATE INDEX song_artist_artist_idx ON SongArtistMap(artistId);
+
+-- Playlist-Song mapping
+CREATE TABLE PlaylistSongMap (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    playlistId TEXT NOT NULL,
+    songId TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (playlistId) REFERENCES Playlist(id) ON DELETE CASCADE,
+    FOREIGN KEY (songId) REFERENCES Song(id) ON DELETE CASCADE
+);
+
+CREATE INDEX playlist_song_playlist_idx ON PlaylistSongMap(playlistId);
+CREATE INDEX playlist_song_song_idx ON PlaylistSongMap(songId);
+
+-- Download queue table
+CREATE TABLE DownloadQueue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    songId TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL DEFAULT 'pending',
+    progress INTEGER NOT NULL DEFAULT 0,
+    addedAt TEXT NOT NULL,
+    error TEXT,
+    FOREIGN KEY (songId) REFERENCES Song(id) ON DELETE CASCADE
+);
+
+-- Search history
+CREATE TABLE SearchHistory (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    query TEXT NOT NULL UNIQUE,
+    searchedAt TEXT NOT NULL
+);
+
+-- Play queue persistence
+CREATE TABLE PlayQueue (
+    position INTEGER NOT NULL PRIMARY KEY,
+    songId TEXT NOT NULL,
+    title TEXT NOT NULL,
+    artist TEXT NOT NULL,
+    thumbnailUrl TEXT,
+    durationMs INTEGER NOT NULL DEFAULT 0,
+    album TEXT,
+    durationSec INTEGER NOT NULL DEFAULT -1
+);
+
+CREATE TABLE PlayQueueState (
+    id INTEGER NOT NULL PRIMARY KEY DEFAULT 0,
+    currentIndex INTEGER NOT NULL DEFAULT -1,
+    shuffleEnabled INTEGER NOT NULL DEFAULT 0,
+    repeatMode TEXT NOT NULL DEFAULT 'OFF',
+    positionMs INTEGER NOT NULL DEFAULT 0
+);
+
+-- ============ QUERIES ============
+
+-- Song queries
+getAllSongs:
+SELECT * FROM Song WHERE inLibrary IS NOT NULL ORDER BY inLibrary DESC;
+
+getLikedSongs:
+SELECT * FROM Song WHERE liked = 1 ORDER BY likedDate DESC;
+
+getDownloadedSongs:
+SELECT * FROM Song WHERE isDownloaded = 1 ORDER BY dateDownload DESC;
+
+getSongById:
+SELECT * FROM Song WHERE id = ?;
+
+getSongsByAlbum:
+SELECT * FROM Song WHERE albumId = ? ORDER BY id;
+
+insertSong:
+INSERT OR REPLACE INTO Song(id, title, duration, thumbnailUrl, albumId, albumName, explicit, year, liked, likedDate, totalPlayTime, inLibrary, dateDownload, isLocal, isDownloaded, localPath)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+updateSongLiked:
+UPDATE Song SET liked = ?, likedDate = ? WHERE id = ?;
+
+updateSongInLibrary:
+UPDATE Song SET inLibrary = ? WHERE id = ?;
+
+updateSongDownloaded:
+UPDATE Song SET isDownloaded = ?, dateDownload = ?, localPath = ? WHERE id = ?;
+
+deleteSong:
+DELETE FROM Song WHERE id = ?;
+
+searchSongs:
+SELECT * FROM Song WHERE title LIKE '%' || ? || '%' OR albumName LIKE '%' || ? || '%' LIMIT 50;
+
+-- Album queries
+getAllAlbums:
+SELECT * FROM Album WHERE bookmarkedAt IS NOT NULL OR inLibrary IS NOT NULL ORDER BY COALESCE(bookmarkedAt, inLibrary) DESC;
+
+getAlbumById:
+SELECT * FROM Album WHERE id = ?;
+
+insertAlbum:
+INSERT OR REPLACE INTO Album(id, playlistId, title, year, thumbnailUrl, songCount, duration, explicit, lastUpdateTime, bookmarkedAt, inLibrary)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+updateAlbumBookmarked:
+UPDATE Album SET bookmarkedAt = ? WHERE id = ?;
+
+deleteAlbum:
+DELETE FROM Album WHERE id = ?;
+
+-- Artist queries
+getAllArtists:
+SELECT * FROM Artist WHERE bookmarkedAt IS NOT NULL ORDER BY bookmarkedAt DESC;
+
+getArtistById:
+SELECT * FROM Artist WHERE id = ?;
+
+insertArtist:
+INSERT OR REPLACE INTO Artist(id, name, thumbnailUrl, channelId, lastUpdateTime, bookmarkedAt)
+VALUES (?, ?, ?, ?, ?, ?);
+
+updateArtistBookmarked:
+UPDATE Artist SET bookmarkedAt = ? WHERE id = ?;
+
+deleteArtist:
+DELETE FROM Artist WHERE id = ?;
+
+getArtistsForSong:
+SELECT Artist.* FROM Artist
+INNER JOIN SongArtistMap ON Artist.id = SongArtistMap.artistId
+WHERE SongArtistMap.songId = ?
+ORDER BY SongArtistMap.position;
+
+-- Playlist queries
+getAllPlaylists:
+SELECT * FROM Playlist ORDER BY COALESCE(bookmarkedAt, createdAt) DESC;
+
+getPlaylistById:
+SELECT * FROM Playlist WHERE id = ?;
+
+insertPlaylist:
+INSERT OR REPLACE INTO Playlist(id, name, browseId, createdAt, lastUpdateTime, isEditable, bookmarkedAt, remoteSongCount, thumbnailUrl)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+updatePlaylistBookmarked:
+UPDATE Playlist SET bookmarkedAt = ? WHERE id = ?;
+
+deletePlaylist:
+DELETE FROM Playlist WHERE id = ?;
+
+-- Playlist song queries
+getSongsForPlaylist:
+SELECT Song.* FROM Song
+INNER JOIN PlaylistSongMap ON Song.id = PlaylistSongMap.songId
+WHERE PlaylistSongMap.playlistId = ?
+ORDER BY PlaylistSongMap.position;
+
+getPlaylistSongCount:
+SELECT COUNT(*) FROM PlaylistSongMap WHERE playlistId = ?;
+
+insertPlaylistSong:
+INSERT OR REPLACE INTO PlaylistSongMap(playlistId, songId, position)
+VALUES (?, ?, ?);
+
+deletePlaylistSong:
+DELETE FROM PlaylistSongMap WHERE playlistId = ? AND songId = ?;
+
+clearPlaylistSongs:
+DELETE FROM PlaylistSongMap WHERE playlistId = ?;
+
+-- Song-Artist mapping queries
+insertSongArtistMap:
+INSERT OR REPLACE INTO SongArtistMap(songId, artistId, position)
+VALUES (?, ?, ?);
+
+deleteSongArtistMaps:
+DELETE FROM SongArtistMap WHERE songId = ?;
+
+-- Download queue queries
+getPendingDownloads:
+SELECT * FROM DownloadQueue WHERE status = 'pending' ORDER BY addedAt;
+
+getDownloadingItems:
+SELECT * FROM DownloadQueue WHERE status = 'downloading';
+
+insertDownloadQueue:
+INSERT OR REPLACE INTO DownloadQueue(songId, status, progress, addedAt, error)
+VALUES (?, ?, ?, ?, ?);
+
+updateDownloadProgress:
+UPDATE DownloadQueue SET progress = ?, status = ? WHERE songId = ?;
+
+updateDownloadError:
+UPDATE DownloadQueue SET error = ?, status = 'error' WHERE songId = ?;
+
+deleteFromDownloadQueue:
+DELETE FROM DownloadQueue WHERE songId = ?;
+
+clearCompletedDownloads:
+DELETE FROM DownloadQueue WHERE status = 'completed';
+
+-- Search history queries
+getSearchHistory:
+SELECT query FROM SearchHistory ORDER BY searchedAt DESC LIMIT 20;
+
+insertSearchHistory:
+INSERT OR REPLACE INTO SearchHistory(query, searchedAt)
+VALUES (?, ?);
+
+deleteSearchHistory:
+DELETE FROM SearchHistory WHERE query = ?;
+
+clearSearchHistory:
+DELETE FROM SearchHistory;
+
+-- Play queue queries
+getPlayQueue:
+SELECT * FROM PlayQueue ORDER BY position;
+
+insertPlayQueueItem:
+INSERT OR REPLACE INTO PlayQueue(position, songId, title, artist, thumbnailUrl, durationMs, album, durationSec)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+clearPlayQueue:
+DELETE FROM PlayQueue;
+
+getPlayQueueState:
+SELECT * FROM PlayQueueState WHERE id = 0;
+
+savePlayQueueState:
+INSERT OR REPLACE INTO PlayQueueState(id, currentIndex, shuffleEnabled, repeatMode, positionMs)
+VALUES (0, ?, ?, ?, ?);

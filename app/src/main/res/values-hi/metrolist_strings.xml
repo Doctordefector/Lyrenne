@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="local_history">स्थानीय</string>
+    <string name="back_button_desc">पीछे</string>
+    <string name="album_cover_desc">एल्बम आवरण</string>
+</resources>

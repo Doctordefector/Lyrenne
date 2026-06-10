@@ -18,6 +18,18 @@ enum class ThemeMode {
     LIGHT, DARK, SYSTEM
 }
 
+enum class ProxyType {
+    HTTP, SOCKS
+}
+
+enum class LibraryViewMode {
+    LIST, GRID
+}
+
+enum class LyricsPosition {
+    LEFT, CENTER, RIGHT
+}
+
 data class AppPreferences(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val audioQuality: AudioQuality = AudioQuality.HIGH,
@@ -44,6 +56,33 @@ data class AppPreferences(
     val eqPreset: String? = null, // null = custom
     val eqPreamp: Float = 12f,
     val eqBands: List<Float> = List(10) { 0f }, // 10-band gains in dB (-20 to +20)
+    // Playback extras
+    val playbackSpeed: Float = 1.0f,           // 0.25x - 3.0x
+    val crossfadeSec: Int = 0,                 // 0 = off, 1-12 seconds
+    val autoLoadRadio: Boolean = false,        // auto-queue related tracks near queue end
+    // Privacy
+    val pauseListenHistory: Boolean = false,
+    val pauseSearchHistory: Boolean = false,
+    // Content
+    val contentCountry: String = "system",     // ISO 3166-1 alpha-2 or "system"
+    val contentLanguage: String = "system",    // ISO 639-1 or "system"
+    val hideExplicit: Boolean = false,
+    val quickPicks: Boolean = true,            // show Quick picks section on home
+    val homeRandomize: Boolean = false,        // shuffle home section order
+    // Network proxy
+    val proxyEnabled: Boolean = false,
+    val proxyType: ProxyType = ProxyType.HTTP,
+    val proxyHost: String = "",
+    val proxyPort: Int = 8080,
+    val proxyUsername: String = "",
+    val proxyPassword: String = "",
+    // Library
+    val libraryViewMode: LibraryViewMode = LibraryViewMode.LIST,
+    val autoDownloadOnLike: Boolean = false,
+    // Lyrics display
+    val lyricsTextSize: Float = 16f,           // sp, 12-32
+    val lyricsPosition: LyricsPosition = LyricsPosition.LEFT,
+    val lyricsClickToSeek: Boolean = true,
 )
 
 object PreferencesManager {
@@ -93,6 +132,33 @@ object PreferencesManager {
                     eqBands = props.getProperty("eqBands")?.split(",")
                         ?.mapNotNull { it.trim().toFloatOrNull()?.coerceIn(-20f, 20f) }
                         ?.takeIf { it.size == 10 } ?: List(10) { 0f },
+                    playbackSpeed = props.getProperty("playbackSpeed")?.toFloatOrNull()?.coerceIn(0.25f, 3f) ?: 1f,
+                    crossfadeSec = props.getProperty("crossfadeSec")?.toIntOrNull()?.coerceIn(0, 12) ?: 0,
+                    autoLoadRadio = props.getProperty("autoLoadRadio")?.toBoolean() ?: false,
+                    pauseListenHistory = props.getProperty("pauseListenHistory")?.toBoolean() ?: false,
+                    pauseSearchHistory = props.getProperty("pauseSearchHistory")?.toBoolean() ?: false,
+                    contentCountry = props.getProperty("contentCountry") ?: "system",
+                    contentLanguage = props.getProperty("contentLanguage") ?: "system",
+                    hideExplicit = props.getProperty("hideExplicit")?.toBoolean() ?: false,
+                    quickPicks = props.getProperty("quickPicks")?.toBoolean() ?: true,
+                    homeRandomize = props.getProperty("homeRandomize")?.toBoolean() ?: false,
+                    proxyEnabled = props.getProperty("proxyEnabled")?.toBoolean() ?: false,
+                    proxyType = props.getProperty("proxyType")?.let {
+                        try { ProxyType.valueOf(it) } catch (_: Exception) { null }
+                    } ?: ProxyType.HTTP,
+                    proxyHost = props.getProperty("proxyHost") ?: "",
+                    proxyPort = props.getProperty("proxyPort")?.toIntOrNull()?.coerceIn(1, 65535) ?: 8080,
+                    proxyUsername = props.getProperty("proxyUsername") ?: "",
+                    proxyPassword = props.getProperty("proxyPassword") ?: "",
+                    libraryViewMode = props.getProperty("libraryViewMode")?.let {
+                        try { LibraryViewMode.valueOf(it) } catch (_: Exception) { null }
+                    } ?: LibraryViewMode.LIST,
+                    autoDownloadOnLike = props.getProperty("autoDownloadOnLike")?.toBoolean() ?: false,
+                    lyricsTextSize = props.getProperty("lyricsTextSize")?.toFloatOrNull()?.coerceIn(12f, 32f) ?: 16f,
+                    lyricsPosition = props.getProperty("lyricsPosition")?.let {
+                        try { LyricsPosition.valueOf(it) } catch (_: Exception) { null }
+                    } ?: LyricsPosition.LEFT,
+                    lyricsClickToSeek = props.getProperty("lyricsClickToSeek")?.toBoolean() ?: true,
                 )
             }
         } catch (e: Exception) {
@@ -129,6 +195,27 @@ object PreferencesManager {
             prefs.eqPreset?.let { props.setProperty("eqPreset", it) }
             props.setProperty("eqPreamp", prefs.eqPreamp.toString())
             props.setProperty("eqBands", prefs.eqBands.joinToString(","))
+            props.setProperty("playbackSpeed", prefs.playbackSpeed.toString())
+            props.setProperty("crossfadeSec", prefs.crossfadeSec.toString())
+            props.setProperty("autoLoadRadio", prefs.autoLoadRadio.toString())
+            props.setProperty("pauseListenHistory", prefs.pauseListenHistory.toString())
+            props.setProperty("pauseSearchHistory", prefs.pauseSearchHistory.toString())
+            props.setProperty("contentCountry", prefs.contentCountry)
+            props.setProperty("contentLanguage", prefs.contentLanguage)
+            props.setProperty("hideExplicit", prefs.hideExplicit.toString())
+            props.setProperty("quickPicks", prefs.quickPicks.toString())
+            props.setProperty("homeRandomize", prefs.homeRandomize.toString())
+            props.setProperty("proxyEnabled", prefs.proxyEnabled.toString())
+            props.setProperty("proxyType", prefs.proxyType.name)
+            props.setProperty("proxyHost", prefs.proxyHost)
+            props.setProperty("proxyPort", prefs.proxyPort.toString())
+            props.setProperty("proxyUsername", prefs.proxyUsername)
+            props.setProperty("proxyPassword", prefs.proxyPassword)
+            props.setProperty("libraryViewMode", prefs.libraryViewMode.name)
+            props.setProperty("autoDownloadOnLike", prefs.autoDownloadOnLike.toString())
+            props.setProperty("lyricsTextSize", prefs.lyricsTextSize.toString())
+            props.setProperty("lyricsPosition", prefs.lyricsPosition.name)
+            props.setProperty("lyricsClickToSeek", prefs.lyricsClickToSeek.toString())
 
             prefsFile.outputStream().use {
                 props.store(it, "Metrolist Desktop Preferences")
@@ -261,6 +348,97 @@ object PreferencesManager {
             )
             savePreferences()
         }
+    }
+
+    fun setPlaybackSpeed(speed: Float) {
+        _preferences.value = _preferences.value.copy(playbackSpeed = speed.coerceIn(0.25f, 3f))
+        savePreferences()
+    }
+
+    fun setCrossfadeSec(sec: Int) {
+        _preferences.value = _preferences.value.copy(crossfadeSec = sec.coerceIn(0, 12))
+        savePreferences()
+    }
+
+    fun setAutoLoadRadio(enabled: Boolean) {
+        _preferences.value = _preferences.value.copy(autoLoadRadio = enabled)
+        savePreferences()
+    }
+
+    fun setPauseListenHistory(paused: Boolean) {
+        _preferences.value = _preferences.value.copy(pauseListenHistory = paused)
+        savePreferences()
+    }
+
+    fun setPauseSearchHistory(paused: Boolean) {
+        _preferences.value = _preferences.value.copy(pauseSearchHistory = paused)
+        savePreferences()
+    }
+
+    fun setContentCountry(country: String) {
+        _preferences.value = _preferences.value.copy(contentCountry = country)
+        savePreferences()
+    }
+
+    fun setContentLanguage(language: String) {
+        _preferences.value = _preferences.value.copy(contentLanguage = language)
+        savePreferences()
+    }
+
+    fun setHideExplicit(hide: Boolean) {
+        _preferences.value = _preferences.value.copy(hideExplicit = hide)
+        savePreferences()
+    }
+
+    fun setQuickPicks(enabled: Boolean) {
+        _preferences.value = _preferences.value.copy(quickPicks = enabled)
+        savePreferences()
+    }
+
+    fun setHomeRandomize(enabled: Boolean) {
+        _preferences.value = _preferences.value.copy(homeRandomize = enabled)
+        savePreferences()
+    }
+
+    fun setProxyEnabled(enabled: Boolean) {
+        _preferences.value = _preferences.value.copy(proxyEnabled = enabled)
+        savePreferences()
+    }
+
+    fun setProxyConfig(type: ProxyType, host: String, port: Int, username: String, password: String) {
+        _preferences.value = _preferences.value.copy(
+            proxyType = type,
+            proxyHost = host,
+            proxyPort = port.coerceIn(1, 65535),
+            proxyUsername = username,
+            proxyPassword = password
+        )
+        savePreferences()
+    }
+
+    fun setLibraryViewMode(mode: LibraryViewMode) {
+        _preferences.value = _preferences.value.copy(libraryViewMode = mode)
+        savePreferences()
+    }
+
+    fun setAutoDownloadOnLike(enabled: Boolean) {
+        _preferences.value = _preferences.value.copy(autoDownloadOnLike = enabled)
+        savePreferences()
+    }
+
+    fun setLyricsTextSize(size: Float) {
+        _preferences.value = _preferences.value.copy(lyricsTextSize = size.coerceIn(12f, 32f))
+        savePreferences()
+    }
+
+    fun setLyricsPosition(position: LyricsPosition) {
+        _preferences.value = _preferences.value.copy(lyricsPosition = position)
+        savePreferences()
+    }
+
+    fun setLyricsClickToSeek(enabled: Boolean) {
+        _preferences.value = _preferences.value.copy(lyricsClickToSeek = enabled)
+        savePreferences()
     }
 
     fun getDownloadDirectory(): File {

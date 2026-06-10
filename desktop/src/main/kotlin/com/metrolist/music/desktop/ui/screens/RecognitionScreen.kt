@@ -45,6 +45,17 @@ fun RecognitionScreen(
             }
             result.onSuccess { recognitionResult ->
                 status = RecognitionStatus.Success(recognitionResult)
+                // Save to recognition history
+                scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                    try {
+                        com.metrolist.music.desktop.db.DatabaseHelper.insertRecognition(
+                            videoId = recognitionResult.youtubeVideoId,
+                            title = recognitionResult.title,
+                            artist = recognitionResult.artist,
+                            thumbnailUrl = recognitionResult.coverArtUrl
+                        )
+                    } catch (_: Exception) {}
+                }
             }.onFailure { error ->
                 val message = error.message ?: "Recognition failed"
                 if (message.contains("No match", ignoreCase = true)) {
@@ -90,7 +101,8 @@ fun RecognitionScreen(
                 is RecognitionStatus.Ready -> {
                     ReadyState(
                         hasMicrophone = hasMicrophone,
-                        onStart = ::startRecognition
+                        onStart = ::startRecognition,
+                        player = player
                     )
                 }
                 is RecognitionStatus.Listening -> {
@@ -128,11 +140,24 @@ fun RecognitionScreen(
 @Composable
 private fun ReadyState(
     hasMicrophone: Boolean,
-    onStart: () -> Unit
+    onStart: () -> Unit,
+    player: DesktopPlayer? = null
 ) {
+    val scope = rememberCoroutineScope()
+    var history by remember { mutableStateOf<List<com.metrolist.music.desktop.db.DatabaseHelper.Recognition>>(emptyList()) }
+    var refreshKey by remember { mutableStateOf(0) }
+
+    LaunchedEffect(refreshKey) {
+        history = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try { com.metrolist.music.desktop.db.DatabaseHelper.getRecognitionHistory() }
+            catch (_: Exception) { emptyList() }
+        }
+    }
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.fillMaxHeight().padding(vertical = 24.dp)
     ) {
         Icon(
             Icons.Default.Mic,
@@ -172,6 +197,65 @@ private fun ReadyState(
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.error
             )
+        }
+
+        // Recognition history
+        if (history.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.widthIn(max = 480.dp).fillMaxWidth()
+            ) {
+                Text(
+                    "Recently recognized",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = {
+                    scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                        com.metrolist.music.desktop.db.DatabaseHelper.clearRecognitionHistory()
+                        refreshKey++
+                    }
+                }) { Text("Clear") }
+            }
+            androidx.compose.foundation.lazy.LazyColumn(
+                modifier = Modifier.widthIn(max = 480.dp).weight(1f, fill = false)
+            ) {
+                items(history.size) { index ->
+                    val rec = history[index]
+                    ListItem(
+                        headlineContent = { Text(rec.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        supportingContent = { Text(rec.artist, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        leadingContent = {
+                            AsyncImage(
+                                model = rec.thumbnailUrl,
+                                contentDescription = null,
+                                modifier = Modifier.size(40.dp).clip(RoundedCornerShape(4.dp)),
+                                contentScale = ContentScale.Crop
+                            )
+                        },
+                        trailingContent = {
+                            if (rec.videoId != null && player != null) {
+                                IconButton(onClick = {
+                                    scope.launch {
+                                        player.playSong(
+                                            SongInfo(
+                                                id = rec.videoId,
+                                                title = rec.title,
+                                                artist = rec.artist,
+                                                thumbnailUrl = rec.thumbnailUrl
+                                            )
+                                        )
+                                    }
+                                }) {
+                                    Icon(Icons.Default.PlayArrow, "Play")
+                                }
+                            }
+                        }
+                    )
+                }
+            }
         }
     }
 }

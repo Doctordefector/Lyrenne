@@ -21,10 +21,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.History
 import coil3.compose.AsyncImage
 import com.metrolist.music.desktop.db.DatabaseHelper
+import com.metrolist.music.desktop.playback.DesktopPlayer
+import com.metrolist.music.desktop.playback.SongInfo
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 enum class StatPeriod(val label: String, val durationMs: Long) {
     WEEK_1("1 Week", 7L * 24 * 60 * 60 * 1000),
@@ -45,8 +54,10 @@ enum class StatPeriod(val label: String, val durationMs: Long) {
 fun StatsScreen(
     onBack: () -> Unit,
     onArtistClick: (String) -> Unit = {},
-    onAlbumClick: (String) -> Unit = {}
+    onAlbumClick: (String) -> Unit = {},
+    player: DesktopPlayer? = null
 ) {
+    var selectedTab by remember { mutableStateOf(0) }
     var selectedPeriod by remember { mutableStateOf(StatPeriod.MONTH_1) }
 
     var topSongs by remember { mutableStateOf<List<DatabaseHelper.SongStats>>(emptyList()) }
@@ -82,6 +93,19 @@ fun StatsScreen(
         }
 
         Spacer(Modifier.height(16.dp))
+
+        // Stats / History tabs
+        TabRow(selectedTabIndex = selectedTab, modifier = Modifier.width(320.dp)) {
+            Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("Stats") })
+            Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("History") })
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        if (selectedTab == 1) {
+            HistoryTab(player = player)
+            return@Column
+        }
 
         // Period selector chips
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -181,6 +205,115 @@ fun StatsScreen(
                     }
                 }
                 Spacer(Modifier.height(24.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun HistoryTab(player: DesktopPlayer?) {
+    val scope = rememberCoroutineScope()
+    var events by remember { mutableStateOf<List<DatabaseHelper.PlayEvent>>(emptyList()) }
+    var showClearDialog by remember { mutableStateOf(false) }
+    var refreshKey by remember { mutableStateOf(0) }
+
+    LaunchedEffect(refreshKey) {
+        events = withContext(Dispatchers.IO) { DatabaseHelper.getAllEvents() }
+    }
+
+    if (showClearDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearDialog = false },
+            title = { Text("Clear listen history?") },
+            text = { Text("This permanently deletes all ${events.size} history entries and resets your stats. This cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch(Dispatchers.IO) {
+                        DatabaseHelper.clearAllEvents()
+                        refreshKey++
+                    }
+                    showClearDialog = false
+                }) { Text("Clear", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (events.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    Icons.Default.History,
+                    contentDescription = null,
+                    modifier = Modifier.size(64.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    "No listen history yet",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        return
+    }
+
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "${events.size} entries",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(onClick = { showClearDialog = true }) {
+                Icon(Icons.Default.Delete, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Clear history")
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+
+        val dateFormat = remember { SimpleDateFormat("MMM d, yyyy  HH:mm", Locale.getDefault()) }
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            items(events.size) { index ->
+                val event = events[index]
+                ListItem(
+                    headlineContent = {
+                        Text(event.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    },
+                    supportingContent = {
+                        Text(
+                            "${dateFormat.format(Date(event.timestamp))}  •  played ${formatDuration(event.playTime)}",
+                            maxLines = 1
+                        )
+                    },
+                    leadingContent = {
+                        AsyncImage(
+                            model = event.thumbnailUrl,
+                            contentDescription = null,
+                            modifier = Modifier.size(44.dp).clip(RoundedCornerShape(4.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                    },
+                    modifier = if (player != null) {
+                        Modifier.clickable {
+                            scope.launch {
+                                player.playSong(
+                                    SongInfo(
+                                        id = event.songId,
+                                        title = event.title,
+                                        artist = event.albumName ?: "",
+                                        thumbnailUrl = event.thumbnailUrl
+                                    )
+                                )
+                            }
+                        }
+                    } else Modifier
+                )
             }
         }
     }

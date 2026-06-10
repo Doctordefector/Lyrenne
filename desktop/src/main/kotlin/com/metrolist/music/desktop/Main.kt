@@ -26,6 +26,40 @@ import kotlinx.coroutines.withContext
 import org.jetbrains.skia.Image
 import timber.log.Timber
 
+/**
+ * Apply content locale and proxy settings to the InnerTube client.
+ * Called at startup and whenever the user changes these settings.
+ */
+fun applyNetworkPreferences() {
+    val prefs = PreferencesManager.preferences.value
+    try {
+        val systemLocale = java.util.Locale.getDefault()
+        val gl = if (prefs.contentCountry == "system") systemLocale.country.ifEmpty { "US" } else prefs.contentCountry
+        val hl = if (prefs.contentLanguage == "system") systemLocale.language.ifEmpty { "en" } else prefs.contentLanguage
+        com.metrolist.innertube.YouTube.locale = com.metrolist.innertube.models.YouTubeLocale(gl = gl, hl = hl)
+
+        if (prefs.proxyEnabled && prefs.proxyHost.isNotBlank()) {
+            val type = when (prefs.proxyType) {
+                com.metrolist.music.desktop.settings.ProxyType.HTTP -> java.net.Proxy.Type.HTTP
+                com.metrolist.music.desktop.settings.ProxyType.SOCKS -> java.net.Proxy.Type.SOCKS
+            }
+            com.metrolist.innertube.YouTube.proxy = java.net.Proxy(
+                type,
+                java.net.InetSocketAddress(prefs.proxyHost, prefs.proxyPort)
+            )
+            com.metrolist.innertube.YouTube.proxyAuth = if (prefs.proxyUsername.isNotBlank()) {
+                "Basic " + java.util.Base64.getEncoder()
+                    .encodeToString("${prefs.proxyUsername}:${prefs.proxyPassword}".toByteArray())
+            } else null
+        } else {
+            com.metrolist.innertube.YouTube.proxy = null
+            com.metrolist.innertube.YouTube.proxyAuth = null
+        }
+    } catch (e: Exception) {
+        Timber.e("Failed to apply network preferences: ${e.message}")
+    }
+}
+
 fun main() {
     // Load icon once at startup from classpath resources (512x512 PNG)
     val appIcon = try {
@@ -45,6 +79,7 @@ fun main() {
     // Initialize core services before window (fast, no I/O)
     DatabaseHelper.initialize()
     PreferencesManager.initialize()
+    applyNetworkPreferences()
 
     application {
         val windowState = rememberWindowState(width = 1200.dp, height = 800.dp)

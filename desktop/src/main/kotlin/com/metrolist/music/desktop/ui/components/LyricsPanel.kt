@@ -23,6 +23,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.metrolist.music.desktop.lyrics.LyricsManager
 import com.metrolist.music.desktop.playback.DesktopPlayer
+import com.metrolist.music.desktop.settings.LyricsPosition
+import com.metrolist.music.desktop.settings.PreferencesManager
 
 @Composable
 fun LyricsPanel(
@@ -99,14 +101,32 @@ fun LyricsPanel(
                             )
                         }
                         lyricsState.syncedSentences != null -> {
+                            val prefs by PreferencesManager.preferences.collectAsState()
                             SyncedLyricsView(
                                 sentences = lyricsState.syncedSentences!!,
                                 positionMs = playerState.position,
-                                onSeek = { timestampMs -> player.seekTo(timestampMs) }
+                                textSize = prefs.lyricsTextSize,
+                                textAlign = when (prefs.lyricsPosition) {
+                                    LyricsPosition.LEFT -> TextAlign.Start
+                                    LyricsPosition.CENTER -> TextAlign.Center
+                                    LyricsPosition.RIGHT -> TextAlign.End
+                                },
+                                onSeek = if (prefs.lyricsClickToSeek) {
+                                    { timestampMs -> player.seekTo(timestampMs) }
+                                } else null
                             )
                         }
                         lyricsState.lyrics != null -> {
-                            PlainLyricsView(lyrics = lyricsState.lyrics!!)
+                            val prefs by PreferencesManager.preferences.collectAsState()
+                            PlainLyricsView(
+                                lyrics = lyricsState.lyrics!!,
+                                textSize = prefs.lyricsTextSize,
+                                textAlign = when (prefs.lyricsPosition) {
+                                    LyricsPosition.LEFT -> TextAlign.Start
+                                    LyricsPosition.CENTER -> TextAlign.Center
+                                    LyricsPosition.RIGHT -> TextAlign.End
+                                }
+                            )
                         }
                         else -> {
                             Text(
@@ -126,7 +146,9 @@ fun LyricsPanel(
 private fun SyncedLyricsView(
     sentences: Map<Long, String>,
     positionMs: Long,
-    onSeek: (Long) -> Unit
+    textSize: Float = 16f,
+    textAlign: TextAlign = TextAlign.Start,
+    onSeek: ((Long) -> Unit)? = null
 ) {
     val sortedEntries = remember(sentences) {
         sentences.entries.sortedBy { it.key }
@@ -180,7 +202,9 @@ private fun SyncedLyricsView(
                     accentColor = accentColor,
                     dimColor = dimColor,
                     upcomingColor = upcomingColor,
-                    onClick = { onSeek(entry.key) }
+                    baseSize = textSize,
+                    textAlign = textAlign,
+                    onClick = onSeek?.let { seek -> { seek(entry.key) } }
                 )
             } else {
                 Spacer(Modifier.height(20.dp))
@@ -199,7 +223,9 @@ private fun LyricsLine(
     accentColor: androidx.compose.ui.graphics.Color,
     dimColor: androidx.compose.ui.graphics.Color,
     upcomingColor: androidx.compose.ui.graphics.Color,
-    onClick: () -> Unit
+    baseSize: Float = 16f,
+    textAlign: TextAlign = TextAlign.Start,
+    onClick: (() -> Unit)? = null
 ) {
     // Animate scale: current line pops up to 1.05x like Android Metrolist
     val scale by animateFloatAsState(
@@ -230,7 +256,7 @@ private fun LyricsLine(
 
     // Animate font weight via fontSize (Compose doesn't animate FontWeight directly)
     val fontSize by animateFloatAsState(
-        targetValue = if (isCurrent) 20f else 16f,
+        targetValue = if (isCurrent) baseSize + 4f else baseSize,
         animationSpec = tween(durationMillis = 300)
     )
 
@@ -240,6 +266,7 @@ private fun LyricsLine(
         fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
         color = animatedColor,
         lineHeight = (fontSize + 6).sp,
+        textAlign = textAlign,
         modifier = Modifier
             .fillMaxWidth()
             .graphicsLayer {
@@ -248,20 +275,26 @@ private fun LyricsLine(
                 this.alpha = alpha
                 transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
             }
-            .clickable(onClick = onClick)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(vertical = 6.dp)
     )
 }
 
 @Composable
-private fun PlainLyricsView(lyrics: String) {
+private fun PlainLyricsView(
+    lyrics: String,
+    textSize: Float = 16f,
+    textAlign: TextAlign = TextAlign.Start
+) {
     LazyColumn {
         item {
             Text(
                 text = lyrics,
-                fontSize = 16.sp,
+                fontSize = textSize.sp,
                 color = MaterialTheme.colorScheme.onSurface,
-                lineHeight = 26.sp
+                lineHeight = (textSize + 10).sp,
+                textAlign = textAlign,
+                modifier = Modifier.fillMaxWidth()
             )
         }
         item { Spacer(Modifier.height(200.dp)) }

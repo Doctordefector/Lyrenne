@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.*
@@ -29,10 +30,14 @@ import com.metrolist.music.desktop.download.DownloadManager
 import com.metrolist.music.desktop.media.suppressMediaKeys
 import com.metrolist.music.desktop.playback.DesktopPlayer
 import com.metrolist.music.desktop.playback.SongInfo
+import com.metrolist.music.desktop.settings.PreferencesManager
+import com.metrolist.music.desktop.ui.components.PlaylistPickerDialog
 import com.metrolist.music.desktop.ui.screens.toSongInfo
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class SearchFilter(val value: String, val label: String) {
     All("", "All"),
@@ -65,6 +70,12 @@ fun SearchScreen(
         scope.launch {
             isLoading = true
             showSuggestions = false
+            // Record search history (unless paused in privacy settings)
+            if (!PreferencesManager.preferences.value.pauseSearchHistory) {
+                withContext(Dispatchers.IO) {
+                    try { DatabaseHelper.addSearchHistory(searchQuery.trim()) } catch (_: Exception) {}
+                }
+            }
             try {
                 val filter = if (selectedFilter == SearchFilter.All) {
                     YouTube.SearchFilter.FILTER_SONG
@@ -72,7 +83,8 @@ fun SearchScreen(
                     YouTube.SearchFilter(selectedFilter.value)
                 }
                 YouTube.search(searchQuery, filter).onSuccess { result ->
-                    searchResults = result.items
+                    val hideExplicit = PreferencesManager.preferences.value.hideExplicit
+                    searchResults = if (hideExplicit) result.items.filterNot { it.explicit } else result.items
                 }.onFailure {
                     searchResults = emptyList()
                 }
@@ -218,22 +230,68 @@ fun SearchScreen(
                     )
                 }
                 else -> {
-                    Column(
-                        modifier = Modifier.align(Alignment.Center),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            Icons.Default.Search,
-                            contentDescription = null,
-                            modifier = Modifier.size(64.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        Text(
-                            "Search for your favorite music",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    // Search history (when idle)
+                    val searchHistory by DatabaseHelper.getSearchHistory()
+                        .collectAsState(initial = emptyList())
+
+                    if (searchHistory.isNotEmpty()) {
+                        Column {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "Recent searches",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                TextButton(onClick = {
+                                    scope.launch(Dispatchers.IO) { DatabaseHelper.clearSearchHistory() }
+                                }) {
+                                    Text("Clear all")
+                                }
+                            }
+                            LazyColumn {
+                                items(searchHistory) { historyQuery ->
+                                    ListItem(
+                                        headlineContent = { Text(historyQuery) },
+                                        leadingContent = { Icon(Icons.Default.History, null) },
+                                        trailingContent = {
+                                            IconButton(onClick = {
+                                                scope.launch(Dispatchers.IO) {
+                                                    DatabaseHelper.deleteSearchHistory(historyQuery)
+                                                }
+                                            }) {
+                                                Icon(Icons.Default.Close, "Remove", modifier = Modifier.size(18.dp))
+                                            }
+                                        },
+                                        modifier = Modifier.clickable {
+                                            query = historyQuery
+                                            performSearch(historyQuery)
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        Column(
+                            modifier = Modifier.align(Alignment.Center),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                Icons.Default.Search,
+                                contentDescription = null,
+                                modifier = Modifier.size(64.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            Text(
+                                "Search for your favorite music",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }
@@ -248,7 +306,9 @@ private fun SearchResultItem(
     onClick: () -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
+    var showPlaylistPicker by remember { mutableStateOf(false) }
     val songInfo = remember(item) { item.toSongInfo() }
+    val scope = rememberCoroutineScope()
 
     ListItem(
         headlineContent = {
@@ -313,6 +373,22 @@ private fun SearchResultItem(
                             },
                             leadingIcon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, null) }
                         )
+                        DropdownMenuItem(
+                            text = { Text("Start Radio") },
+                            onClick = {
+                                showMenu = false
+                                scope.launch { player.startRadio(songInfo) }
+                            },
+                            leadingIcon = { Icon(Icons.Default.Radio, null) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Add to Playlist") },
+                            onClick = {
+                                showMenu = false
+                                showPlaylistPicker = true
+                            },
+                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null) }
+                        )
                         HorizontalDivider()
                         DropdownMenuItem(
                             text = { Text("Download") },
@@ -323,6 +399,14 @@ private fun SearchResultItem(
                             leadingIcon = { Icon(Icons.Default.Download, null) }
                         )
                     }
+                }
+                if (showPlaylistPicker) {
+                    val playlists by DatabaseHelper.getAllPlaylists().collectAsState(initial = emptyList())
+                    PlaylistPickerDialog(
+                        song = songInfo,
+                        playlists = playlists,
+                        onDismiss = { showPlaylistPicker = false }
+                    )
                 }
             } else {
                 val icon = when (item) {

@@ -19,15 +19,21 @@ import com.metrolist.innertube.YouTube
 import com.metrolist.innertube.models.*
 import com.metrolist.innertube.pages.HomePage
 import com.metrolist.music.desktop.auth.AuthManager
+import com.metrolist.music.desktop.db.DatabaseHelper
 import com.metrolist.music.desktop.playback.DesktopPlayer
 import com.metrolist.music.desktop.playback.SongInfo
+import com.metrolist.music.desktop.playback.toPlayerSongInfo
+import com.metrolist.music.desktop.settings.PreferencesManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 
 /** Simple in-memory cache for the home feed to avoid re-fetching on every navigation */
 private object HomeFeedCache {
     var cachedPage: HomePage? = null
     var cachedForLogin: Boolean? = null
+    var quickPicks: List<SongItem>? = null
 }
 
 @Composable
@@ -42,7 +48,33 @@ fun HomeScreen(
     var homePage by remember { mutableStateOf(HomeFeedCache.cachedPage) }
     var isLoading by remember { mutableStateOf(HomeFeedCache.cachedPage == null) }
     var error by remember { mutableStateOf<String?>(null) }
+    var quickPicks by remember { mutableStateOf(HomeFeedCache.quickPicks) }
     val authState by AuthManager.authState.collectAsState()
+    val prefs by PreferencesManager.preferences.collectAsState()
+
+    // Quick picks: related tracks seeded from the most recent listen
+    LaunchedEffect(prefs.quickPicks) {
+        if (!prefs.quickPicks) {
+            quickPicks = null
+            return@LaunchedEffect
+        }
+        if (HomeFeedCache.quickPicks != null) return@LaunchedEffect
+        try {
+            val lastEvent = withContext(Dispatchers.IO) {
+                DatabaseHelper.getAllEvents().firstOrNull()
+            } ?: return@LaunchedEffect
+            YouTube.next(WatchEndpoint(videoId = lastEvent.songId, playlistId = "RDAMVM${lastEvent.songId}"))
+                .onSuccess { next ->
+                    val picks = next.items.filter { it.id != lastEvent.songId }.take(20)
+                    quickPicks = picks
+                    HomeFeedCache.quickPicks = picks
+                }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.w("Quick picks failed: ${e.message}")
+        }
+    }
 
     // Re-fetch when auth state changes (e.g. after login) or if no cache
     LaunchedEffect(authState.isLoggedIn) {
@@ -131,6 +163,26 @@ fun HomeScreen(
                 }
             }
             homePage != null -> {
+                // Quick picks (based on your last listen) + sections with optional shuffle/explicit filter.
+                // remember keeps the shuffle order stable across recompositions.
+                val picks = remember(quickPicks, prefs.hideExplicit) {
+                    quickPicks
+                        ?.let { list -> if (prefs.hideExplicit) list.filterNot { it.explicit } else list }
+                        .orEmpty()
+                }
+                val sections = remember(homePage, prefs.homeRandomize, prefs.hideExplicit) {
+                    homePage?.sections.orEmpty()
+                        .let { if (prefs.homeRandomize) it.shuffled() else it }
+                        .map { section ->
+                            if (prefs.hideExplicit) {
+                                section to section.items.filterNot { it.explicit }
+                            } else {
+                                section to section.items
+                            }
+                        }
+                        .filter { it.second.isNotEmpty() }
+                }
+
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
@@ -141,11 +193,25 @@ fun HomeScreen(
                         )
                     }
 
-                    homePage?.sections?.forEach { section ->
+                    if (picks.isNotEmpty()) {
+                        item {
+                            HomeSection(
+                                title = "Quick picks",
+                                items = picks,
+                                player = player,
+                                onAlbumClick = onAlbumClick,
+                                onArtistClick = onArtistClick,
+                                onPlaylistClick = onPlaylistClick,
+                                onPodcastClick = onPodcastClick
+                            )
+                        }
+                    }
+
+                    sections.forEach { (section, items) ->
                         item {
                             HomeSection(
                                 title = section.title ?: "Recommended",
-                                items = section.items,
+                                items = items,
                                 player = player,
                                 onAlbumClick = onAlbumClick,
                                 onArtistClick = onArtistClick,

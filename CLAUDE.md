@@ -4,7 +4,7 @@
 Porting Metrolist (Android YouTube Music client) to desktop using Compose Desktop (JVM).
 - **Upstream**: https://github.com/mostafaalagamy/Metrolist (v13.3.0)
 - **Desktop module**: `desktop/` folder
-- **Shared modules**: `innertube/`, `lrclib/`, `kizzy/`, `lastfm/`, `shazamkit/` (sources included directly via `kotlin.srcDir()`, not as project dependencies)
+- **Shared modules**: `innertube/`, `lrclib/`, `betterlyrics/`, `kugou/`, `kizzy/`, `lastfm/`, `shazamkit/` (sources included directly via `kotlin.srcDir()`, not as project dependencies)
 - **Codebase**: ~12,000 lines of Kotlin across 34 files + 1 protobuf file
 
 ## Architecture
@@ -56,13 +56,39 @@ Porting Metrolist (Android YouTube Music client) to desktop using Compose Deskto
 - Music recognition via Shazam API (JVM microphone capture, Vibra FFT fingerprinting, shazamkit module)
 - Skip Silence (VLC compressor audio filter with aggressive threshold/ratio settings)
 - Normalize Audio (VLC normvol audio filter)
+- Equalizer (vlcj 10-band EQ, VLC presets + custom bands + preamp, real-time)
+- Listening stats (most played songs/artists/albums by period, totals) + listen history tab with clear
+- Playback speed control (0.25x–3x via VLC setRate, persisted, MiniPlayer menu)
+- Sleep timer (5-60 min or end-of-track, MiniPlayer menu)
+- Crossfade (early-transition + fade-in approach — VLC single decoder can't overlap; setting 0-12s)
+- Start Radio (RDAMVM radio queue from any song) + Auto-Queue Related Songs setting (appends near queue end)
+- Explore screen (new releases, moods & genres via innertube, Charts via generic BrowseScreen FEmusic_charts)
+- Generic BrowseScreen for any browseId (moods, charts drill-down)
+- Local playlists (create/rename/delete, add/remove songs, move up/down reorder, LocalPlaylistScreen)
+- Auto playlists (Liked Songs, Downloaded, Most Played) in Library playlists tab
+- PlaylistPickerDialog with inline "New playlist" creation
+- Context menus everywhere (MiniPlayer, search results, library songs: Play Next/Add Queue/Add to Playlist/Start Radio/Download/Like)
+- Auto-download on like (setting)
+- Search history (recorded on search, shown when idle, per-item delete + clear all, pause setting)
+- Hide explicit content filter (search, home, explore, browse)
+- Quick picks home section (radio seeded from last listen event, setting)
+- Randomize home sections (setting)
+- Lyrics: 5-provider chain (BetterLyrics → LrcLib → KuGou → YouTube lyrics → YouTube transcript)
+- Lyrics customization (text size 12-32pt, alignment left/center/right, click-to-seek toggle)
+- Recognition history (RecognitionHistory table, list on Ready state, play from history)
+- Privacy: pause listen history + pause search history settings
+- Content region/language settings (gl/hl via YouTube.locale, curated lists + system default)
+- Proxy support (HTTP/SOCKS + auth via YouTube.proxy/proxyAuth, settings UI, applyNetworkPreferences() in Main.kt)
+- Backup & restore (ZIP of preferences.properties + metrolist.db + credentials.json, BackupManager, restore needs restart)
+- Library grid/list view toggle (albums + artists tabs, LibraryViewMode pref)
+- Play All / Shuffle All buttons (library songs tab, local/auto playlists)
 
 ### Partially Implemented
-- Drag-to-reorder in queue (visual drag handle + pointerInput, reorder logic exists but needs polish)
+- Drag-to-reorder in queue (visual drag handle + pointerInput, reorder logic exists but needs polish; local playlists use menu-based Move Up/Down instead)
 
 ### Not Yet Implemented
-- Context menus on MiniPlayer / search results (Play Next, Add to Queue, Add to Playlist)
-- Play All / Shuffle All buttons in Library songs tab
+- AI lyrics translation (intentionally skipped — requires paid LLM API)
+- Per-song EQ profiles, loudness-enhancement beyond normvol
 
 ## Key Files
 
@@ -130,7 +156,13 @@ Porting Metrolist (Android YouTube Music client) to desktop using Compose Deskto
 | ui/screens/PlaylistScreen.kt | Playlist detail with pagination |
 | ui/screens/ListenTogetherScreen.kt | Room create/join, user list, suggestions, connection status |
 | ui/screens/PodcastScreen.kt | Podcast detail with episode list, Play All/Shuffle, context menus |
-| ui/screens/RecognitionScreen.kt | Music recognition UI (Ready/Listening/Processing/Success/Error states) |
+| ui/screens/RecognitionScreen.kt | Music recognition UI (Ready/Listening/Processing/Success/Error states) + recognition history |
+| ui/screens/ExploreScreen.kt | New releases, moods & genres grid, Charts entry (cached in-memory) |
+| ui/screens/BrowseScreen.kt | Generic browse detail for any browseId/params (moods, charts) |
+| ui/screens/LocalPlaylistScreen.kt | Local playlist detail (rename/delete/reorder/remove) + AutoPlaylistScreen (Liked/Downloaded/Most Played) |
+| ui/screens/StatsScreen.kt | Listening stats by period + History tab (all events, clear) |
+| ui/screens/EqualizerScreen.kt | 10-band EQ UI with presets |
+| backup/BackupManager.kt | ZIP export/import of preferences + DB + credentials |
 | ui/screens/ErrorUtils.kt | User-friendly error messages |
 
 #### UI Components

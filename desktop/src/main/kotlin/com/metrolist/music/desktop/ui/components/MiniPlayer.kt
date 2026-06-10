@@ -42,7 +42,10 @@ fun MiniPlayer(
     val scope = rememberCoroutineScope()
     var showSongMenu by remember { mutableStateOf(false) }
     var showPlaylistPicker by remember { mutableStateOf(false) }
+    var showSleepMenu by remember { mutableStateOf(false) }
+    var showSpeedMenu by remember { mutableStateOf(false) }
     val playlists by DatabaseHelper.getAllPlaylists().collectAsState(initial = emptyList())
+    val sleepTimer by player.sleepTimer.collectAsState()
 
     if (state.currentSong == null) {
         return // Don't show if nothing is playing
@@ -138,6 +141,14 @@ fun MiniPlayer(
                                 leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null) }
                             )
                         }
+                        DropdownMenuItem(
+                            text = { Text("Start Radio") },
+                            onClick = {
+                                showSongMenu = false
+                                scope.launch { player.startRadio(song) }
+                            },
+                            leadingIcon = { Icon(Icons.Default.Radio, null) }
+                        )
                         HorizontalDivider()
                         DropdownMenuItem(
                             text = { Text("Download") },
@@ -244,6 +255,101 @@ fun MiniPlayer(
                             MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(20.dp)
                     )
+                }
+
+                // Playback speed button
+                Box {
+                    val prefsForSpeed by PreferencesManager.preferences.collectAsState()
+                    IconButton(
+                        onClick = { showSpeedMenu = true },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Speed,
+                            contentDescription = "Playback speed",
+                            tint = if (prefsForSpeed.playbackSpeed != 1f)
+                                MaterialTheme.colorScheme.primary
+                            else
+                                MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = showSpeedMenu,
+                        onDismissRequest = { showSpeedMenu = false }
+                    ) {
+                        listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f).forEach { speed ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        if (speed == 1f) "Normal" else "${speed}x",
+                                        color = if (prefsForSpeed.playbackSpeed == speed)
+                                            MaterialTheme.colorScheme.primary
+                                        else
+                                            MaterialTheme.colorScheme.onSurface
+                                    )
+                                },
+                                onClick = {
+                                    player.setPlaybackSpeed(speed)
+                                    showSpeedMenu = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // Sleep timer button
+                Box {
+                    IconButton(
+                        onClick = { showSleepMenu = true },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Bedtime,
+                            contentDescription = "Sleep timer",
+                            tint = if (sleepTimer != null)
+                                MaterialTheme.colorScheme.primary
+                            else
+                                MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = showSleepMenu,
+                        onDismissRequest = { showSleepMenu = false }
+                    ) {
+                        if (sleepTimer != null) {
+                            val label = sleepTimer?.endsAtMillis?.let { endsAt ->
+                                val minLeft = ((endsAt - System.currentTimeMillis()) / 60000).coerceAtLeast(0)
+                                "Cancel timer ($minLeft min left)"
+                            } ?: "Cancel (end of track)"
+                            DropdownMenuItem(
+                                text = { Text(label) },
+                                onClick = {
+                                    player.cancelSleepTimer()
+                                    showSleepMenu = false
+                                },
+                                leadingIcon = { Icon(Icons.Default.Close, null) }
+                            )
+                            HorizontalDivider()
+                        }
+                        listOf(5, 10, 15, 30, 45, 60).forEach { minutes ->
+                            DropdownMenuItem(
+                                text = { Text("$minutes minutes") },
+                                onClick = {
+                                    player.startSleepTimer(minutes)
+                                    showSleepMenu = false
+                                }
+                            )
+                        }
+                        DropdownMenuItem(
+                            text = { Text("End of track") },
+                            onClick = {
+                                player.setSleepEndOfTrack()
+                                showSleepMenu = false
+                            }
+                        )
+                    }
                 }
 
                 Spacer(Modifier.width(8.dp))

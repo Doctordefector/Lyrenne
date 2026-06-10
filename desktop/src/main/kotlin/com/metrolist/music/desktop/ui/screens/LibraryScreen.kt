@@ -4,6 +4,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
@@ -51,7 +54,9 @@ fun LibraryScreen(
     player: DesktopPlayer,
     onAlbumClick: (String) -> Unit = {},
     onArtistClick: (String) -> Unit = {},
-    onPlaylistClick: (String) -> Unit = {}
+    onPlaylistClick: (String) -> Unit = {},
+    onLocalPlaylistClick: (String) -> Unit = {},
+    onAutoPlaylistClick: (com.metrolist.music.desktop.ui.AutoPlaylistType) -> Unit = {}
 ) {
     var selectedTab by remember { mutableStateOf(LibraryTab.Songs) }
     var searchQuery by remember { mutableStateOf("") }
@@ -93,7 +98,25 @@ fun LibraryScreen(
                 style = MaterialTheme.typography.headlineMedium
             )
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                // Grid/list view toggle (affects Albums + Artists tabs)
+                val prefs by com.metrolist.music.desktop.settings.PreferencesManager.preferences.collectAsState()
+                IconButton(onClick = {
+                    com.metrolist.music.desktop.settings.PreferencesManager.setLibraryViewMode(
+                        if (prefs.libraryViewMode == com.metrolist.music.desktop.settings.LibraryViewMode.LIST)
+                            com.metrolist.music.desktop.settings.LibraryViewMode.GRID
+                        else
+                            com.metrolist.music.desktop.settings.LibraryViewMode.LIST
+                    )
+                }) {
+                    Icon(
+                        if (prefs.libraryViewMode == com.metrolist.music.desktop.settings.LibraryViewMode.LIST)
+                            Icons.Default.GridView
+                        else
+                            Icons.Default.ViewList,
+                        contentDescription = "Toggle view mode"
+                    )
+                }
                 // Sync button
                 if (authState.isLoggedIn) {
                     if (syncState.isSyncing) {
@@ -213,7 +236,13 @@ fun LibraryScreen(
             LibraryTab.Songs -> SongsTab(librarySongs, likedSongs, player, artistNamesMap, searchQuery, sortMode, sortAscending, playlists)
             LibraryTab.Albums -> AlbumsTab(albums, onAlbumClick, searchQuery, sortMode, sortAscending)
             LibraryTab.Artists -> ArtistsTab(artists, onArtistClick, searchQuery, sortMode, sortAscending)
-            LibraryTab.Playlists -> PlaylistsTab(playlists, onPlaylistClick, searchQuery)
+            LibraryTab.Playlists -> PlaylistsTab(
+                playlists = playlists,
+                onPlaylistClick = onPlaylistClick,
+                onLocalPlaylistClick = onLocalPlaylistClick,
+                onAutoPlaylistClick = onAutoPlaylistClick,
+                searchQuery = searchQuery
+            )
             LibraryTab.Downloads -> DownloadsTab(downloadedSongs, activeDownloads, player, artistNamesMap, searchQuery, playlists)
         }
     }
@@ -408,10 +437,18 @@ private fun SongsTab(
                                 DownloadManager.queueDownload(song)
                             },
                             onToggleLike = {
-                                DatabaseHelper.updateSongLiked(dbSong.id, dbSong.liked != 1L)
+                                val nowLiked = dbSong.liked != 1L
+                                DatabaseHelper.updateSongLiked(dbSong.id, nowLiked)
+                                // Auto-download on like (optional setting)
+                                if (nowLiked && dbSong.isDownloaded != 1L &&
+                                    com.metrolist.music.desktop.settings.PreferencesManager.preferences.value.autoDownloadOnLike
+                                ) {
+                                    DownloadManager.queueDownload(song)
+                                }
                             },
                             onPlayNext = { player.addToQueueNext(song) },
-                            onAddToQueue = { player.addToQueue(song) }
+                            onAddToQueue = { player.addToQueue(song) },
+                            onStartRadio = { scope.launch { player.startRadio(song) } }
                         )
                     }
                 }
@@ -431,7 +468,8 @@ private fun SongListItem(
     onDownload: () -> Unit = {},
     onToggleLike: () -> Unit = {},
     onPlayNext: () -> Unit = {},
-    onAddToQueue: () -> Unit = {}
+    onAddToQueue: () -> Unit = {},
+    onStartRadio: (() -> Unit)? = null
 ) {
     var showMenu by remember { mutableStateOf(false) }
     var showPlaylistPicker by remember { mutableStateOf(false) }
@@ -522,14 +560,22 @@ private fun SongListItem(
                             },
                             leadingIcon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, null) }
                         )
-                        if (playlists.isNotEmpty()) {
+                        DropdownMenuItem(
+                            text = { Text("Add to Playlist") },
+                            onClick = {
+                                showMenu = false
+                                showPlaylistPicker = true
+                            },
+                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null) }
+                        )
+                        if (onStartRadio != null) {
                             DropdownMenuItem(
-                                text = { Text("Add to Playlist") },
+                                text = { Text("Start Radio") },
                                 onClick = {
+                                    onStartRadio()
                                     showMenu = false
-                                    showPlaylistPicker = true
                                 },
-                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null) }
+                                leadingIcon = { Icon(Icons.Default.Radio, null) }
                             )
                         }
                         HorizontalDivider()
@@ -603,12 +649,30 @@ private fun AlbumsTab(
         if (sortAscending && sortMode != SortMode.DATE_ADDED) sorted else if (sortMode == SortMode.DATE_ADDED) sorted else sorted.reversed()
     }
 
+    val viewMode = com.metrolist.music.desktop.settings.PreferencesManager.preferences
+        .collectAsState().value.libraryViewMode
+
     if (displayAlbums.isEmpty()) {
         EmptyLibraryMessage(
             icon = Icons.Default.Album,
             message = if (searchQuery.isNotBlank()) "No matching albums" else "No albums saved",
             subMessage = if (searchQuery.isNotBlank()) "Try a different search term" else "Sync your library to see saved albums"
         )
+    } else if (viewMode == com.metrolist.music.desktop.settings.LibraryViewMode.GRID) {
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 160.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(displayAlbums) { album ->
+                LibraryGridCard(
+                    title = album.title,
+                    subtitle = "${album.songCount} songs" + (album.year?.let { " \u2022 $it" } ?: ""),
+                    thumbnailUrl = album.thumbnailUrl,
+                    onClick = { onAlbumClick(album.id) }
+                )
+            }
+        }
     } else {
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -648,6 +712,65 @@ private fun AlbumsTab(
 }
 
 @Composable
+private fun LibraryGridCard(
+    title: String,
+    subtitle: String,
+    thumbnailUrl: String?,
+    isCircular: Boolean = false,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier.clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            if (thumbnailUrl != null) {
+                AsyncImage(
+                    model = thumbnailUrl,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1f)
+                        .clip(if (isCircular) RoundedCornerShape(50) else RoundedCornerShape(8.dp)),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1f)
+                        .clip(if (isCircular) RoundedCornerShape(50) else RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        if (isCircular) Icons.Default.Person else Icons.Default.Album,
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (subtitle.isNotEmpty()) {
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun ArtistsTab(
     artists: List<Artist>,
     onArtistClick: (String) -> Unit,
@@ -669,12 +792,31 @@ private fun ArtistsTab(
         if (sortAscending && sortMode == SortMode.NAME) sorted else if (sortMode == SortMode.DATE_ADDED) sorted else sorted.reversed()
     }
 
+    val viewMode = com.metrolist.music.desktop.settings.PreferencesManager.preferences
+        .collectAsState().value.libraryViewMode
+
     if (displayArtists.isEmpty()) {
         EmptyLibraryMessage(
             icon = Icons.Default.Person,
             message = if (searchQuery.isNotBlank()) "No matching artists" else "No artists followed",
             subMessage = if (searchQuery.isNotBlank()) "Try a different search term" else "Sync your library to see subscribed artists"
         )
+    } else if (viewMode == com.metrolist.music.desktop.settings.LibraryViewMode.GRID) {
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 160.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(displayArtists) { artist ->
+                LibraryGridCard(
+                    title = artist.name,
+                    subtitle = "",
+                    thumbnailUrl = artist.thumbnailUrl,
+                    isCircular = true,
+                    onClick = { onArtistClick(artist.id) }
+                )
+            }
+        }
     } else {
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -711,50 +853,182 @@ private fun ArtistsTab(
 private fun PlaylistsTab(
     playlists: List<Playlist>,
     onPlaylistClick: (String) -> Unit,
+    onLocalPlaylistClick: (String) -> Unit,
+    onAutoPlaylistClick: (com.metrolist.music.desktop.ui.AutoPlaylistType) -> Unit,
     searchQuery: String
 ) {
+    val scope = rememberCoroutineScope()
+    var showCreateDialog by remember { mutableStateOf(false) }
+    var newPlaylistName by remember { mutableStateOf("") }
+
     val filteredPlaylists = remember(playlists, searchQuery) {
         if (searchQuery.isBlank()) playlists
         else playlists.filter { it.name.lowercase().contains(searchQuery.lowercase()) }
     }
 
-    if (filteredPlaylists.isEmpty()) {
-        EmptyLibraryMessage(
-            icon = Icons.AutoMirrored.Filled.QueueMusic,
-            message = if (searchQuery.isNotBlank()) "No matching playlists" else "No playlists yet",
-            subMessage = if (searchQuery.isNotBlank()) "Try a different search term" else "Sync your library or create a playlist"
-        )
-    } else {
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            items(filteredPlaylists) { playlist ->
-                ListItem(
-                    headlineContent = { Text(playlist.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                    supportingContent = {
-                        Text("${playlist.remoteSongCount ?: 0} songs")
+    if (showCreateDialog) {
+        AlertDialog(
+            onDismissRequest = { showCreateDialog = false },
+            title = { Text("New playlist") },
+            text = {
+                OutlinedTextField(
+                    value = newPlaylistName,
+                    onValueChange = { newPlaylistName = it },
+                    placeholder = { Text("Playlist name") },
+                    singleLine = true,
+                    modifier = Modifier.suppressMediaKeys()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (newPlaylistName.isNotBlank()) {
+                            scope.launch(Dispatchers.IO) {
+                                DatabaseHelper.createLocalPlaylist(newPlaylistName.trim())
+                            }
+                            newPlaylistName = ""
+                            showCreateDialog = false
+                        }
                     },
+                    enabled = newPlaylistName.isNotBlank()
+                ) { Text("Create") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    LazyColumn(
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        // Create playlist button
+        item {
+            ListItem(
+                headlineContent = { Text("New playlist", color = MaterialTheme.colorScheme.primary) },
+                leadingContent = {
+                    Box(
+                        modifier = Modifier.size(56.dp).clip(RoundedCornerShape(4.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                },
+                modifier = Modifier.clickable { showCreateDialog = true }
+            )
+        }
+
+        // Auto playlists (only when not searching)
+        if (searchQuery.isBlank()) {
+            items(com.metrolist.music.desktop.ui.AutoPlaylistType.entries) { type ->
+                ListItem(
+                    headlineContent = { Text(type.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    supportingContent = { Text("Auto playlist") },
                     leadingContent = {
-                        if (playlist.thumbnailUrl != null) {
-                            AsyncImage(
-                                model = playlist.thumbnailUrl,
-                                contentDescription = null,
-                                modifier = Modifier
-                                    .size(56.dp)
-                                    .clip(RoundedCornerShape(4.dp)),
-                                contentScale = ContentScale.Crop
-                            )
-                        } else {
+                        Box(
+                            modifier = Modifier.size(56.dp).clip(RoundedCornerShape(4.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
                             Icon(
-                                Icons.AutoMirrored.Filled.QueueMusic,
+                                when (type) {
+                                    com.metrolist.music.desktop.ui.AutoPlaylistType.LIKED -> Icons.Default.Favorite
+                                    com.metrolist.music.desktop.ui.AutoPlaylistType.DOWNLOADED -> Icons.Default.Download
+                                    com.metrolist.music.desktop.ui.AutoPlaylistType.MOST_PLAYED -> Icons.Default.TrendingUp
+                                },
                                 contentDescription = null,
-                                modifier = Modifier.size(56.dp)
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(28.dp)
                             )
                         }
                     },
-                    modifier = Modifier.clickable { onPlaylistClick(playlist.id) }
+                    modifier = Modifier.clickable { onAutoPlaylistClick(type) }
                 )
             }
+        }
+
+        if (filteredPlaylists.isEmpty() && searchQuery.isNotBlank()) {
+            item {
+                Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                    Text(
+                        "No matching playlists",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        items(filteredPlaylists) { playlist ->
+            // Local playlists have no browseId; remote ones navigate to the YouTube playlist screen
+            val isLocal = playlist.browseId == null
+            var showMenu by remember(playlist.id) { mutableStateOf(false) }
+            var localSongCount by remember(playlist.id) { mutableStateOf<Int?>(null) }
+
+            if (isLocal) {
+                LaunchedEffect(playlist.id) {
+                    localSongCount = withContext(Dispatchers.IO) {
+                        try { DatabaseHelper.getPlaylistSongCount(playlist.id) } catch (_: Exception) { 0 }
+                    }
+                }
+            }
+
+            ListItem(
+                headlineContent = { Text(playlist.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                supportingContent = {
+                    Text(
+                        if (isLocal) "${localSongCount ?: 0} songs  •  Local"
+                        else "${playlist.remoteSongCount ?: 0} songs"
+                    )
+                },
+                leadingContent = {
+                    if (playlist.thumbnailUrl != null) {
+                        AsyncImage(
+                            model = playlist.thumbnailUrl,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(RoundedCornerShape(4.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Icon(
+                            Icons.AutoMirrored.Filled.QueueMusic,
+                            contentDescription = null,
+                            modifier = Modifier.size(56.dp)
+                        )
+                    }
+                },
+                trailingContent = {
+                    if (isLocal) {
+                        Box {
+                            IconButton(onClick = { showMenu = true }) {
+                                Icon(Icons.Default.MoreVert, "More options")
+                            }
+                            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                                DropdownMenuItem(
+                                    text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                                    onClick = {
+                                        showMenu = false
+                                        scope.launch(Dispatchers.IO) {
+                                            DatabaseHelper.deletePlaylist(playlist.id)
+                                        }
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                },
+                modifier = Modifier.clickable {
+                    if (isLocal) onLocalPlaylistClick(playlist.id) else onPlaylistClick(playlist.id)
+                }
+            )
         }
     }
 }

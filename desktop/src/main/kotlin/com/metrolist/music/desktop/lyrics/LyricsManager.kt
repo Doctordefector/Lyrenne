@@ -2,6 +2,7 @@ package com.metrolist.music.desktop.lyrics
 
 import com.metrolist.innertube.YouTube
 import com.metrolist.innertube.models.WatchEndpoint
+import com.metrolist.kugou.KuGou
 import com.metrolist.lrclib.LrcLib
 import com.metrolist.music.betterlyrics.BetterLyrics
 import kotlinx.coroutines.*
@@ -37,9 +38,10 @@ object LyricsManager {
 
             val effectiveDuration = if (durationSec <= 0) -1 else durationSec
 
-            // Provider chain: BetterLyrics → LrcLib → YouTube Lyrics → YouTube Transcript
+            // Provider chain: BetterLyrics → LrcLib → KuGou → YouTube Lyrics → YouTube Transcript
             val result = tryBetterLyrics(title, artist, effectiveDuration, album)
                 ?: tryLrcLib(title, artist, effectiveDuration, album)
+                ?: tryKuGou(title, artist, effectiveDuration, album)
                 ?: tryYouTubeLyrics(songId)
                 ?: tryYouTubeTranscript(songId)
 
@@ -96,6 +98,24 @@ object LyricsManager {
             throw e
         } catch (e: Exception) {
             Timber.d("LrcLib failed: ${e.message}")
+            null
+        }
+    }
+
+    /** KuGou — synced LRC lyrics, strong coverage for CJK/Asian catalogs */
+    private suspend fun tryKuGou(title: String, artist: String, duration: Int, album: String?): Pair<String, String>? {
+        return try {
+            val result = KuGou.getLyrics(
+                title = title,
+                artist = artist,
+                duration = duration,
+                album = album
+            )
+            result.getOrNull()?.let { it to "KuGou" }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.d("KuGou failed: ${e.message}")
             null
         }
     }

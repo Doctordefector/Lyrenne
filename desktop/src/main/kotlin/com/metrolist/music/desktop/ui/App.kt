@@ -27,6 +27,7 @@ import com.metrolist.music.desktop.ui.components.MiniPlayer
 
 enum class Screen(val title: String, val icon: ImageVector, val selectedIcon: ImageVector) {
     Home("Home", Icons.Outlined.Home, Icons.Filled.Home),
+    Explore("Explore", Icons.Outlined.Explore, Icons.Filled.Explore),
     Search("Search", Icons.Outlined.Search, Icons.Filled.Search),
     Library("Library", Icons.Outlined.LibraryMusic, Icons.Filled.LibraryMusic),
     Settings("Settings", Icons.Outlined.Settings, Icons.Filled.Settings)
@@ -42,11 +43,20 @@ sealed class DetailScreen {
     data class Album(val browseId: String) : DetailScreen()
     data class Artist(val browseId: String) : DetailScreen()
     data class Playlist(val playlistId: String) : DetailScreen()
+    data class LocalPlaylist(val playlistId: String) : DetailScreen()
+    data class AutoPlaylist(val type: AutoPlaylistType) : DetailScreen()
     data class Podcast(val podcastId: String) : DetailScreen()
+    data class Browse(val browseId: String, val params: String?, val title: String) : DetailScreen()
     data object ListenTogether : DetailScreen()
     data object Recognition : DetailScreen()
     data object Equalizer : DetailScreen()
     data object Stats : DetailScreen()
+}
+
+enum class AutoPlaylistType(val title: String) {
+    LIKED("Liked Songs"),
+    DOWNLOADED("Downloaded"),
+    MOST_PLAYED("Most Played")
 }
 
 @Composable
@@ -295,6 +305,26 @@ fun App(player: DesktopPlayer) {
                                         onBack = ::navigateBack,
                                         onArtistClick = ::navigateToArtist
                                     )
+                                    is DetailScreen.LocalPlaylist -> LocalPlaylistScreen(
+                                        playlistId = currentDetail.playlistId,
+                                        player = player,
+                                        onBack = ::navigateBack
+                                    )
+                                    is DetailScreen.AutoPlaylist -> AutoPlaylistScreen(
+                                        type = currentDetail.type,
+                                        player = player,
+                                        onBack = ::navigateBack
+                                    )
+                                    is DetailScreen.Browse -> BrowseScreen(
+                                        browseId = currentDetail.browseId,
+                                        params = currentDetail.params,
+                                        title = currentDetail.title,
+                                        player = player,
+                                        onBack = ::navigateBack,
+                                        onAlbumClick = ::navigateToAlbum,
+                                        onArtistClick = ::navigateToArtist,
+                                        onPlaylistClick = ::navigateToPlaylist
+                                    )
                                     is DetailScreen.Podcast -> PodcastScreen(
                                         podcastId = currentDetail.podcastId,
                                         player = player,
@@ -315,7 +345,8 @@ fun App(player: DesktopPlayer) {
                                     is DetailScreen.Stats -> StatsScreen(
                                         onBack = ::navigateBack,
                                         onArtistClick = ::navigateToArtist,
-                                        onAlbumClick = ::navigateToAlbum
+                                        onAlbumClick = ::navigateToAlbum,
+                                        player = player
                                     )
                                 }
                             } else {
@@ -326,6 +357,15 @@ fun App(player: DesktopPlayer) {
                                         onArtistClick = ::navigateToArtist,
                                         onPlaylistClick = ::navigateToPlaylist,
                                         onPodcastClick = ::navigateToPodcast
+                                    )
+                                    Screen.Explore -> ExploreScreen(
+                                        player = player,
+                                        onAlbumClick = ::navigateToAlbum,
+                                        onArtistClick = ::navigateToArtist,
+                                        onPlaylistClick = ::navigateToPlaylist,
+                                        onBrowseClick = { browseId, params, title ->
+                                            detailStack.add(DetailScreen.Browse(browseId, params, title))
+                                        }
                                     )
                                     Screen.Search -> SearchScreen(
                                         player = player,
@@ -338,7 +378,13 @@ fun App(player: DesktopPlayer) {
                                         player = player,
                                         onAlbumClick = ::navigateToAlbum,
                                         onArtistClick = ::navigateToArtist,
-                                        onPlaylistClick = ::navigateToPlaylist
+                                        onPlaylistClick = ::navigateToPlaylist,
+                                        onLocalPlaylistClick = { id ->
+                                            detailStack.add(DetailScreen.LocalPlaylist(id))
+                                        },
+                                        onAutoPlaylistClick = { type ->
+                                            detailStack.add(DetailScreen.AutoPlaylist(type))
+                                        }
                                     )
                                     Screen.Settings -> SettingsScreen(
                                         onLoginClick = { currentAppScreen = AppScreen.Login }

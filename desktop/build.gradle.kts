@@ -20,6 +20,7 @@ sourceSets {
         kotlin.srcDir("${project.rootDir}/innertube/src/main/kotlin")
         kotlin.srcDir("${project.rootDir}/lrclib/src/main/kotlin")
         kotlin.srcDir("${project.rootDir}/betterlyrics/src/main/kotlin")
+        kotlin.srcDir("${project.rootDir}/kugou/src/main/kotlin")
         kotlin.srcDir("${project.rootDir}/kizzy/src/main/kotlin")
         kotlin.srcDir("${project.rootDir}/lastfm/src/main/kotlin")
         kotlin.srcDir("${project.rootDir}/shazamkit/src/main/kotlin")
@@ -104,7 +105,7 @@ compose.desktop {
             modules("java.sql", "java.naming", "java.net.http", "jdk.unsupported")
 
             packageName = "Metrolist"
-            packageVersion = "2.3.13"
+            packageVersion = "2.4.0"
             description = "YouTube Music Desktop Client"
             vendor = "Metrolist"
 

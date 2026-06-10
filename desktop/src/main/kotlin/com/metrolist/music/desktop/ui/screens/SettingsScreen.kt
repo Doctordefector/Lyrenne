@@ -358,6 +358,295 @@ fun SettingsScreen(
             )
         }
 
+        item {
+            var expanded by remember { mutableStateOf(false) }
+            SettingsItem(
+                icon = Icons.Default.SwapHoriz,
+                title = "Crossfade",
+                subtitle = if (preferences.crossfadeSec == 0) "Off"
+                else "${preferences.crossfadeSec} seconds",
+                onClick = { expanded = true }
+            ) {
+                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    listOf(0, 1, 2, 3, 5, 8, 12).forEach { sec ->
+                        DropdownMenuItem(
+                            text = { Text(if (sec == 0) "Off" else "$sec seconds") },
+                            onClick = {
+                                PreferencesManager.setCrossfadeSec(sec)
+                                expanded = false
+                            },
+                            leadingIcon = {
+                                if (preferences.crossfadeSec == sec) Icon(Icons.Default.Check, null)
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
+            SettingsItem(
+                icon = Icons.Default.Radio,
+                title = "Auto-Queue Related Songs",
+                subtitle = "Keep the music going when your queue runs out",
+                trailing = {
+                    Switch(
+                        checked = preferences.autoLoadRadio,
+                        onCheckedChange = { PreferencesManager.setAutoLoadRadio(it) }
+                    )
+                }
+            )
+        }
+
+        // Content section
+        item {
+            SettingsSectionHeader("Content")
+        }
+
+        item {
+            var expanded by remember { mutableStateOf(false) }
+            SettingsItem(
+                icon = Icons.Default.Public,
+                title = "Content Country",
+                subtitle = if (preferences.contentCountry == "system") "System default" else preferences.contentCountry,
+                onClick = { expanded = true }
+            ) {
+                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    contentCountries.forEach { (code, name) ->
+                        DropdownMenuItem(
+                            text = { Text(name) },
+                            onClick = {
+                                PreferencesManager.setContentCountry(code)
+                                com.metrolist.music.desktop.applyNetworkPreferences()
+                                expanded = false
+                            },
+                            leadingIcon = {
+                                if (preferences.contentCountry == code) Icon(Icons.Default.Check, null)
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
+            var expanded by remember { mutableStateOf(false) }
+            SettingsItem(
+                icon = Icons.Default.Language,
+                title = "Content Language",
+                subtitle = if (preferences.contentLanguage == "system") "System default" else preferences.contentLanguage,
+                onClick = { expanded = true }
+            ) {
+                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    contentLanguages.forEach { (code, name) ->
+                        DropdownMenuItem(
+                            text = { Text(name) },
+                            onClick = {
+                                PreferencesManager.setContentLanguage(code)
+                                com.metrolist.music.desktop.applyNetworkPreferences()
+                                expanded = false
+                            },
+                            leadingIcon = {
+                                if (preferences.contentLanguage == code) Icon(Icons.Default.Check, null)
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
+            SettingsItem(
+                icon = Icons.Default.Block,
+                title = "Hide Explicit Content",
+                subtitle = "Filter explicit songs and albums from search, home and explore",
+                trailing = {
+                    Switch(
+                        checked = preferences.hideExplicit,
+                        onCheckedChange = { PreferencesManager.setHideExplicit(it) }
+                    )
+                }
+            )
+        }
+
+        item {
+            SettingsItem(
+                icon = Icons.Default.Recommend,
+                title = "Quick Picks",
+                subtitle = "Show recommendations based on your last listen",
+                trailing = {
+                    Switch(
+                        checked = preferences.quickPicks,
+                        onCheckedChange = { PreferencesManager.setQuickPicks(it) }
+                    )
+                }
+            )
+        }
+
+        item {
+            SettingsItem(
+                icon = Icons.Default.Shuffle,
+                title = "Randomize Home Sections",
+                subtitle = "Shuffle the order of home feed sections",
+                trailing = {
+                    Switch(
+                        checked = preferences.homeRandomize,
+                        onCheckedChange = { PreferencesManager.setHomeRandomize(it) }
+                    )
+                }
+            )
+        }
+
+        // Library section
+        item {
+            SettingsSectionHeader("Library")
+        }
+
+        item {
+            SettingsItem(
+                icon = Icons.Default.Favorite,
+                title = "Auto-Download on Like",
+                subtitle = "Download songs automatically when you like them",
+                trailing = {
+                    Switch(
+                        checked = preferences.autoDownloadOnLike,
+                        onCheckedChange = { PreferencesManager.setAutoDownloadOnLike(it) }
+                    )
+                }
+            )
+        }
+
+        // Privacy section
+        item {
+            SettingsSectionHeader("Privacy")
+        }
+
+        item {
+            SettingsItem(
+                icon = Icons.Default.History,
+                title = "Pause Listen History",
+                subtitle = "Stop recording plays for stats and history",
+                trailing = {
+                    Switch(
+                        checked = preferences.pauseListenHistory,
+                        onCheckedChange = { PreferencesManager.setPauseListenHistory(it) }
+                    )
+                }
+            )
+        }
+
+        item {
+            SettingsItem(
+                icon = Icons.Default.SearchOff,
+                title = "Pause Search History",
+                subtitle = "Stop saving your search queries",
+                trailing = {
+                    Switch(
+                        checked = preferences.pauseSearchHistory,
+                        onCheckedChange = { PreferencesManager.setPauseSearchHistory(it) }
+                    )
+                }
+            )
+        }
+
+        // Lyrics section
+        item {
+            SettingsSectionHeader("Lyrics")
+        }
+
+        item {
+            SettingsItem(
+                icon = Icons.Default.FormatSize,
+                title = "Lyrics Text Size",
+                subtitle = "${preferences.lyricsTextSize.toInt()} pt",
+                trailing = {
+                    Slider(
+                        value = preferences.lyricsTextSize,
+                        onValueChange = { PreferencesManager.setLyricsTextSize(it) },
+                        valueRange = 12f..32f,
+                        steps = 9,
+                        modifier = Modifier.width(160.dp)
+                    )
+                }
+            )
+        }
+
+        item {
+            var expanded by remember { mutableStateOf(false) }
+            SettingsItem(
+                icon = Icons.Default.FormatAlignLeft,
+                title = "Lyrics Alignment",
+                subtitle = preferences.lyricsPosition.name.lowercase().replaceFirstChar { it.uppercase() },
+                onClick = { expanded = true }
+            ) {
+                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    com.metrolist.music.desktop.settings.LyricsPosition.entries.forEach { pos ->
+                        DropdownMenuItem(
+                            text = { Text(pos.name.lowercase().replaceFirstChar { it.uppercase() }) },
+                            onClick = {
+                                PreferencesManager.setLyricsPosition(pos)
+                                expanded = false
+                            },
+                            leadingIcon = {
+                                if (preferences.lyricsPosition == pos) Icon(Icons.Default.Check, null)
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
+            SettingsItem(
+                icon = Icons.Default.TouchApp,
+                title = "Click Lyrics to Seek",
+                subtitle = "Jump to a line by clicking it",
+                trailing = {
+                    Switch(
+                        checked = preferences.lyricsClickToSeek,
+                        onCheckedChange = { PreferencesManager.setLyricsClickToSeek(it) }
+                    )
+                }
+            )
+        }
+
+        // Network section
+        item {
+            SettingsSectionHeader("Network")
+        }
+
+        item {
+            SettingsItem(
+                icon = Icons.Default.VpnLock,
+                title = "Use Proxy",
+                subtitle = if (preferences.proxyEnabled)
+                    "${preferences.proxyType.name} ${preferences.proxyHost}:${preferences.proxyPort}"
+                else
+                    "Route YouTube traffic through a proxy",
+                trailing = {
+                    Switch(
+                        checked = preferences.proxyEnabled,
+                        onCheckedChange = {
+                            PreferencesManager.setProxyEnabled(it)
+                            com.metrolist.music.desktop.applyNetworkPreferences()
+                        }
+                    )
+                }
+            )
+        }
+
+        if (preferences.proxyEnabled) {
+            item {
+                ProxyConfigCard(
+                    type = preferences.proxyType,
+                    host = preferences.proxyHost,
+                    port = preferences.proxyPort,
+                    username = preferences.proxyUsername,
+                    password = preferences.proxyPassword
+                )
+            }
+        }
+
         // Discord section
         item {
             SettingsSectionHeader("Discord")
@@ -604,6 +893,72 @@ fun SettingsScreen(
             )
         }
 
+        // Backup & Restore section
+        item {
+            SettingsSectionHeader("Backup & Restore")
+        }
+
+        item {
+            var backupStatus by remember { mutableStateOf<String?>(null) }
+            SettingsItem(
+                icon = Icons.Default.Save,
+                title = "Back Up Data",
+                subtitle = backupStatus ?: "Export settings, library database and login to a ZIP",
+                onClick = {
+                    val chooser = JFileChooser().apply {
+                        dialogTitle = "Save Backup"
+                        selectedFile = java.io.File(
+                            com.metrolist.music.desktop.backup.BackupManager.defaultBackupFileName()
+                        )
+                    }
+                    if (chooser.showSaveDialog(null) == JFileChooser.APPROVE_OPTION) {
+                        val target = chooser.selectedFile
+                        com.metrolist.music.desktop.backup.BackupManager.exportBackup(target)
+                            .onSuccess { count ->
+                                backupStatus = "Backup saved (${count} files): ${target.name}"
+                            }
+                            .onFailure { e ->
+                                backupStatus = "Backup failed: ${e.message}"
+                            }
+                    }
+                }
+            )
+        }
+
+        item {
+            var restoreStatus by remember { mutableStateOf<String?>(null) }
+            var showRestartNotice by remember { mutableStateOf(false) }
+            SettingsItem(
+                icon = Icons.Default.SettingsBackupRestore,
+                title = "Restore from Backup",
+                subtitle = restoreStatus ?: "Import a previously exported backup ZIP",
+                onClick = {
+                    val chooser = JFileChooser().apply {
+                        dialogTitle = "Choose Backup ZIP"
+                        fileFilter = javax.swing.filechooser.FileNameExtensionFilter("ZIP files", "zip")
+                    }
+                    if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
+                        com.metrolist.music.desktop.backup.BackupManager.importBackup(chooser.selectedFile)
+                            .onSuccess { count ->
+                                restoreStatus = "Restored $count files — restart Metrolist to apply"
+                                showRestartNotice = true
+                            }
+                            .onFailure { e ->
+                                restoreStatus = "Restore failed: ${e.message}"
+                            }
+                    }
+                }
+            )
+            if (showRestartNotice) {
+                Text(
+                    "Restart the app for restored data to take effect.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(start = 56.dp, top = 4.dp)
+                )
+            }
+        }
+
         // Updates section
         item {
             SettingsSectionHeader("Updates")
@@ -839,3 +1194,139 @@ private fun formatBytes(bytes: Long): String {
         else -> "%.1f GB".format(bytes / (1024.0 * 1024 * 1024))
     }
 }
+
+@Composable
+private fun ProxyConfigCard(
+    type: com.metrolist.music.desktop.settings.ProxyType,
+    host: String,
+    port: Int,
+    username: String,
+    password: String
+) {
+    var editType by remember(type) { mutableStateOf(type) }
+    var editHost by remember(host) { mutableStateOf(host) }
+    var editPort by remember(port) { mutableStateOf(port.toString()) }
+    var editUser by remember(username) { mutableStateOf(username) }
+    var editPass by remember(password) { mutableStateOf(password) }
+
+    Card(modifier = Modifier.fillMaxWidth().padding(start = 40.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                com.metrolist.music.desktop.settings.ProxyType.entries.forEach { proxyType ->
+                    FilterChip(
+                        selected = editType == proxyType,
+                        onClick = { editType = proxyType },
+                        label = { Text(proxyType.name) }
+                    )
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = editHost,
+                    onValueChange = { editHost = it },
+                    label = { Text("Host") },
+                    singleLine = true,
+                    modifier = Modifier.weight(2f).suppressMediaKeys()
+                )
+                OutlinedTextField(
+                    value = editPort,
+                    onValueChange = { editPort = it.filter { c -> c.isDigit() }.take(5) },
+                    label = { Text("Port") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f).suppressMediaKeys()
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = editUser,
+                    onValueChange = { editUser = it },
+                    label = { Text("Username (optional)") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f).suppressMediaKeys()
+                )
+                OutlinedTextField(
+                    value = editPass,
+                    onValueChange = { editPass = it },
+                    label = { Text("Password (optional)") },
+                    singleLine = true,
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    modifier = Modifier.weight(1f).suppressMediaKeys()
+                )
+            }
+            Button(
+                onClick = {
+                    PreferencesManager.setProxyConfig(
+                        type = editType,
+                        host = editHost.trim(),
+                        port = editPort.toIntOrNull() ?: 8080,
+                        username = editUser.trim(),
+                        password = editPass
+                    )
+                    com.metrolist.music.desktop.applyNetworkPreferences()
+                },
+                enabled = editHost.isNotBlank()
+            ) {
+                Text("Apply Proxy")
+            }
+        }
+    }
+}
+
+/** Curated content country list (ISO 3166-1 alpha-2) */
+private val contentCountries = listOf(
+    "system" to "System default",
+    "US" to "United States",
+    "GB" to "United Kingdom",
+    "CA" to "Canada",
+    "AU" to "Australia",
+    "DE" to "Germany",
+    "FR" to "France",
+    "ES" to "Spain",
+    "IT" to "Italy",
+    "NL" to "Netherlands",
+    "PL" to "Poland",
+    "PT" to "Portugal",
+    "BR" to "Brazil",
+    "MX" to "Mexico",
+    "AR" to "Argentina",
+    "JP" to "Japan",
+    "KR" to "South Korea",
+    "IN" to "India",
+    "ID" to "Indonesia",
+    "TR" to "Turkey",
+    "RU" to "Russia",
+    "UA" to "Ukraine",
+    "SE" to "Sweden",
+    "NO" to "Norway",
+    "FI" to "Finland",
+    "DK" to "Denmark",
+    "CZ" to "Czechia",
+    "SA" to "Saudi Arabia",
+    "AE" to "United Arab Emirates",
+    "EG" to "Egypt",
+    "ZA" to "South Africa"
+)
+
+/** Curated content language list (ISO 639-1) */
+private val contentLanguages = listOf(
+    "system" to "System default",
+    "en" to "English",
+    "de" to "Deutsch",
+    "fr" to "Français",
+    "es" to "Español",
+    "it" to "Italiano",
+    "pt" to "Português",
+    "nl" to "Nederlands",
+    "pl" to "Polski",
+    "tr" to "Türkçe",
+    "ru" to "Русский",
+    "uk" to "Українська",
+    "ar" to "العربية",
+    "ja" to "日本語",
+    "ko" to "한국어",
+    "zh" to "中文",
+    "hi" to "हिन्दी",
+    "id" to "Bahasa Indonesia",
+    "sv" to "Svenska",
+    "cs" to "Čeština"
+)

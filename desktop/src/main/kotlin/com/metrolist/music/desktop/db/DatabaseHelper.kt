@@ -72,6 +72,20 @@ object DatabaseHelper {
             driver.execute(null, "CREATE INDEX IF NOT EXISTS event_timestamp_idx ON Event(timestamp)", 0)
         }
 
+        if ("RecognitionHistory" !in existingTables) {
+            driver.execute(null, """
+                CREATE TABLE IF NOT EXISTS RecognitionHistory (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    videoId TEXT,
+                    title TEXT NOT NULL,
+                    artist TEXT NOT NULL,
+                    thumbnailUrl TEXT,
+                    recognizedAt INTEGER NOT NULL
+                )
+            """.trimIndent(), 0)
+            driver.execute(null, "CREATE INDEX IF NOT EXISTS recognition_time_idx ON RecognitionHistory(recognizedAt)", 0)
+        }
+
         if ("PlayQueueState" !in existingTables) {
             driver.execute(null, """
                 CREATE TABLE IF NOT EXISTS PlayQueueState (
@@ -345,6 +359,21 @@ object DatabaseHelper {
         queries.deletePlaylist(id)
     }
 
+    /** Create a local (non-YouTube) playlist. Returns the new playlist id. */
+    fun createLocalPlaylist(name: String): String {
+        val id = "LP" + System.currentTimeMillis()
+        insertPlaylist(id = id, name = name, browseId = null, isEditable = true)
+        return id
+    }
+
+    fun renamePlaylist(id: String, newName: String) {
+        queries.renamePlaylist(newName, id)
+    }
+
+    fun movePlaylistSong(playlistId: String, songId: String, newPosition: Int) {
+        queries.movePlaylistSong(newPosition.toLong(), playlistId, songId)
+    }
+
     // ============ Song-Artist Name Lookup ============
 
     /** Get joined artist names for a single song (blocking) */
@@ -590,5 +619,34 @@ object DatabaseHelper {
 
     fun getUniqueArtistCountInRange(fromTimestamp: Long, toTimestamp: Long): Long {
         return queries.getUniqueArtistCountInRange(fromTimestamp, toTimestamp).executeAsOne()
+    }
+
+    // ============ Recognition History ============
+
+    data class Recognition(
+        val id: Long,
+        val videoId: String?,
+        val title: String,
+        val artist: String,
+        val thumbnailUrl: String?,
+        val recognizedAt: Long
+    )
+
+    fun insertRecognition(videoId: String?, title: String, artist: String, thumbnailUrl: String?) {
+        queries.insertRecognition(videoId, title, artist, thumbnailUrl, System.currentTimeMillis())
+    }
+
+    fun getRecognitionHistory(): List<Recognition> {
+        return queries.getRecognitionHistory { id, videoId, title, artist, thumbnailUrl, recognizedAt ->
+            Recognition(id, videoId, title, artist, thumbnailUrl, recognizedAt)
+        }.executeAsList()
+    }
+
+    fun deleteRecognition(id: Long) {
+        queries.deleteRecognition(id)
+    }
+
+    fun clearRecognitionHistory() {
+        queries.clearRecognitionHistory()
     }
 }

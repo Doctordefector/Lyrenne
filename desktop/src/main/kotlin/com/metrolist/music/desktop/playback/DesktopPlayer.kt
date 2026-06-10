@@ -1,6 +1,8 @@
 package com.metrolist.music.desktop.playback
 
 import com.metrolist.innertube.YouTube
+import com.metrolist.innertube.models.SongItem
+import com.metrolist.innertube.models.WatchEndpoint
 import com.metrolist.innertube.models.YouTubeClient
 import com.metrolist.music.desktop.db.DatabaseHelper
 import com.metrolist.music.desktop.settings.PreferencesManager
@@ -43,6 +45,21 @@ data class SongInfo(
     val duration: Int = -1 // in seconds
 )
 
+/** Sleep timer state: either a wall-clock deadline or end-of-current-track */
+data class SleepTimerState(
+    val endsAtMillis: Long? = null,
+    val endOfTrack: Boolean = false
+)
+
+fun SongItem.toPlayerSongInfo() = SongInfo(
+    id = id,
+    title = title,
+    artist = artists.joinToString { it.name },
+    thumbnailUrl = thumbnail,
+    album = album?.name,
+    duration = duration ?: -1
+)
+
 class DesktopPlayer {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private var audioPlayer: AudioPlayerComponent? = null
@@ -59,6 +76,19 @@ class DesktopPlayer {
 
     // Equalizer (vlcj programmatic API — real-time, no restart needed)
     private var vlcEqualizer: Equalizer? = null
+
+    // Sleep timer
+    private var sleepJob: Job? = null
+    private val _sleepTimer = MutableStateFlow<SleepTimerState?>(null)
+    val sleepTimer: StateFlow<SleepTimerState?> = _sleepTimer.asStateFlow()
+
+    // Crossfade: set when the early-transition watcher already advanced the track
+    private var crossfadeTriggered = false
+    private var fadeJob: Job? = null
+
+    // Radio: id of the song the current radio queue was seeded from (null = not radio)
+    private var radioSeedId: String? = null
+    private var radioLoading = false
 
     // Play event tracking
     private var trackStartTime: Long = 0L       // System.currentTimeMillis when track started playing
@@ -179,9 +209,45 @@ class DesktopPlayer {
                 audioPlayer?.mediaPlayer()?.let { player ->
                     val position = player.status().time()
                     _state.value = _state.value.copy(position = position)
+                    maybeCrossfadeEarly(position)
                 }
                 delay(200)
             }
+        }
+    }
+
+    /**
+     * Crossfade: VLC has a single decoder, so a true overlapping crossfade isn't possible.
+     * Instead, when the track is within crossfadeSec of its end we advance early and
+     * fade the next track in from silence — perceptually close to a real crossfade.
+     */
+    private fun maybeCrossfadeEarly(position: Long) {
+        val crossfadeMs = PreferencesManager.preferences.value.crossfadeSec * 1000L
+        if (crossfadeMs <= 0 || crossfadeTriggered) return
+        if (repeatMode == RepeatMode.ONE) return
+        val duration = _state.value.duration
+        if (duration <= 0 || position <= 0) return
+        val hasNext = currentIndex < queue.size - 1 || (repeatMode == RepeatMode.ALL && queue.size > 1)
+        if (!hasNext) return
+        if (duration - position in 1..crossfadeMs) {
+            crossfadeTriggered = true
+            scope.launch { playNext() }
+        }
+    }
+
+    /** Ramp VLC volume from 0 to the user's volume over [durationMs]. */
+    private fun fadeIn(durationMs: Long) {
+        fadeJob?.cancel()
+        val target = (PreferencesManager.preferences.value.volume * 100).toInt()
+        fadeJob = scope.launch {
+            val steps = 20
+            val stepDelay = durationMs / steps
+            for (i in 0..steps) {
+                if (!isActive) return@launch
+                audioPlayer?.mediaPlayer()?.audio()?.setVolume(target * i / steps)
+                delay(stepDelay)
+            }
+            audioPlayer?.mediaPlayer()?.audio()?.setVolume(target)
         }
     }
 
@@ -191,6 +257,7 @@ class DesktopPlayer {
     }
 
     suspend fun playSong(song: SongInfo) {
+        radioSeedId = null
         // Get the stream URL from YouTube
         val streamUrl = getStreamUrl(song.id)
         if (streamUrl != null) {
@@ -208,6 +275,7 @@ class DesktopPlayer {
 
     suspend fun playQueue(songs: List<SongInfo>, startIndex: Int = 0) {
         if (songs.isEmpty()) return
+        radioSeedId = null
 
         queue.clear()
         queue.addAll(songs)
@@ -277,6 +345,9 @@ class DesktopPlayer {
             recordPlayEvent()
         }
 
+        val crossfadeMs = PreferencesManager.preferences.value.crossfadeSec * 1000L
+        val shouldFadeIn = crossfadeMs > 0 && _state.value.currentSong != null
+
         val options = buildMediaOptions()
         if (options.isNotEmpty()) {
             audioPlayer?.mediaPlayer()?.media()?.play(url, *options.toTypedArray())
@@ -289,9 +360,20 @@ class DesktopPlayer {
             currentIndex = currentIndex
         )
         resetPlayTracking()
+        crossfadeTriggered = false
 
         // Re-apply EQ after starting new media (VLC resets filters on new media)
         applyEqualizer()
+
+        // Apply playback speed (VLC resets rate on new media)
+        val speed = PreferencesManager.preferences.value.playbackSpeed
+        if (speed != 1f) {
+            audioPlayer?.mediaPlayer()?.controls()?.setRate(speed)
+        }
+
+        if (shouldFadeIn) {
+            fadeIn(crossfadeMs.coerceAtMost(4000L))
+        }
     }
 
     /**
@@ -368,6 +450,12 @@ class DesktopPlayer {
     }
 
     private suspend fun onTrackFinished() {
+        // Sleep timer set to "end of track": stop here instead of advancing
+        if (_sleepTimer.value?.endOfTrack == true) {
+            _sleepTimer.value = null
+            _state.value = _state.value.copy(isPlaying = false)
+            return
+        }
         when (repeatMode) {
             RepeatMode.ONE -> {
                 // Replay the same track
@@ -399,6 +487,7 @@ class DesktopPlayer {
     }
 
     suspend fun playNext() {
+        maybeLoadMoreRadio()
         if (currentIndex < queue.size - 1) {
             currentIndex++
             val song = queue[currentIndex]
@@ -677,6 +766,11 @@ class DesktopPlayer {
         if (wasPlaying) {
             accumulatedPlayTime += System.currentTimeMillis() - lastPlayStateTime
         }
+        // Privacy: listen history paused
+        if (PreferencesManager.preferences.value.pauseListenHistory) {
+            resetPlayTracking()
+            return
+        }
         val songId = _state.value.currentSong?.id ?: return
         val playTimeMs = accumulatedPlayTime
         // Only record if played for at least 10 seconds
@@ -691,6 +785,99 @@ class DesktopPlayer {
             }
         }
         resetPlayTracking()
+    }
+
+    // ============ Playback Speed ============
+
+    /** Set playback rate (0.25x–3x). Applied immediately and persisted for future tracks. */
+    fun setPlaybackSpeed(speed: Float) {
+        val clamped = speed.coerceIn(0.25f, 3f)
+        PreferencesManager.setPlaybackSpeed(clamped)
+        audioPlayer?.mediaPlayer()?.controls()?.setRate(clamped)
+    }
+
+    // ============ Sleep Timer ============
+
+    /** Start a sleep timer that pauses playback after [minutes]. */
+    fun startSleepTimer(minutes: Int) {
+        sleepJob?.cancel()
+        val endsAt = System.currentTimeMillis() + minutes * 60_000L
+        _sleepTimer.value = SleepTimerState(endsAtMillis = endsAt)
+        sleepJob = scope.launch {
+            delay(minutes * 60_000L)
+            pause()
+            _sleepTimer.value = null
+        }
+    }
+
+    /** Pause playback when the current track ends. */
+    fun setSleepEndOfTrack() {
+        sleepJob?.cancel()
+        sleepJob = null
+        _sleepTimer.value = SleepTimerState(endOfTrack = true)
+    }
+
+    fun cancelSleepTimer() {
+        sleepJob?.cancel()
+        sleepJob = null
+        _sleepTimer.value = null
+    }
+
+    // ============ Radio ============
+
+    /**
+     * Start a radio queue seeded from [song]: plays the song followed by
+     * YouTube Music's auto-generated mix of related tracks.
+     */
+    suspend fun startRadio(song: SongInfo) {
+        val result = YouTube.next(WatchEndpoint(videoId = song.id, playlistId = "RDAMVM${song.id}"))
+        result.onSuccess { next ->
+            val related = next.items
+                .map { it.toPlayerSongInfo() }
+                .filter { it.id != song.id }
+            playQueue(listOf(song) + related, 0)
+            radioSeedId = song.id // after playQueue (which clears it)
+        }.onFailure { e ->
+            Timber.w("Radio failed for ${song.id}: ${e.message}")
+            // Fall back to just playing the song
+            playSong(song)
+        }
+    }
+
+    /**
+     * Auto-queue: when enabled and the queue is nearly exhausted, append more
+     * related tracks seeded from the last queue item.
+     */
+    private suspend fun maybeLoadMoreRadio() {
+        val prefs = PreferencesManager.preferences.value
+        val radioActive = radioSeedId != null
+        if (!prefs.autoLoadRadio && !radioActive) return
+        if (radioLoading) return
+        if (queue.isEmpty() || currentIndex < queue.size - 3) return
+        if (repeatMode != RepeatMode.OFF) return
+
+        radioLoading = true
+        try {
+            val seed = queue.last()
+            val result = YouTube.next(WatchEndpoint(videoId = seed.id, playlistId = "RDAMVM${seed.id}"))
+            result.onSuccess { next ->
+                val existing = queue.map { it.id }.toSet()
+                val newSongs = next.items
+                    .map { it.toPlayerSongInfo() }
+                    .filter { it.id !in existing }
+                    .take(20)
+                if (newSongs.isNotEmpty()) {
+                    queue.addAll(newSongs)
+                    if (!shuffleEnabled) originalQueue.addAll(newSongs)
+                    updateQueueState()
+                    Timber.d("Auto-queued ${newSongs.size} related tracks")
+                }
+            }
+        } catch (e: Exception) {
+            Timber.w("Auto-queue failed: ${e.message}")
+        } finally {
+            radioLoading = false
+        }
     }
 
     // ============ Equalizer ============

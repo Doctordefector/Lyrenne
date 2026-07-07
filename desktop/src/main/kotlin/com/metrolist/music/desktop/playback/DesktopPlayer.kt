@@ -238,7 +238,7 @@ class DesktopPlayer {
     /** Ramp VLC volume from 0 to the user's volume over [durationMs]. */
     private fun fadeIn(durationMs: Long) {
         fadeJob?.cancel()
-        val target = (PreferencesManager.preferences.value.volume * 100).toInt()
+        val target = vlcVolume(PreferencesManager.preferences.value.volume)
         fadeJob = scope.launch {
             val steps = 20
             val stepDelay = durationMs / steps
@@ -647,9 +647,16 @@ class DesktopPlayer {
     }
 
     fun setVolume(volume: Float) {
-        // VLC volume is 0-200, we use 0-1
-        audioPlayer?.mediaPlayer()?.audio()?.setVolume((volume * 100).toInt())
+        audioPlayer?.mediaPlayer()?.audio()?.setVolume(vlcVolume(volume))
     }
+
+    /**
+     * Map the 0-1 slider to VLC's 0-100 volume with a quadratic taper. Loudness
+     * perception is roughly logarithmic, so a linear slider feels non-linear
+     * (all the change bunched at the bottom); squaring spreads it evenly.
+     */
+    private fun vlcVolume(volume: Float): Int =
+        (volume.coerceIn(0f, 1f).let { it * it } * 100).toInt()
 
     fun playLocalFile(filePath: String, song: SongInfo) {
         queue.clear()

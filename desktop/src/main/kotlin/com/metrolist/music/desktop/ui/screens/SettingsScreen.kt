@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.metrolist.music.desktop.auth.AuthManager
@@ -1107,10 +1108,37 @@ fun SettingsScreen(
         }
 
         item {
+            // Easter egg: triple-click Version → "Hi Valerie!"
+            var clickCount by remember { mutableIntStateOf(0) }
+            var showEasterEgg by remember { mutableStateOf(false) }
+
+            if (showEasterEgg) {
+                AlertDialog(
+                    onDismissRequest = { showEasterEgg = false },
+                    title = { Text("💌", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                    text = {
+                        Text(
+                            "Hi Valerie! 💖",
+                            style = MaterialTheme.typography.headlineSmall,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    },
+                    confirmButton = {}
+                )
+            }
+
             SettingsItem(
                 icon = Icons.Default.Info,
                 title = "Version",
-                subtitle = "${AutoUpdater.CURRENT_VERSION} (Desktop)"
+                subtitle = "${AutoUpdater.CURRENT_VERSION} (Desktop)",
+                onClick = {
+                    clickCount++
+                    if (clickCount >= 3) {
+                        clickCount = 0
+                        showEasterEgg = true
+                    }
+                }
             )
         }
 
@@ -1141,6 +1169,16 @@ fun SettingsScreen(
                         // Ignore
                     }
                 }
+            )
+        }
+
+        item {
+            Text(
+                text = "Made by Andrei with love ❤",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(top = 24.dp)
             )
         }
 

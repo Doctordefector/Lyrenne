@@ -24,6 +24,7 @@ import com.metrolist.music.desktop.playback.DesktopPlayer
 import com.metrolist.music.desktop.playback.SongInfo
 import com.metrolist.music.desktop.playback.toPlayerSongInfo
 import com.metrolist.music.desktop.settings.PreferencesManager
+import com.metrolist.music.desktop.ui.components.ScrollableRow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -251,7 +252,7 @@ private fun HomeSection(
             modifier = Modifier.padding(bottom = 12.dp)
         )
 
-        LazyRow(
+        ScrollableRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(items) { item ->

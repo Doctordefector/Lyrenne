@@ -36,7 +36,6 @@ object DiscordRPC {
     @Volatile
     private var connected = false
     private var lastSongId: String? = null
-    private var trackStartEpoch = 0L // epoch seconds of the virtual track start (now - position)
 
     // IPC opcodes
     private const val OP_HANDSHAKE = 0
@@ -63,16 +62,18 @@ object DiscordRPC {
     private fun startPresenceUpdates(player: DesktopPlayer) {
         updateJob?.cancel()
         updateJob = scope.launch {
+            // collectLatest serializes sends: a newer state cancels an in-flight
+            // update, so pipe writes never overlap. Fire only on song change — the
+            // start timestamp is anchored to the live position, so enabling RPC or
+            // resuming mid-song shows the correct elapsed time without re-sending on
+            // every 200ms position tick (which raced and tripped Discord's rate limit).
             player.state.collectLatest { state ->
-                if (state.currentSong != null && state.isPlaying) {
-                    // Anchor the presence timestamp to the actual playback position,
-                    // so enabling RPC (or seeking) mid-song shows the real elapsed time.
-                    val startEpoch = System.currentTimeMillis() / 1000 - state.position / 1000
-                    val seeked = kotlin.math.abs(startEpoch - trackStartEpoch) > 5
-                    if (state.currentSong.id != lastSongId || seeked) {
-                        lastSongId = state.currentSong.id
-                        trackStartEpoch = startEpoch
-                        setPresence(state.currentSong, startEpoch, state.duration)
+                val song = state.currentSong
+                if (song != null && state.isPlaying) {
+                    if (song.id != lastSongId) {
+                        lastSongId = song.id
+                        val startEpoch = System.currentTimeMillis() / 1000 - state.position / 1000
+                        setPresence(song, startEpoch, state.duration)
                     }
                 } else {
                     if (lastSongId != null) {
@@ -84,7 +85,7 @@ object DiscordRPC {
         }
     }
 
-    private fun stopPresenceUpdates() {
+    private suspend fun stopPresenceUpdates() {
         updateJob?.cancel()
         updateJob = null
         lastSongId = null
@@ -201,10 +202,9 @@ object DiscordRPC {
         }
     }
 
-    private fun setPresence(song: SongInfo, startEpoch: Long, durationMs: Long) {
-        scope.launch {
+    private suspend fun setPresence(song: SongInfo, startEpoch: Long, durationMs: Long) {
             try {
-                if (!connect()) return@launch
+                if (!connect()) return
 
                 val title = escapeJson(song.title)
                 val artist = escapeJson(song.artist)
@@ -250,12 +250,10 @@ object DiscordRPC {
                 try { pipe?.close() } catch (_: Exception) {}
                 pipe = null
             }
-        }
     }
 
-    private fun clearPresence() {
+    private suspend fun clearPresence() {
         if (!connected) return
-        scope.launch {
             try {
                 val clear = """{"cmd":"SET_ACTIVITY","args":{"pid":${ProcessHandle.current().pid()},"activity":null},"nonce":"${System.nanoTime()}"}"""
                 sendFrame(OP_FRAME, clear)
@@ -267,7 +265,6 @@ object DiscordRPC {
                 try { pipe?.close() } catch (_: Exception) {}
                 pipe = null
             }
-        }
     }
 
     private fun escapeJson(s: String): String =

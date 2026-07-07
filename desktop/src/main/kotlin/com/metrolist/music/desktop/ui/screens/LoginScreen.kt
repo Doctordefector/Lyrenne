@@ -14,18 +14,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.metrolist.music.desktop.auth.AuthManager
-import com.metrolist.music.desktop.auth.BrowserCookieExtractor
 import com.metrolist.music.desktop.auth.BrowserLoginHelper
-import com.metrolist.music.desktop.auth.BrowserProfile
 import com.metrolist.music.desktop.auth.CookieExtractResult
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 enum class LoginStep {
     PICK_METHOD,
     WAITING_FOR_BROWSER,
-    EXTRACTING,
     VALIDATING,
     SUCCESS,
     ERROR
@@ -40,17 +35,9 @@ fun LoginScreen(
     val scope = rememberCoroutineScope()
     var loginStep by remember { mutableStateOf(LoginStep.PICK_METHOD) }
     var error by remember { mutableStateOf<String?>(null) }
-    var browsers by remember { mutableStateOf<List<BrowserProfile>>(emptyList()) }
     var statusMessage by remember { mutableStateOf("") }
-    var showAdvanced by remember { mutableStateOf(false) }
 
     val hasBrowser = remember { BrowserLoginHelper.findBrowserExecutable() != null }
-
-    LaunchedEffect(Unit) {
-        browsers = withContext(Dispatchers.IO) {
-            BrowserCookieExtractor.detectBrowsers()
-        }
-    }
 
     fun handleCookieResult(result: CookieExtractResult) {
         when (result) {
@@ -92,18 +79,6 @@ fun LoginScreen(
         }
     }
 
-    fun importFromBrowser(browser: BrowserProfile) {
-        loginStep = LoginStep.EXTRACTING
-        statusMessage = "Reading cookies from ${browser.name}..."
-
-        scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                BrowserCookieExtractor.extractYouTubeCookies(browser)
-            }
-            handleCookieResult(result)
-        }
-    }
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -112,7 +87,6 @@ fun LoginScreen(
                         when (loginStep) {
                             LoginStep.PICK_METHOD -> "Sign in to YouTube Music"
                             LoginStep.WAITING_FOR_BROWSER -> "Waiting for sign in..."
-                            LoginStep.EXTRACTING -> "Reading cookies..."
                             LoginStep.VALIDATING -> "Signing in..."
                             LoginStep.SUCCESS -> "Success!"
                             LoginStep.ERROR -> "Sign in Failed"
@@ -191,34 +165,6 @@ fun LoginScreen(
                                 }
                             }
                         }
-
-                        // Advanced: import from existing browser
-                        if (browsers.isNotEmpty()) {
-                            TextButton(
-                                onClick = { showAdvanced = !showAdvanced }
-                            ) {
-                                Icon(
-                                    if (showAdvanced) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                    null, Modifier.size(18.dp)
-                                )
-                                Spacer(Modifier.width(4.dp))
-                                Text("Import from existing browser session")
-                            }
-
-                            if (showAdvanced) {
-                                Text(
-                                    "Pick a browser where you're already signed in to YouTube Music.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                browsers.forEach { browser ->
-                                    BrowserCard(
-                                        browser = browser,
-                                        onClick = { importFromBrowser(browser) }
-                                    )
-                                }
-                            }
-                        }
                     }
                 }
 
@@ -256,7 +202,7 @@ fun LoginScreen(
                     }
                 }
 
-                LoginStep.EXTRACTING, LoginStep.VALIDATING -> {
+                LoginStep.VALIDATING -> {
                     Column(
                         modifier = Modifier.fillMaxSize(),
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -342,53 +288,6 @@ fun LoginScreen(
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun BrowserCard(
-    browser: BrowserProfile,
-    onClick: () -> Unit
-) {
-    Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                shape = MaterialTheme.shapes.small,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.size(40.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        Icons.Default.Language,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-            }
-            Spacer(Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(browser.name, style = MaterialTheme.typography.titleMedium)
-                Text(
-                    browser.userDataDir.absolutePath,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1
-                )
-            }
-            Icon(
-                Icons.AutoMirrored.Filled.Login,
-                contentDescription = "Import",
-                tint = MaterialTheme.colorScheme.primary
-            )
         }
     }
 }

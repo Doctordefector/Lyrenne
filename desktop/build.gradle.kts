@@ -103,7 +103,7 @@ compose.desktop {
             modules("java.sql", "java.naming", "java.net.http", "jdk.unsupported")
 
             packageName = "Metrolist"
-            packageVersion = "2.5.0"
+            packageVersion = "2.5.1"
             description = "YouTube Music Desktop Client"
             vendor = "Metrolist"
 

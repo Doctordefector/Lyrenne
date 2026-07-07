@@ -160,7 +160,7 @@ data class LibraryPage(
 
             return when {
                 renderer.isSong -> {
-                    val videoId = renderer.playlistItemData?.videoId ?: return null
+                    val videoId = renderer.videoId ?: return null
                     val title = renderer.flexColumns.firstOrNull()
                         ?.musicResponsiveListItemFlexColumnRenderer?.text
                         ?.runs?.firstOrNull()?.text ?: return null

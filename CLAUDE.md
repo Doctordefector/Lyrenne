@@ -2,7 +2,10 @@
 
 ## Overview
 Porting Metrolist (Android YouTube Music client) to desktop using Compose Desktop (JVM).
-- **Upstream**: https://github.com/mostafaalagamy/Metrolist (v13.3.0)
+- **Upstream**: https://github.com/MetrolistGroup/Metrolist (shared modules synced to v13.6.0, 2026-07-07; upstream is in maintenance mode)
+  - Sync method: `git checkout v13.6.0 -- innertube betterlyrics shazamkit lrclib kugou lastfm` from `upstream` remote, then re-apply the accountIndex patch (see InnerTube modifications below)
+  - NewPipe.kt deliberately kept at pre-v13.4.1 version + NewPipeExtractor v0.26.0: upstream's MetrolistExtractor fork ships Java 25 bytecode (we target JVM 21), and desktop never calls NewPipeUtils (streams via direct-URL clients)
+  - kizzy module: upstream deleted it; our copy remains in repo but is NO LONGER compiled into desktop (was never referenced — desktop Discord RPC is the named-pipe DiscordRPC.kt)
 - **Desktop module**: `desktop/` folder
 - **Shared modules**: `innertube/`, `lrclib/`, `betterlyrics/`, `kugou/`, `kizzy/`, `lastfm/`, `shazamkit/` (sources included directly via `kotlin.srcDir()`, not as project dependencies)
 - **Codebase**: ~12,000 lines of Kotlin across 34 files + 1 protobuf file

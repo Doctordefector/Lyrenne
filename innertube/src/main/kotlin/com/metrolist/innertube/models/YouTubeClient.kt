@@ -73,6 +73,7 @@ data class YouTubeClient(
             loginSupported = true,
             loginRequired = true,
             useSignatureTimestamp = true,
+            useWebPoTokens = true,
         )
 
         val TVHTML5 = YouTubeClient(

@@ -38,6 +38,10 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 class InnerTube {
     private var httpClient = createClient()
 
+    private companion object {
+        const val PLAYBACK_TELEMETRY_VER = "2"
+    }
+
     var locale = YouTubeLocale(
         gl = Locale.getDefault().country,
         hl = Locale.getDefault().toLanguageTag()
@@ -157,8 +161,7 @@ class InnerTube {
                     append("cookie", cookie)
                     if ("SAPISID" !in cookieMap) return@let
                     val currentTime = System.currentTimeMillis() / 1000
-                    val sapisid = cookieMap["SAPISID"]!!
-                    val sapisidHash = sha1("$currentTime $sapisid ${YouTubeClient.ORIGIN_YOUTUBE_MUSIC}")
+                    val sapisidHash = sha1("$currentTime ${cookieMap["SAPISID"]} ${YouTubeClient.ORIGIN_YOUTUBE_MUSIC}")
                     append("Authorization", "SAPISIDHASH ${currentTime}_${sapisidHash}")
                     append("X-Goog-AuthUser", accountIndex.toString())
                 }
@@ -200,13 +203,13 @@ class InnerTube {
         continuation: String? = null,
     ) = withRetry {
         httpClient.post("search") {
-            ytClient(client, setLogin = useLoginForBrowse)
+            ytClient(client, setLogin = false)
             setBody(
                 SearchBody(
                     context = client.toContext(
                         locale,
                         visitorData,
-                        if (useLoginForBrowse) dataSyncId else null
+                        null
                     ),
                     query = query,
                     params = params
@@ -262,9 +265,9 @@ class InnerTube {
     ) = withRetry {
         httpClient.get(url) {
             ytClient(client, true)
-            parameter("ver", "2")
             parameter("c", client.clientName)
             parameter("cpn", cpn)
+            parameter("ver", PLAYBACK_TELEMETRY_VER)
 
             if (playlistId != null) {
                 parameter("list", playlistId)
@@ -758,7 +761,7 @@ class InnerTube {
                     append("Authorization", "SAPISIDHASH ${currentTime}_${sapisidHash}")
                 }
             }
-            contentType(ContentType.Application.FormUrlEncoded)
+            contentType(ContentType.Application.OctetStream)
             setBody(data)
             onUpload { bytesSentTotal, contentLength ->
                 contentLength?.let {

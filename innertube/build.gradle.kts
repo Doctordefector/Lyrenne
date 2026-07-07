@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.metrolist.innertube"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 26
@@ -29,7 +29,9 @@ dependencies {
     implementation(libs.ktor.serialization.json)
     implementation(libs.ktor.client.encoding)
     implementation(libs.brotli)
-    implementation(libs.newpipeextractor)
+    implementation("com.github.MetrolistGroup:MetrolistExtractor:f0a00f5") {
+        exclude(group = "com.google.protobuf")
+    }
     implementation(libs.timber)
     testImplementation(libs.junit)
 

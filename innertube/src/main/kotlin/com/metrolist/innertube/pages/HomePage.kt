@@ -133,7 +133,7 @@ data class HomePage(
                     ?: return null
 
                 return SongItem(
-                    id = renderer.playlistItemData?.videoId ?: return null,
+                    id = renderer.videoId ?: return null,
                     title = renderer.flexColumns
                         .firstOrNull()
                         ?.musicResponsiveListItemFlexColumnRenderer

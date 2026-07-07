@@ -53,7 +53,7 @@ data class PodcastPage(
             val libraryTokens = PageHelper.extractLibraryTokensFromMenuItems(renderer.menu?.menuRenderer?.items)
 
             return EpisodeItem(
-                id = renderer.playlistItemData?.videoId ?: return null,
+                id = renderer.videoId ?: return null,
                 title = renderer.flexColumns.firstOrNull()
                     ?.musicResponsiveListItemFlexColumnRenderer?.text
                     ?.runs?.firstOrNull()?.text ?: return null,

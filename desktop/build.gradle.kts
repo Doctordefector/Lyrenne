@@ -21,7 +21,6 @@ sourceSets {
         kotlin.srcDir("${project.rootDir}/lrclib/src/main/kotlin")
         kotlin.srcDir("${project.rootDir}/betterlyrics/src/main/kotlin")
         kotlin.srcDir("${project.rootDir}/kugou/src/main/kotlin")
-        kotlin.srcDir("${project.rootDir}/kizzy/src/main/kotlin")
         kotlin.srcDir("${project.rootDir}/lastfm/src/main/kotlin")
         kotlin.srcDir("${project.rootDir}/shazamkit/src/main/kotlin")
         proto {
@@ -63,7 +62,6 @@ dependencies {
     implementation(libs.brotli)
     implementation(libs.newpipeextractor)
     implementation(libs.ktor.client.cio) // Used by lrclib
-    implementation(libs.json) // Used by kizzy (org.json)
 
     // Image loading for desktop
     implementation("io.coil-kt.coil3:coil-compose:3.3.0")

@@ -67,9 +67,15 @@ object SearchPage {
                 else null
 
                 EpisodeItem(
-                    // In filtered search, playlistItemData is absent; fall back to watchEndpoint.
                     id = renderer.playlistItemData?.videoId
                         ?: renderer.navigationEndpoint?.watchEndpoint?.videoId
+                        ?: renderer.overlay?.musicItemThumbnailOverlayRenderer
+                            ?.content?.musicPlayButtonRenderer
+                            ?.playNavigationEndpoint?.watchEndpoint?.videoId
+                        ?: renderer.flexColumns.firstOrNull()
+                            ?.musicResponsiveListItemFlexColumnRenderer
+                            ?.text?.runs?.firstOrNull()
+                            ?.navigationEndpoint?.watchEndpoint?.videoId
                         ?: return null,
                     title =
                         renderer.flexColumns
@@ -110,7 +116,16 @@ object SearchPage {
                 val libraryTokens = PageHelper.extractLibraryTokensFromMenuItems(renderer.menu?.menuRenderer?.items)
 
                 SongItem(
-                    id = renderer.playlistItemData?.videoId ?: return null,
+                    id = renderer.playlistItemData?.videoId
+                        ?: renderer.navigationEndpoint?.watchEndpoint?.videoId
+                        ?: renderer.overlay?.musicItemThumbnailOverlayRenderer
+                            ?.content?.musicPlayButtonRenderer
+                            ?.playNavigationEndpoint?.watchEndpoint?.videoId
+                        ?: renderer.flexColumns.firstOrNull()
+                            ?.musicResponsiveListItemFlexColumnRenderer
+                            ?.text?.runs?.firstOrNull()
+                            ?.navigationEndpoint?.watchEndpoint?.videoId
+                        ?: return null,
                     title =
                         renderer.flexColumns
                             .firstOrNull()

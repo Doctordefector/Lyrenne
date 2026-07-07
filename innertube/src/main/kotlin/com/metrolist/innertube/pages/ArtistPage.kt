@@ -19,7 +19,7 @@ import com.metrolist.innertube.models.WatchEndpoint
 import com.metrolist.innertube.models.YTItem
 import com.metrolist.innertube.models.filterExplicit
 import com.metrolist.innertube.models.getItems
-import com.metrolist.innertube.models.oddElements
+import com.metrolist.innertube.models.splitArtistsByConjunction
 import com.metrolist.innertube.models.splitBySeparator
 
 data class ArtistSection(
@@ -71,23 +71,22 @@ data class ArtistPage(
         }
 
         private fun fromMusicResponsiveListItemRenderer(renderer: MusicResponsiveListItemRenderer): SongItem? {
-            // Split the secondary line by bullet separator to separate artists from other metadata (like views)
-            val secondaryLineRuns = renderer.flexColumns
+            val artistRuns = renderer.flexColumns
                 .getOrNull(1)
                 ?.musicResponsiveListItemFlexColumnRenderer
                 ?.text
                 ?.runs
                 ?.splitBySeparator()
+                ?.getOrNull(0)
+                ?.splitArtistsByConjunction()
+                ?.filter { it.text.isNotBlank() && it.text != "&" && it.text != "," }
+                ?.map { run ->
+                    Artist(
+                        name = run.text.trim(),
+                        id = run.navigationEndpoint?.browseEndpoint?.browseId
+                    )
+                }
 
-            // Extract artists from the first segment after splitting
-            val artists = secondaryLineRuns?.firstOrNull()?.oddElements()?.map {
-                Artist(
-                    name = it.text,
-                    id = it.navigationEndpoint?.browseEndpoint?.browseId
-                )
-            }
-
-            // Extract album from last flexColumn (like SimpMusic)
             val album = renderer.flexColumns.lastOrNull()
                 ?.musicResponsiveListItemFlexColumnRenderer?.text?.runs
                 ?.firstOrNull()?.let {
@@ -99,15 +98,23 @@ data class ArtistPage(
                     } else null
                 }
 
-            // Extract library tokens using the new method that properly handles multiple toggle items
             val libraryTokens = PageHelper.extractLibraryTokensFromMenuItems(renderer.menu?.menuRenderer?.items)
 
             return SongItem(
-                id = renderer.playlistItemData?.videoId ?: return null,
+                id = renderer.playlistItemData?.videoId
+                    ?: renderer.navigationEndpoint?.watchEndpoint?.videoId
+                    ?: renderer.overlay?.musicItemThumbnailOverlayRenderer
+                        ?.content?.musicPlayButtonRenderer
+                        ?.playNavigationEndpoint?.watchEndpoint?.videoId
+                    ?: renderer.flexColumns.firstOrNull()
+                        ?.musicResponsiveListItemFlexColumnRenderer
+                        ?.text?.runs?.firstOrNull()
+                        ?.navigationEndpoint?.watchEndpoint?.videoId
+                    ?: return null,
                 title = renderer.flexColumns.firstOrNull()
                     ?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.firstOrNull()
                     ?.text ?: return null,
-                artists = artists ?: return null,
+                artists = artistRuns ?: return null,
                 album = album,
                 duration = null,
                 musicVideoType = renderer.musicVideoType,
@@ -125,23 +132,20 @@ data class ArtistPage(
         private fun fromMusicTwoRowItemRenderer(renderer: MusicTwoRowItemRenderer): YTItem? {
             return when {
                 renderer.isSong -> {
-                    val subtitleRuns = renderer.subtitle?.runs?.oddElements() ?: return null
+                    val subtitleRuns = renderer.subtitle?.runs ?: return null
+                    val expandedRuns = subtitleRuns.splitArtistsByConjunction()
+                    val artistRuns = expandedRuns.filter { 
+                        it.text.isNotBlank() && it.text != "&" && it.text != "," 
+                    }
                     SongItem(
                         id = renderer.navigationEndpoint.watchEndpoint?.videoId ?: return null,
                         title = renderer.title.runs?.firstOrNull()?.text ?: return null,
-                        artists = subtitleRuns.filter { 
-                            it.navigationEndpoint?.browseEndpoint?.browseId?.startsWith("UC") == true ||
-                            it.navigationEndpoint?.browseEndpoint != null
-                        }.map {
+                        artists = artistRuns.map { run ->
                             Artist(
-                                name = it.text,
-                                id = it.navigationEndpoint?.browseEndpoint?.browseId
+                                name = run.text.trim(),
+                                id = run.navigationEndpoint?.browseEndpoint?.browseId
                             )
-                        }.ifEmpty {
-                            subtitleRuns.firstOrNull()?.let { 
-                                listOf(Artist(name = it.text, id = null)) 
-                            } ?: emptyList()
-                        },
+                        }.ifEmpty { null } ?: return null,
                         album = null,
                         duration = null,
                         musicVideoType = renderer.musicVideoType,

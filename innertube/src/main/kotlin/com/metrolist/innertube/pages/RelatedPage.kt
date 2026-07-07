@@ -12,6 +12,7 @@ import com.metrolist.innertube.models.SongItem
 import com.metrolist.innertube.models.YTItem
 import com.metrolist.innertube.models.oddElements
 import com.metrolist.innertube.models.splitBySeparator
+import com.metrolist.innertube.utils.parseTime
 
 data class RelatedPage(
     val songs: List<SongItem>,
@@ -33,7 +34,7 @@ data class RelatedPage(
                 ?.splitBySeparator()
 
             return SongItem(
-                id = renderer.playlistItemData?.videoId ?: return null,
+                id = renderer.videoId ?: return null,
                 title =
                     renderer.flexColumns
                         .firstOrNull()
@@ -56,7 +57,9 @@ data class RelatedPage(
                             id = it.navigationEndpoint?.browseEndpoint?.browseId ?: return null,
                         )
                     },
-                duration = null,
+                duration = renderer.fixedColumns?.firstOrNull()
+                    ?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.firstOrNull()
+                    ?.text?.parseTime(),
                 musicVideoType = renderer.musicVideoType,
                 thumbnail = renderer.thumbnail?.musicThumbnailRenderer?.getThumbnailUrl() ?: return null,
                 explicit =

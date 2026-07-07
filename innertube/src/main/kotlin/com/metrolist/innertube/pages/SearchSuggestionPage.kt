@@ -12,6 +12,7 @@ import com.metrolist.innertube.models.SongItem
 import com.metrolist.innertube.models.YTItem
 import com.metrolist.innertube.models.clean
 import com.metrolist.innertube.models.oddElements
+import com.metrolist.innertube.models.splitArtistsByConjunction
 import com.metrolist.innertube.models.splitBySeparator
 import com.metrolist.innertube.utils.parseTime
 
@@ -72,7 +73,7 @@ object SearchSuggestionPage {
                 val dateIndex = if (isUnfilteredSearch) 1 else 0
                 val podcastIndex = if (isUnfilteredSearch) 2 else 1
                 EpisodeItem(
-                    id = renderer.playlistItemData?.videoId ?: return null,
+                    id = renderer.videoId ?: return null,
                     title =
                         renderer.flexColumns
                             .firstOrNull()
@@ -159,8 +160,13 @@ object SearchSuggestionPage {
                         ?.runs
                         ?.splitBySeparator()
                         ?.clean()
+                // Split artist runs by conjunction to handle "Artist1 & Artist2" cases
+                val artistRuns = secondaryLine
+                    ?.firstOrNull()
+                    ?.splitArtistsByConjunction()
+                    ?.filter { it.text.isNotBlank() && it.text != "&" && it.text != "," }
                 SongItem(
-                    id = renderer.playlistItemData?.videoId ?: return null,
+                    id = renderer.videoId ?: return null,
                     title =
                         renderer.flexColumns
                             .firstOrNull()
@@ -170,15 +176,12 @@ object SearchSuggestionPage {
                             ?.firstOrNull()
                             ?.text ?: return null,
                     artists =
-                        secondaryLine
-                            ?.firstOrNull()
-                            ?.oddElements()
-                            ?.map {
-                                Artist(
-                                    name = it.text,
-                                    id = it.navigationEndpoint?.browseEndpoint?.browseId,
-                                )
-                            } ?: return null,
+                        artistRuns?.map { run ->
+                            Artist(
+                                name = run.text.trim(),
+                                id = run.navigationEndpoint?.browseEndpoint?.browseId,
+                            )
+                        } ?: return null,
                     album =
                         renderer.flexColumns
                             .getOrNull(

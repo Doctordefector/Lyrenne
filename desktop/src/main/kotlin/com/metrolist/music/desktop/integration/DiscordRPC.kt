@@ -36,6 +36,10 @@ object DiscordRPC {
     @Volatile
     private var connected = false
     private var lastSongId: String? = null
+    // Last observed position + the wall-clock time we observed it — used to tell a real
+    // seek (position jumps out of step with elapsed time) from normal playback drift.
+    private var lastPosition = 0L
+    private var lastPositionWall = 0L
 
     // IPC opcodes
     private const val OP_HANDSHAKE = 0
@@ -62,18 +66,34 @@ object DiscordRPC {
     private fun startPresenceUpdates(player: DesktopPlayer) {
         updateJob?.cancel()
         updateJob = scope.launch {
-            // collectLatest serializes sends: a newer state cancels an in-flight
-            // update, so pipe writes never overlap. Fire only on song change — the
-            // start timestamp is anchored to the live position, so enabling RPC or
-            // resuming mid-song shows the correct elapsed time without re-sending on
-            // every 200ms position tick (which raced and tripped Discord's rate limit).
+            // collectLatest serializes sends and cancels an in-flight/pending update
+            // when a newer state arrives, so pipe writes never overlap and a scrub
+            // debounces to a single send. Presence updates on song change and on a
+            // real seek — detected by the position jumping out of step with elapsed
+            // wall time, which ignores the ±sub-second jitter of VLC's position that
+            // made the previous absolute-threshold approach spam Discord's rate limit.
             player.state.collectLatest { state ->
                 val song = state.currentSong
                 if (song != null && state.isPlaying) {
-                    if (song.id != lastSongId) {
+                    val pos = state.position
+                    val wall = System.currentTimeMillis()
+                    val songChanged = song.id != lastSongId
+                    val expectedPos = lastPosition + (wall - lastPositionWall)
+                    val seeked = !songChanged && lastSongId != null &&
+                        kotlin.math.abs(pos - expectedPos) > 3000
+                    lastPosition = pos
+                    lastPositionWall = wall
+
+                    if (songChanged) {
                         lastSongId = song.id
-                        val startEpoch = System.currentTimeMillis() / 1000 - state.position / 1000
-                        setPresence(song, startEpoch, state.duration)
+                        setPresence(song, wall / 1000 - pos / 1000, state.duration)
+                    } else if (seeked) {
+                        // Debounce: a newer emission (still scrubbing) cancels this,
+                        // so only the position the user lands on is sent. The anchor
+                        // is the absolute time position would have been 0 (wall - pos),
+                        // so it stays correct across the delay.
+                        delay(700)
+                        setPresence(song, wall / 1000 - pos / 1000, state.duration)
                     }
                 } else {
                     if (lastSongId != null) {

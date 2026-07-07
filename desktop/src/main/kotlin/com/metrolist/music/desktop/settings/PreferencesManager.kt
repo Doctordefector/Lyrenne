@@ -79,6 +79,7 @@ data class AppPreferences(
     // Library
     val libraryViewMode: LibraryViewMode = LibraryViewMode.LIST,
     val autoDownloadOnLike: Boolean = false,
+    val autoSyncOnStartup: Boolean = true,
     // Lyrics display
     val lyricsTextSize: Float = 16f,           // sp, 12-32
     val lyricsPosition: LyricsPosition = LyricsPosition.LEFT,
@@ -154,6 +155,7 @@ object PreferencesManager {
                         try { LibraryViewMode.valueOf(it) } catch (_: Exception) { null }
                     } ?: LibraryViewMode.LIST,
                     autoDownloadOnLike = props.getProperty("autoDownloadOnLike")?.toBoolean() ?: false,
+                    autoSyncOnStartup = props.getProperty("autoSyncOnStartup")?.toBoolean() ?: true,
                     lyricsTextSize = props.getProperty("lyricsTextSize")?.toFloatOrNull()?.coerceIn(12f, 32f) ?: 16f,
                     lyricsPosition = props.getProperty("lyricsPosition")?.let {
                         try { LyricsPosition.valueOf(it) } catch (_: Exception) { null }
@@ -213,6 +215,7 @@ object PreferencesManager {
             props.setProperty("proxyPassword", prefs.proxyPassword)
             props.setProperty("libraryViewMode", prefs.libraryViewMode.name)
             props.setProperty("autoDownloadOnLike", prefs.autoDownloadOnLike.toString())
+            props.setProperty("autoSyncOnStartup", prefs.autoSyncOnStartup.toString())
             props.setProperty("lyricsTextSize", prefs.lyricsTextSize.toString())
             props.setProperty("lyricsPosition", prefs.lyricsPosition.name)
             props.setProperty("lyricsClickToSeek", prefs.lyricsClickToSeek.toString())
@@ -423,6 +426,11 @@ object PreferencesManager {
 
     fun setAutoDownloadOnLike(enabled: Boolean) {
         _preferences.value = _preferences.value.copy(autoDownloadOnLike = enabled)
+        savePreferences()
+    }
+
+    fun setAutoSyncOnStartup(enabled: Boolean) {
+        _preferences.value = _preferences.value.copy(autoSyncOnStartup = enabled)
         savePreferences()
     }
 

@@ -36,6 +36,7 @@ object DiscordRPC {
     @Volatile
     private var connected = false
     private var lastSongId: String? = null
+    private var trackStartEpoch = 0L // epoch seconds of the virtual track start (now - position)
 
     // IPC opcodes
     private const val OP_HANDSHAKE = 0
@@ -64,10 +65,14 @@ object DiscordRPC {
         updateJob = scope.launch {
             player.state.collectLatest { state ->
                 if (state.currentSong != null && state.isPlaying) {
-                    // Only update if song changed
-                    if (state.currentSong.id != lastSongId) {
+                    // Anchor the presence timestamp to the actual playback position,
+                    // so enabling RPC (or seeking) mid-song shows the real elapsed time.
+                    val startEpoch = System.currentTimeMillis() / 1000 - state.position / 1000
+                    val seeked = kotlin.math.abs(startEpoch - trackStartEpoch) > 5
+                    if (state.currentSong.id != lastSongId || seeked) {
                         lastSongId = state.currentSong.id
-                        setPresence(state.currentSong)
+                        trackStartEpoch = startEpoch
+                        setPresence(state.currentSong, startEpoch, state.duration)
                     }
                 } else {
                     if (lastSongId != null) {
@@ -196,7 +201,7 @@ object DiscordRPC {
         }
     }
 
-    private fun setPresence(song: SongInfo) {
+    private fun setPresence(song: SongInfo, startEpoch: Long, durationMs: Long) {
         scope.launch {
             try {
                 if (!connect()) return@launch
@@ -209,14 +214,19 @@ object DiscordRPC {
                     ?.replace("w120-h120", "w512-h512")
                     ?.let { escapeJson(it) }
                 val ytUrl = escapeJson("https://music.youtube.com/watch?v=${song.id}")
-                val now = System.currentTimeMillis() / 1000
+                // With an end timestamp Discord renders a progress bar instead of a count-up
+                val timestamps = if (durationMs > 0) {
+                    """{"start":$startEpoch,"end":${startEpoch + durationMs / 1000}}"""
+                } else {
+                    """{"start":$startEpoch}"""
+                }
 
                 val activity = buildString {
                     append("""{"cmd":"SET_ACTIVITY","args":{"pid":${ProcessHandle.current().pid()},"activity":{""")
                     append(""""type":2,""") // LISTENING
                     append(""""details":"$title",""")
                     append(""""state":"$artist",""")
-                    append(""""timestamps":{"start":$now},""")
+                    append(""""timestamps":$timestamps,""")
                     append(""""assets":{""")
                     if (thumbnailUrl != null) {
                         append(""""large_image":"$thumbnailUrl",""")

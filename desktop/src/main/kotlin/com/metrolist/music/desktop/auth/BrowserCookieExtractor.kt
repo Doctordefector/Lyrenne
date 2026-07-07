@@ -209,6 +209,9 @@ object BrowserCookieExtractor {
 
         val cookieMap = mutableMapOf<String, String>()
         val cookieDomain = mutableMapOf<String, String>()
+        // Set when a v20 (app-bound) cookie can't be decrypted with the Local State key.
+        // v20 keys are SYSTEM-DPAPI-scoped, so user-space decryption is impossible by design.
+        var appBoundBlocked = false
         try {
             Class.forName("org.sqlite.JDBC")
             DriverManager.getConnection("jdbc:sqlite:${tempDb.absolutePath}").use { conn ->
@@ -233,6 +236,11 @@ object BrowserCookieExtractor {
                         else -> null
                     }
 
+                    if (value == null && encryptedValue != null && encryptedValue.size >= 3 &&
+                        String(encryptedValue, 0, 3) == "v20") {
+                        appBoundBlocked = true
+                    }
+
                     if (!value.isNullOrBlank()) {
                         val safe = value.filter { it.code >= 0x20 && it.code != 0x7F }
                         if (safe.isNotEmpty()) {
@@ -249,6 +257,15 @@ object BrowserCookieExtractor {
         }
 
         Timber.i("${browser.name}: found ${cookieMap.size} cookies (keys: ${cookieMap.keys.take(10)})")
+
+        val hasAuth = cookieMap.containsKey("SAPISID") || cookieMap.containsKey("__Secure-3PAPISID")
+        if (!hasAuth && appBoundBlocked) {
+            return CookieExtractResult.Error(
+                "${browser.name} uses app-bound cookie encryption (Chrome/Edge 127+), which can't be " +
+                "read without admin rights. Use \"Sign in with browser\" above instead, or import from Firefox."
+            )
+        }
+
         return buildCookieResult(cookieMap, browser.name)
     }
 

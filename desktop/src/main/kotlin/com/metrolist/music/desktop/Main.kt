@@ -15,6 +15,7 @@ import com.metrolist.music.desktop.auth.AuthManager
 import com.metrolist.music.desktop.db.DatabaseHelper
 import com.metrolist.music.desktop.media.MediaKeyHandler
 import com.metrolist.music.desktop.settings.PreferencesManager
+import com.metrolist.music.desktop.sync.LibrarySync
 import com.metrolist.music.desktop.ui.App
 import com.metrolist.music.desktop.ui.theme.MetrolistTheme
 import com.metrolist.music.desktop.playback.DesktopPlayer
@@ -22,6 +23,7 @@ import com.metrolist.music.desktop.integration.DiscordRPC
 import com.metrolist.music.desktop.integration.LastFmManager
 import com.metrolist.music.desktop.notification.DesktopNotification
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.jetbrains.skia.Image
 import timber.log.Timber
@@ -97,6 +99,11 @@ fun main() {
             // Restore queue (metadata only, no stream URL resolution)
             player.restoreQueue()
             player.setVolume(PreferencesManager.preferences.value.volume)
+            // Auto-sync library on each launch (no-op if not logged in or already syncing)
+            delay(1000) // brief delay so UI settles before network storm
+            if (PreferencesManager.preferences.value.autoSyncOnStartup) {
+                LibrarySync.syncLibrary()
+            }
             // Integrations
             DiscordRPC.initialize(player)
             LastFmManager.initialize(player)

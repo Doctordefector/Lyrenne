@@ -517,6 +517,20 @@ fun SettingsScreen(
             )
         }
 
+        item {
+            SettingsItem(
+                icon = Icons.Default.Sync,
+                title = "Sync Library on Startup",
+                subtitle = "Automatically fetch new liked songs, albums, artists, and playlists",
+                trailing = {
+                    Switch(
+                        checked = preferences.autoSyncOnStartup,
+                        onCheckedChange = { PreferencesManager.setAutoSyncOnStartup(it) }
+                    )
+                }
+            )
+        }
+
         // Privacy section
         item {
             SettingsSectionHeader("Privacy")
@@ -1118,7 +1132,7 @@ fun SettingsScreen(
                     title = { Text("💌", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
                     text = {
                         Text(
-                            "Hi Valerie! 💖",
+                            "Hi Valerie! 💜💚",
                             style = MaterialTheme.typography.headlineSmall,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth()

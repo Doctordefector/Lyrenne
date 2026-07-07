@@ -25,6 +25,7 @@ import com.metrolist.innertube.pages.ExplorePage
 import com.metrolist.innertube.pages.MoodAndGenres
 import com.metrolist.music.desktop.playback.DesktopPlayer
 import com.metrolist.music.desktop.settings.PreferencesManager
+import com.metrolist.music.desktop.ui.components.ScrollableRow
 import kotlinx.coroutines.launch
 import timber.log.Timber
 
@@ -160,7 +161,7 @@ fun ExploreScreen(
                                     style = MaterialTheme.typography.titleLarge,
                                     modifier = Modifier.padding(bottom = 12.dp)
                                 )
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                ScrollableRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     items(newReleases) { album ->
                                         ExploreAlbumCard(
                                             album = album,

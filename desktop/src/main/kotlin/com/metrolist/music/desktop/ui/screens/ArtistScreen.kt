@@ -23,6 +23,7 @@ import com.metrolist.innertube.YouTube
 import com.metrolist.innertube.models.*
 import com.metrolist.innertube.pages.ArtistPage
 import com.metrolist.music.desktop.playback.DesktopPlayer
+import com.metrolist.music.desktop.ui.components.ScrollableRow
 import kotlinx.coroutines.launch
 
 @Composable
@@ -239,7 +240,7 @@ fun ArtistScreen(
                         } else {
                             // Carousel view for albums, singles, playlists, related artists
                             item {
-                                LazyRow(
+                                ScrollableRow(
                                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
                                     items(section.items) { ytItem ->

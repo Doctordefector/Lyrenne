@@ -22,6 +22,7 @@ import com.metrolist.innertube.models.*
 import com.metrolist.innertube.pages.BrowseResult
 import com.metrolist.music.desktop.playback.DesktopPlayer
 import com.metrolist.music.desktop.settings.PreferencesManager
+import com.metrolist.music.desktop.ui.components.ScrollableRow
 import kotlinx.coroutines.launch
 import timber.log.Timber
 
@@ -108,7 +109,7 @@ fun BrowseScreen(
                                             modifier = Modifier.padding(bottom = 12.dp)
                                         )
                                     }
-                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    ScrollableRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                         items(section.items) { item ->
                                             BrowseItemCard(
                                                 item = item,

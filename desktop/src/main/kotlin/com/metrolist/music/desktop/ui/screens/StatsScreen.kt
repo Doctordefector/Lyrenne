@@ -28,6 +28,7 @@ import coil3.compose.AsyncImage
 import com.metrolist.music.desktop.db.DatabaseHelper
 import com.metrolist.music.desktop.playback.DesktopPlayer
 import com.metrolist.music.desktop.playback.SongInfo
+import com.metrolist.music.desktop.ui.components.ScrollableRow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -159,7 +160,7 @@ fun StatsScreen(
             if (topSongs.isNotEmpty()) {
                 Text("Most Played Songs", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(12.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ScrollableRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(topSongs) { song ->
                         StatsItemCard(
                             title = song.title,
@@ -176,7 +177,7 @@ fun StatsScreen(
             if (topArtists.isNotEmpty()) {
                 Text("Most Played Artists", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(12.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ScrollableRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(topArtists) { artist ->
                         StatsItemCard(
                             title = artist.name,
@@ -194,7 +195,7 @@ fun StatsScreen(
             if (topAlbums.isNotEmpty()) {
                 Text("Most Played Albums", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(12.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ScrollableRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(topAlbums) { album ->
                         StatsItemCard(
                             title = album.title,

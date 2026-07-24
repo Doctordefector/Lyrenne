@@ -85,7 +85,9 @@ data class AppPreferences(
     val lyricsPosition: LyricsPosition = LyricsPosition.LEFT,
     val lyricsClickToSeek: Boolean = true,
     // Car / USB export
-    val carExportDualMono: Boolean = false,    // fold L+R together for tracks mastered on one side
+    val carExportDualMono: Boolean = false,     // fold L+R together for tracks mastered on one side
+    // One-off safety backup written before sync first deletes local library state
+    val syncPruneBackupDone: Boolean = false,
 )
 
 object PreferencesManager {
@@ -164,6 +166,7 @@ object PreferencesManager {
                     } ?: LyricsPosition.LEFT,
                     lyricsClickToSeek = props.getProperty("lyricsClickToSeek")?.toBoolean() ?: true,
                     carExportDualMono = props.getProperty("carExportDualMono")?.toBoolean() ?: false,
+                    syncPruneBackupDone = props.getProperty("syncPruneBackupDone")?.toBoolean() ?: false,
                 )
             }
         } catch (e: Exception) {
@@ -223,6 +226,7 @@ object PreferencesManager {
             props.setProperty("lyricsPosition", prefs.lyricsPosition.name)
             props.setProperty("lyricsClickToSeek", prefs.lyricsClickToSeek.toString())
             props.setProperty("carExportDualMono", prefs.carExportDualMono.toString())
+            props.setProperty("syncPruneBackupDone", prefs.syncPruneBackupDone.toString())
 
             prefsFile.outputStream().use {
                 props.store(it, "Metrolist Desktop Preferences")
@@ -264,6 +268,11 @@ object PreferencesManager {
 
     fun setCacheSize(sizeBytes: Long) {
         _preferences.value = _preferences.value.copy(cacheSize = sizeBytes)
+        savePreferences()
+    }
+
+    fun setSyncPruneBackupDone(done: Boolean) {
+        _preferences.value = _preferences.value.copy(syncPruneBackupDone = done)
         savePreferences()
     }
 

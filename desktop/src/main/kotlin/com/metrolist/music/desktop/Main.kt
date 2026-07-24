@@ -12,6 +12,7 @@ import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import androidx.compose.ui.unit.dp
+import com.metrolist.music.desktop.ui.components.AutoScroll
 import com.metrolist.music.desktop.ui.components.TRAY_PANEL_HEIGHT
 import com.metrolist.music.desktop.ui.components.TRAY_PANEL_WIDTH
 import com.metrolist.music.desktop.ui.components.TrayPanel
@@ -168,6 +169,27 @@ fun main() {
             state = windowState,
             icon = appIcon,
         ) {
+            // Middle-click autoscroll. Registered on the toolkit rather than the window so it
+            // fires wherever the pointer is inside the app — Compose consumes mouse events
+            // before they reach any listener on the window itself.
+            DisposableEffect(window) {
+                val listener = java.awt.event.AWTEventListener { event ->
+                    val e = event as? java.awt.event.MouseEvent ?: return@AWTEventListener
+                    if (e.id != java.awt.event.MouseEvent.MOUSE_PRESSED) return@AWTEventListener
+                    if (e.button == java.awt.event.MouseEvent.BUTTON2) {
+                        AutoScroll.toggle(e.xOnScreen, e.yOnScreen, window)
+                    } else if (AutoScroll.isActive) {
+                        AutoScroll.stop()
+                    }
+                }
+                java.awt.Toolkit.getDefaultToolkit()
+                    .addAWTEventListener(listener, java.awt.AWTEvent.MOUSE_EVENT_MASK)
+                onDispose {
+                    java.awt.Toolkit.getDefaultToolkit().removeAWTEventListener(listener)
+                    AutoScroll.stop()
+                }
+            }
+
             // Set AWT icon images for taskbar/alt-tab (multiple sizes for best quality)
             LaunchedEffect(Unit) {
                 try {

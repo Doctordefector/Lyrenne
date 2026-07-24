@@ -22,6 +22,7 @@ import com.metrolist.music.desktop.playback.DesktopPlayer
 import com.metrolist.music.desktop.settings.PreferencesManager
 import com.metrolist.music.desktop.ui.screens.*
 import kotlinx.coroutines.launch
+import com.metrolist.music.desktop.ui.components.AutoScroll
 import com.metrolist.music.desktop.ui.components.LyricsPanel
 import com.metrolist.music.desktop.ui.components.MiniPlayer
 
@@ -122,6 +123,7 @@ fun App(player: DesktopPlayer) {
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     when {
                         event.key == Key.Escape -> when {
+                            AutoScroll.isActive -> { AutoScroll.stop(); true }
                             showQueueScreen -> { showQueueScreen = false; true }
                             showLyricsPanel -> { showLyricsPanel = false; true }
                             detailStack.isNotEmpty() -> { navigateBack(); true }

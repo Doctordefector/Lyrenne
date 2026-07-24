@@ -17,6 +17,8 @@ import com.metrolist.music.desktop.db.DatabaseHelper
 import com.metrolist.music.desktop.db.Playlist
 import com.metrolist.music.desktop.media.suppressMediaKeys
 import com.metrolist.music.desktop.playback.SongInfo
+import com.metrolist.music.desktop.sync.YouTubeWrites
+import kotlinx.coroutines.launch
 
 @Composable
 fun PlaylistPickerDialog(
@@ -31,6 +33,8 @@ fun PlaylistPickerDialog(
     var creating by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
 
+    val scope = rememberCoroutineScope()
+
     fun addToPlaylist(playlistId: String) {
         DatabaseHelper.insertSong(
             id = song.id,
@@ -40,6 +44,8 @@ fun PlaylistPickerDialog(
         )
         val position = DatabaseHelper.getPlaylistSongCount(playlistId)
         DatabaseHelper.addSongToPlaylist(playlistId, song.id, position)
+        // Mirror to YouTube — without this the song only ever existed in the local DB.
+        YouTubeWrites.addToPlaylist(playlistId, song.id)
         onDismiss()
     }
 
@@ -62,8 +68,12 @@ fun PlaylistPickerDialog(
                         IconButton(
                             onClick = {
                                 if (newName.isNotBlank()) {
-                                    val id = DatabaseHelper.createLocalPlaylist(newName.trim())
-                                    addToPlaylist(id)
+                                    scope.launch {
+                                        // Creates the playlist on YouTube first when signed in,
+                                        // so the song added next has somewhere to mirror to.
+                                        val id = YouTubeWrites.createPlaylist(newName.trim())
+                                        addToPlaylist(id)
+                                    }
                                 }
                             },
                             enabled = newName.isNotBlank()

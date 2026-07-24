@@ -235,6 +235,34 @@ feature without solving SYSTEM DPAPI first.
 - The ytcfg page fetch needs a current User-Agent (Chrome 137+); old ones get "browser deprecated"
 - **CRITICAL: Cookies MUST be stored in plaintext.** DO NOT encrypt, hash, obfuscate, or add any "secure storage" layer to cookie/credential storage. Plaintext storage in credentials.json is intentional and required — never change this.
 
+## Library Writes (two-way sync)
+
+**Every local library edit must also push to YouTube.** Until v2.8.0 the desktop app was
+read-only: adding a song to a playlist, liking a track, renaming or deleting a playlist all
+wrote to SQLDelight and stopped there, so nothing appeared on YouTube. The InnerTube write
+endpoints existed the whole time — nothing called them.
+
+`sync/YouTubeWrites.kt` owns this. Call it alongside the local `DatabaseHelper` mutation:
+
+| Local call | Must be followed by |
+|---|---|
+| `addSongToPlaylist` | `YouTubeWrites.addToPlaylist` |
+| `removeSongFromPlaylist` | `YouTubeWrites.removeFromPlaylist` |
+| `updateSongLiked` | `YouTubeWrites.likeSong` |
+| `renamePlaylist` | `YouTubeWrites.renamePlaylist` |
+| `deletePlaylist` | `YouTubeWrites.deletePlaylist` |
+| `createLocalPlaylist` | use `YouTubeWrites.createPlaylist` instead (suspend) |
+
+- Writes are fire-and-forget; the local DB stays the source of truth so edits work offline.
+  Failures surface via `YouTubeWrites.lastError`, never rolled back — silently undoing a
+  user's edit is worse than a stale remote.
+- Playlists with an `LP`-prefixed id are local-only (created offline or before v2.8.0) and are
+  skipped — they have no YouTube counterpart.
+- Removal needs `setVideoId`, not the video id. It isn't stored, so it's resolved by re-reading
+  the playlist. One extra call, but no schema migration for an id used only on delete.
+- The one place a bare `DatabaseHelper` mutation is correct is `LibrarySync` pruning — that
+  reflects remote state inward and must NOT push back out.
+
 ## Listen Together System
 
 ### Architecture

@@ -32,6 +32,7 @@ import com.metrolist.music.desktop.download.DownloadManager
 import com.metrolist.music.desktop.download.DownloadStatus
 import com.metrolist.music.desktop.ui.components.PlaylistPickerDialog
 import com.metrolist.music.desktop.media.suppressMediaKeys
+import com.metrolist.music.desktop.sync.YouTubeWrites
 import com.metrolist.music.desktop.playback.DesktopPlayer
 import com.metrolist.music.desktop.playback.SongInfo
 import com.metrolist.music.desktop.sync.LibrarySync
@@ -439,6 +440,7 @@ private fun SongsTab(
                             onToggleLike = {
                                 val nowLiked = dbSong.liked != 1L
                                 DatabaseHelper.updateSongLiked(dbSong.id, nowLiked)
+                                YouTubeWrites.likeSong(dbSong.id, nowLiked)
                                 // Auto-download on like (optional setting)
                                 if (nowLiked && dbSong.isDownloaded != 1L &&
                                     com.metrolist.music.desktop.settings.PreferencesManager.preferences.value.autoDownloadOnLike
@@ -884,7 +886,7 @@ private fun PlaylistsTab(
                     onClick = {
                         if (newPlaylistName.isNotBlank()) {
                             scope.launch(Dispatchers.IO) {
-                                DatabaseHelper.createLocalPlaylist(newPlaylistName.trim())
+                                scope.launch { YouTubeWrites.createPlaylist(newPlaylistName.trim()) }
                             }
                             newPlaylistName = ""
                             showCreateDialog = false
@@ -1015,6 +1017,7 @@ private fun PlaylistsTab(
                                         showMenu = false
                                         scope.launch(Dispatchers.IO) {
                                             DatabaseHelper.deletePlaylist(playlist.id)
+                                            YouTubeWrites.deletePlaylist(playlist.id)
                                         }
                                     },
                                     leadingIcon = {

@@ -85,6 +85,7 @@ Porting Metrolist (Android YouTube Music client) to desktop using Compose Deskto
 - Backup & restore (ZIP of preferences.properties + metrolist.db + credentials.json, BackupManager, restore needs restart)
 - Library grid/list view toggle (albums + artists tabs, LibraryViewMode pref)
 - Play All / Shuffle All buttons (library songs tab, local/auto playlists)
+- Car / USB export (`CarExport.kt`): "Export to Folder" button on Album/Playlist/LocalPlaylist writes loudness-normalized 320k MP3s named `01 - Artist - Title.mp3`; Settings → Storage → "Normalize Folder for Car / USB" runs the same pass over an existing folder into `<folder>/Normalized/`. Needs ffmpeg (bundled next to the exe or on PATH); "Force Dual Mono on Export" setting folds L+R for one-sided tracks
 
 ### Partially Implemented
 - Drag-to-reorder in queue (visual drag handle + pointerInput, reorder logic exists but needs polish; local playlists use menu-based Move Up/Down instead)
@@ -116,6 +117,7 @@ Porting Metrolist (Android YouTube Music client) to desktop using Compose Deskto
 | db/DatabaseHelper.kt | SQLDelight wrapper, queue persistence, song/album/artist/playlist CRUD |
 | playback/DesktopPlayer.kt | VLC playback engine, queue management, shuffle/repeat, stream URL resolution |
 | download/DownloadManager.kt | Download queue, HTTP streaming with progress, m4a storage |
+| download/CarExport.kt | ffmpeg-backed export/normalize to MP3 for USB/CD (loudnorm + stereo, optional dual mono) |
 | sync/LibrarySync.kt | YouTube library sync (liked songs, albums, artists, playlists) with pagination |
 | settings/PreferencesManager.kt | Properties file persistence for all user preferences |
 
@@ -204,12 +206,21 @@ Porting Metrolist (Android YouTube Music client) to desktop using Compose Deskto
 
 ## Authentication System
 
+**Only one login path exists: "Sign in with browser".** Importing cookies from an installed
+browser was removed for good in v2.6.0 — Chrome/Edge/Opera 127+ encrypt *every* cookie with
+app-bound `v20` keys stored as `app_bound_encrypted_key` and wrapped in SYSTEM-scoped DPAPI,
+which user-space code cannot unwrap. Verified 2026-07-24 on a real profile: Chrome 41/41 and
+Edge 46/46 YouTube cookies were `v20`, zero `v10`. Do not re-add an import-from-installed
+feature without solving SYSTEM DPAPI first.
+
 ### How it works
-1. **BrowserCookieExtractor** detects installed Chromium + Firefox browsers and decrypts their cookie databases
-2. Chromium cookies decrypted using Windows DPAPI (for master key) + AES-256-GCM (for individual cookies)
-3. Modern Chromium prepends a 32-byte binding hash to decrypted values — must be stripped
-4. **Domain preference**: `.youtube.com` cookies take priority over `.google.com` (critical for SIDCC, PSIDCC, PSIDTS)
-5. **BrowserLoginHelper** can also launch a browser with a temp profile for fresh sign-in
+1. **BrowserLoginHelper** launches Edge/Chrome/Brave with a dedicated profile at
+   `<app-dir>/data/login-profile`, waits for the user to sign in and close the browser
+2. A fresh profile still writes old-style `v10` cookies, which decrypt normally
+3. **BrowserCookieExtractor.extractChromiumCookies()** reads that profile's cookie DB:
+   Windows DPAPI (master key from Local State) + AES-256-GCM (individual cookies)
+4. Modern Chromium prepends a 32-byte binding hash to decrypted values — must be stripped
+5. **Domain preference**: `.youtube.com` cookies take priority over `.google.com` (critical for SIDCC, PSIDCC, PSIDTS)
 6. **AuthManager.saveCredentials()** fetches YouTube Music page HTML to extract ytcfg values:
    - `DATASYNC_ID` — Gaia ID for `onBehalfOfUser` (strip `||` suffix)
    - `SESSION_INDEX` — Google account index (critical for multi-account users)
@@ -251,6 +262,26 @@ Porting Metrolist (Android YouTube Music client) to desktop using Compose Deskto
 
 Text field suppression uses `Modifier.suppressMediaKeys()` on all OutlinedTextField instances + `MediaKeyHandler.textInputActive` check in both AWT KeyEventDispatcher and Compose `onPreviewKeyEvent`.
 
+## Startup Performance
+
+**CRITICAL: `desktop/resources/windows-x64/vlc/plugins/plugins.dat` must exist.**
+Without it libvlc loads and interrogates all 213 plugin DLLs on every launch — measured
+**11.6 s** of startup (~54 ms per DLL, Defender scans each one). With the cache: **0.57 s**.
+Total app startup went 13.5 s → 2.4 s.
+
+- The cache stores **relative** plugin paths, so it survives the app being moved (portable-safe)
+- Regenerate after ever changing the bundled VLC:
+  ```
+  cd desktop/resources/windows-x64/vlc
+  ../../../tools/vlc-cache-gen.exe "<ABSOLUTE path to that plugins dir>"
+  ```
+- **The path argument MUST be absolute.** With a relative path vlc-cache-gen exits 0 but
+  writes a useless 24-byte empty cache
+- `desktop/tools/vlc-cache-gen.exe` is from the official VLC 3.0.23 win64 build and matches
+  the bundled `libvlccore.dll` version. It lives outside `resources/` so it is never shipped
+- Startup order is already correct: window paints at ~1.6 s, VLC/auth/queue init happen
+  off the main thread afterwards. Don't move that work back into `main()`
+
 ## Development Notes
 - VLC must be installed on the system for playback to work (bundled VLC also supported)
 - Stream URLs fetched using InnerTube clients: ANDROID_VR_NO_AUTH → IOS → WEB_REMIX fallback
@@ -263,7 +294,7 @@ Text field suppression uses `Modifier.suppressMediaKeys()` on all OutlinedTextFi
 - SQLDelight accessor is `metrolistQueries` (not `metrolistDatabaseQueries`)
 
 ## Version Management
-- **Current version**: v2.3.0
+- **Current version**: v2.6.0
 - **Version must be updated in TWO places** when releasing:
   1. `desktop/build.gradle.kts` → `packageVersion = "X.Y.Z"`
   2. `desktop/.../update/AutoUpdater.kt` → `CURRENT_VERSION = "X.Y.Z"`

@@ -97,7 +97,7 @@ object DownloadManager {
         return getDownloadPathById(songId) != null
     }
 
-    private fun sanitizeFilename(name: String): String {
+    internal fun sanitizeFilename(name: String): String {
         return name.replace(Regex("[\\\\/:*?\"<>|]"), "_")
             .replace(Regex("\\s+"), " ")
             .trim()
@@ -253,9 +253,9 @@ object DownloadManager {
      * Tries clients in order matching Android Metrolist: WEB_REMIX first, then fallbacks.
      * Returns the URL with &range= appended (bypasses YouTube throttling) and content length.
      */
-    private data class StreamInfo(val url: String, val contentLength: Long)
+    internal data class StreamInfo(val url: String, val contentLength: Long)
 
-    private suspend fun getStreamInfo(videoId: String): StreamInfo? {
+    internal suspend fun getStreamInfo(videoId: String): StreamInfo? {
         // Client order: WEB_REMIX first (like Android), then fallbacks
         val clients = listOf(
             YouTubeClient.WEB_REMIX,

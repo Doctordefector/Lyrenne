@@ -128,21 +128,30 @@ fun App(player: DesktopPlayer) {
                             else -> false
                         }
                         event.isCtrlPressed -> when (event.key) {
+                            // Navigation shortcuts stay global.
                             Key.F -> { currentScreen = Screen.Search; detailStack.clear(); true }
                             Key.Q -> { showQueueScreen = !showQueueScreen; true }
                             Key.L -> { showLyricsPanel = !showLyricsPanel; true }
                             Key.K -> { showCommandPalette = !showCommandPalette; true }
-                            Key.P -> { player.togglePlayPause(); true }
-                            Key.S -> { player.toggleShuffle(); true }
-                            Key.R -> { player.toggleRepeat(); true }
-                            Key.DirectionRight -> { scope.launch { player.playNext() }; true }
-                            Key.DirectionLeft -> { scope.launch { player.playPrevious() }; true }
-                            Key.DirectionUp -> {
+                            // Player shortcuts must not steal Ctrl+Left/Right (word jump),
+                            // Ctrl+S/P/R etc. while the user is typing in a text field.
+                            // Preview runs before the field sees the event, so check explicitly.
+                            Key.P -> if (MediaKeyHandler.textInputActive) false
+                                else { player.togglePlayPause(); true }
+                            Key.S -> if (MediaKeyHandler.textInputActive) false
+                                else { player.toggleShuffle(); true }
+                            Key.R -> if (MediaKeyHandler.textInputActive) false
+                                else { player.toggleRepeat(); true }
+                            Key.DirectionRight -> if (MediaKeyHandler.textInputActive) false
+                                else { scope.launch { player.playNext() }; true }
+                            Key.DirectionLeft -> if (MediaKeyHandler.textInputActive) false
+                                else { scope.launch { player.playPrevious() }; true }
+                            Key.DirectionUp -> if (MediaKeyHandler.textInputActive) false else {
                                 val v = PreferencesManager.preferences.value.volume
                                 val nv = (v + 0.05f).coerceAtMost(1f)
                                 PreferencesManager.setVolume(nv); player.setVolume(nv); true
                             }
-                            Key.DirectionDown -> {
+                            Key.DirectionDown -> if (MediaKeyHandler.textInputActive) false else {
                                 val v = PreferencesManager.preferences.value.volume
                                 val nv = (v - 0.05f).coerceAtLeast(0f)
                                 PreferencesManager.setVolume(nv); player.setVolume(nv); true
@@ -158,6 +167,7 @@ fun App(player: DesktopPlayer) {
                 .onKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                     if (event.isCtrlPressed) return@onKeyEvent false // already handled in preview
+                    if (MediaKeyHandler.textInputActive) return@onKeyEvent false
                     when (event.key) {
                         Key.Spacebar -> { player.togglePlayPause(); true }
                         Key.M -> { MediaKeyHandler.toggleMute(player); true }

@@ -25,6 +25,7 @@ import com.metrolist.music.desktop.settings.PreferencesManager
 import com.metrolist.music.desktop.settings.ThemeMode
 import com.metrolist.music.desktop.integration.LastFmManager
 import com.metrolist.music.desktop.media.suppressMediaKeys
+import com.metrolist.music.desktop.ui.components.NativeFileDialog
 import com.metrolist.music.desktop.update.AutoUpdater
 import kotlinx.coroutines.launch
 import java.awt.Desktop
@@ -979,14 +980,11 @@ fun SettingsScreen(
                 title = "Back Up Data",
                 subtitle = backupStatus ?: "Export settings, library database and login to a ZIP",
                 onClick = {
-                    val chooser = JFileChooser().apply {
-                        dialogTitle = "Save Backup"
-                        selectedFile = java.io.File(
-                            com.metrolist.music.desktop.backup.BackupManager.defaultBackupFileName()
-                        )
-                    }
-                    if (chooser.showSaveDialog(null) == JFileChooser.APPROVE_OPTION) {
-                        val target = chooser.selectedFile
+                    val target = NativeFileDialog.save(
+                        title = "Save Backup",
+                        defaultName = com.metrolist.music.desktop.backup.BackupManager.defaultBackupFileName()
+                    )
+                    if (target != null) {
                         com.metrolist.music.desktop.backup.BackupManager.exportBackup(target)
                             .onSuccess { count ->
                                 backupStatus = "Backup saved (${count} files): ${target.name}"
@@ -1007,12 +1005,9 @@ fun SettingsScreen(
                 title = "Restore from Backup",
                 subtitle = restoreStatus ?: "Import a previously exported backup ZIP",
                 onClick = {
-                    val chooser = JFileChooser().apply {
-                        dialogTitle = "Choose Backup ZIP"
-                        fileFilter = javax.swing.filechooser.FileNameExtensionFilter("ZIP files", "zip")
-                    }
-                    if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
-                        com.metrolist.music.desktop.backup.BackupManager.importBackup(chooser.selectedFile)
+                    val source = NativeFileDialog.open("Choose Backup ZIP", extension = "zip")
+                    if (source != null) {
+                        com.metrolist.music.desktop.backup.BackupManager.importBackup(source)
                             .onSuccess { count ->
                                 restoreStatus = "Restored $count files — restart Metrolist to apply"
                                 showRestartNotice = true

@@ -6,8 +6,6 @@ import com.metrolist.music.desktop.settings.PreferencesManager
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collectLatest
 import timber.log.Timber
-import java.awt.MenuItem
-import java.awt.PopupMenu
 import java.awt.SystemTray
 import java.awt.TrayIcon
 
@@ -26,6 +24,9 @@ object DesktopNotification {
     /** Callback invoked when user clicks "Exit" in tray menu. */
     var onExitApp: (() -> Unit)? = null
 
+    /** Right-click on the tray icon, with screen coordinates for placing the panel. */
+    var onTrayMenu: ((x: Int, y: Int) -> Unit)? = null
+
     fun initialize(player: DesktopPlayer) {
         if (!SystemTray.isSupported()) {
             Timber.w("System tray not supported — notifications and tray minimize disabled")
@@ -43,19 +44,21 @@ object DesktopNotification {
                 java.awt.Toolkit.getDefaultToolkit().createImage(ByteArray(0))
             }
 
-            // Build context menu
-            val popup = PopupMenu()
-            val showItem = MenuItem("Show Metrolist")
-            showItem.addActionListener { onShowWindow?.invoke() }
-            val exitItem = MenuItem("Exit")
-            exitItem.addActionListener { onExitApp?.invoke() }
-            popup.add(showItem)
-            popup.addSeparator()
-            popup.add(exitItem)
-
-            trayIcon = TrayIcon(image, "Metrolist", popup).apply {
+            // Deliberately created WITHOUT a java.awt.PopupMenu. That class is a heavyweight
+            // native Win32 menu — unthemeable, no icons, no custom fonts. Handling the
+            // right-click ourselves lets the menu be rendered as ordinary Compose instead
+            // (see TrayPanel.kt); AWT only delivers mouse events when no popup is attached.
+            trayIcon = TrayIcon(image, "Metrolist").apply {
                 isImageAutoSize = true
                 addActionListener { onShowWindow?.invoke() } // Double-click on Windows
+                addMouseListener(object : java.awt.event.MouseAdapter() {
+                    override fun mousePressed(e: java.awt.event.MouseEvent) = maybePopup(e)
+                    override fun mouseReleased(e: java.awt.event.MouseEvent) = maybePopup(e)
+                    private fun maybePopup(e: java.awt.event.MouseEvent) {
+                        // isPopupTrigger fires on press or release depending on platform.
+                        if (e.isPopupTrigger) onTrayMenu?.invoke(e.xOnScreen, e.yOnScreen)
+                    }
+                })
             }
 
             SystemTray.getSystemTray().add(trayIcon)

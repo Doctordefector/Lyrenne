@@ -1181,7 +1181,7 @@ fun SettingsScreen(
         }
 
         item {
-            // Easter egg: triple-click Version → "Hi Valerie!"
+            // Easter egg: triple-click Version
             var clickCount by remember { mutableIntStateOf(0) }
             var showEasterEgg by remember { mutableStateOf(false) }
 
@@ -1191,8 +1191,9 @@ fun SettingsScreen(
                     title = { Text("💌", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
                     text = {
                         Text(
-                            "Hi Valerie! 💜💚",
-                            style = MaterialTheme.typography.headlineSmall,
+                            "Amazingly Variable Mixtape 1 got its first song as of 25/7/26 " +
+                                "exactly 6 months since my first date with my beloved :)",
+                            style = MaterialTheme.typography.titleMedium,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth()
                         )

@@ -1,5 +1,6 @@
 import com.google.protobuf.gradle.*
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import java.util.zip.ZipFile
 
 plugins {
     kotlin("jvm")
@@ -13,6 +14,9 @@ plugins {
 kotlin {
     jvmToolchain(21)
 }
+
+// Must match AutoUpdater.CURRENT_VERSION — both are checked on every release
+val metrolistVersion = "2.6.0"
 
 // Include shared module sources directly (they are Android library modules but pure Kotlin/JVM code)
 sourceSets {
@@ -103,7 +107,7 @@ compose.desktop {
             modules("java.sql", "java.naming", "java.net.http", "jdk.unsupported")
 
             packageName = "Metrolist"
-            packageVersion = "2.6.0"
+            packageVersion = metrolistVersion
             description = "YouTube Music Desktop Client"
             vendor = "Metrolist"
 
@@ -158,6 +162,75 @@ tasks.register("patchPortableIcon") {
             patched.delete()
             logger.lifecycle("Icon patched into portable exe successfully")
         }
+    }
+}
+
+/**
+ * Build the release ZIP safely.
+ *
+ * Running the app from the distributable folder makes AppPaths write `data/` right next to
+ * Metrolist.exe — credentials.json, the library DB, preferences. Smoke-testing before zipping
+ * therefore bakes real login cookies into the release artifact. This happened once (v2.6.0,
+ * published to a PUBLIC repo) so it is now automated rather than left to memory:
+ * purge runtime dirs, zip with 7z, then FAIL the build if anything sensitive is inside.
+ */
+tasks.register("packagePortableZip") {
+    dependsOn("createDistributable")
+    // Resolved at configuration time — doLast must not reference script/project objects
+    // or the Gradle configuration cache refuses to serialize the task.
+    val appDir = layout.buildDirectory.dir("compose/binaries/main/app").get().asFile
+    val imageDir = File(appDir, "Metrolist")
+    val zipFile = File(appDir, "Metrolist-$metrolistVersion-portable.zip")
+    val sevenZipCandidates = listOf(
+        File("C:/Program Files/7-Zip/7z.exe"),
+        File("C:/Program Files (x86)/7-Zip/7z.exe")
+    )
+
+    doLast {
+        // 1. Purge anything the app generated while it was run from this folder
+        listOf("data", "Downloads", "updates").forEach { name ->
+            val dir = File(imageDir, name)
+            if (dir.exists()) {
+                dir.deleteRecursively()
+                logger.lifecycle("Purged runtime dir: $name")
+            }
+        }
+
+        // 2. Always start from a fresh archive — `7z a` ADDS to an existing zip, which would
+        //    silently retain entries that were just purged from disk.
+        if (zipFile.exists()) zipFile.delete()
+
+        val sevenZip = sevenZipCandidates.firstOrNull { it.exists() }
+            ?: throw GradleException("7-Zip not found. Never use Compress-Archive — it writes backslash entries that break Java's ZipEntry.isDirectory().")
+
+        val exit = ProcessBuilder(
+            sevenZip.absolutePath, "a", "-tzip", zipFile.absolutePath, "Metrolist/*", "-mx5"
+        ).directory(appDir).redirectErrorStream(true).start().let { p ->
+            p.inputStream.bufferedReader().use { it.readText() }
+            p.waitFor()
+        }
+        if (exit != 0) throw GradleException("7z failed with exit code $exit")
+
+        // 3. Refuse to hand over an artifact containing secrets or a broken entry format
+        val forbidden = Regex("(?i)(^|/)(data/|credentials|preferences\\.properties|metrolist\\.db|login-profile)")
+        val offenders = mutableListOf<String>()
+        var backslashEntries = 0
+        ZipFile(zipFile).use { zip ->
+            zip.entries().asSequence().forEach { entry ->
+                if (forbidden.containsMatchIn(entry.name)) offenders += entry.name
+                if (entry.name.contains('\\')) backslashEntries++
+            }
+        }
+        if (offenders.isNotEmpty()) {
+            zipFile.delete()
+            throw GradleException("REFUSING TO SHIP: zip contains user data — ${offenders.joinToString()}")
+        }
+        if (backslashEntries > 0) {
+            zipFile.delete()
+            throw GradleException("REFUSING TO SHIP: $backslashEntries backslash entries — Java cannot extract this zip")
+        }
+
+        logger.lifecycle("Portable zip verified clean: ${zipFile.absolutePath} (${zipFile.length() / 1024 / 1024} MB)")
     }
 }
 

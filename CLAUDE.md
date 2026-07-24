@@ -307,11 +307,12 @@ Total app startup went 13.5 s → 2.4 s.
    ./gradlew :desktop:createDistributable
    ```
    Output: `desktop/build/compose/binaries/main/app/Metrolist/` (folder with exe + runtime + resources)
-3. **Create portable ZIP** (7z — NEVER use Compress-Archive, it creates backslash entries that break Java):
-   ```powershell
-   cd desktop/build/compose/binaries/main/app
-   7z a -tzip "../Metrolist-X.Y.Z-portable.zip" "Metrolist/*"
+3. **Create portable ZIP** — use the guarded task, never a manual 7z call:
    ```
+   ./gradlew :desktop:packagePortableZip
+   ```
+   Purges runtime data, zips with 7z, and refuses to produce an archive containing
+   credentials/DB/prefs or backslash entries. Output: `desktop/build/compose/binaries/main/app/Metrolist-X.Y.Z-portable.zip`
 4. **Push code** to GitHub (robocopy to temp dir, git init, commit, force push)
 5. **Create GitHub release** with portable ZIP only:
    ```
@@ -337,7 +338,20 @@ All data is fully portable — stored next to the executable via centralized `Ap
 - **CRITICAL**: NOTHING goes to %APPDATA% or %LOCALAPPDATA% anymore. Everything lives next to the app for full portability.
 
 ## GitHub & Release
-- **Private repo**: https://github.com/Doctordefector/Metrolist-Desktop
+- **PUBLIC repo**: https://github.com/Doctordefector/Metrolist-Desktop — anything pushed or
+  attached to a release is world-readable immediately. (This file previously claimed "private";
+  it is not, and that error contributed to a credential leak in v2.6.0.)
+
+### CRITICAL: never zip the folder you smoke-tested from
+`AppPaths` writes `data/` (credentials.json, metrolist.db, preferences.properties) next to
+`Metrolist.exe`. Running the app from `build/compose/binaries/main/app/Metrolist/` therefore
+plants **real login cookies** inside the exact folder that gets zipped. This shipped once in
+v2.6.0 and was public for ~12 minutes.
+
+**Always build the release archive with `./gradlew :desktop:packagePortableZip`.** It purges
+`data/`, `Downloads/`, `updates/`, zips with 7z, then scans the archive and *fails the build*
+(deleting the zip) if any credential/DB/prefs entry or backslash entry is present. Do not
+hand-roll the 7z command.
 - Local copy has `nul` file that breaks git — use temp dir copy for pushing
 - Push workflow: robocopy to temp dir (excluding .gradle/.kotlin/build/.claude/nul), git init, commit, force push
 - `gh` CLI at `C:\Program Files\GitHub CLI\gh.exe` (not in bash PATH, use full path), authenticated as Doctordefector

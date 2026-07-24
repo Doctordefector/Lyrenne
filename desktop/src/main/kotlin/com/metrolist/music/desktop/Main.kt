@@ -8,9 +8,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import androidx.compose.ui.unit.dp
+import com.metrolist.music.desktop.ui.components.TRAY_PANEL_HEIGHT
+import com.metrolist.music.desktop.ui.components.TRAY_PANEL_WIDTH
+import com.metrolist.music.desktop.ui.components.TrayPanel
 import com.metrolist.music.desktop.auth.AuthManager
 import com.metrolist.music.desktop.db.DatabaseHelper
 import com.metrolist.music.desktop.media.MediaKeyHandler
@@ -63,6 +67,15 @@ fun applyNetworkPreferences() {
 }
 
 fun main() {
+    // Every remaining Swing dialog (folder pickers, backup/restore) defaults to the
+    // cross-platform Metal look — grey 1990s widgets. The system L&F makes them render
+    // as native Windows dialogs instead. Must be set before any Swing class loads.
+    try {
+        javax.swing.UIManager.setLookAndFeel(javax.swing.UIManager.getSystemLookAndFeelClassName())
+    } catch (e: Exception) {
+        Timber.w("Could not apply system look and feel: ${e.message}")
+    }
+
     // Load icon once at startup from classpath resources (512x512 PNG)
     val appIcon = try {
         val bytes = Thread.currentThread().contextClassLoader
@@ -87,6 +100,7 @@ fun main() {
         val windowState = rememberWindowState(width = 1200.dp, height = 800.dp)
         val player = remember { DesktopPlayer() }
         var windowVisible by remember { mutableStateOf(true) }
+        var trayPanelAt by remember { mutableStateOf<Pair<Int, Int>?>(null) }
 
         // Initialize VLC, auth, media keys, queue restore, and integrations off the main thread
         LaunchedEffect(player) {
@@ -112,6 +126,9 @@ fun main() {
             // Set up tray callbacks for minimize-to-tray
             DesktopNotification.onShowWindow = {
                 windowVisible = true
+            }
+            DesktopNotification.onTrayMenu = { x, y ->
+                trayPanelAt = x to y
             }
             DesktopNotification.onExitApp = {
                 DesktopNotification.release()
@@ -184,6 +201,58 @@ fun main() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     App(player = player)
+                }
+            }
+        }
+
+        // Tray popup — replaces AWT's unthemeable native PopupMenu.
+        trayPanelAt?.let { (clickX, clickY) ->
+            val screen = java.awt.Toolkit.getDefaultToolkit().screenSize
+            // Anchor above-left of the cursor (the tray sits bottom-right), clamped on screen.
+            val x = (clickX - TRAY_PANEL_WIDTH / 2).coerceIn(8, screen.width - TRAY_PANEL_WIDTH - 8)
+            val y = (clickY - TRAY_PANEL_HEIGHT - 16).coerceIn(8, screen.height - TRAY_PANEL_HEIGHT - 8)
+
+            Window(
+                onCloseRequest = { trayPanelAt = null },
+                state = rememberWindowState(
+                    width = TRAY_PANEL_WIDTH.dp,
+                    height = TRAY_PANEL_HEIGHT.dp,
+                    position = WindowPosition(x.dp, y.dp)
+                ),
+                undecorated = true,
+                transparent = true,
+                resizable = false,
+                alwaysOnTop = true,
+                focusable = true,
+                title = "Metrolist"
+            ) {
+                // Dismiss when the user clicks elsewhere, the way a real menu behaves.
+                DisposableEffect(Unit) {
+                    val listener = object : java.awt.event.WindowAdapter() {
+                        override fun windowLostFocus(e: java.awt.event.WindowEvent?) {
+                            trayPanelAt = null
+                        }
+                    }
+                    window.addWindowFocusListener(listener)
+                    window.toFront()
+                    window.requestFocus()
+                    onDispose { window.removeWindowFocusListener(listener) }
+                }
+
+                MetrolistTheme(themeMode = prefs.themeMode) {
+                    TrayPanel(
+                        player = player,
+                        onOpenWindow = { windowVisible = true },
+                        onQuit = {
+                            DesktopNotification.release()
+                            LastFmManager.release()
+                            DiscordRPC.release()
+                            MediaKeyHandler.release()
+                            player.release()
+                            exitApplication()
+                        },
+                        onDismiss = { trayPanelAt = null }
+                    )
                 }
             }
         }

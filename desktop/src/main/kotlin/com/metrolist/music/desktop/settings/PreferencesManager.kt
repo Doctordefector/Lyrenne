@@ -84,6 +84,8 @@ data class AppPreferences(
     val lyricsTextSize: Float = 16f,           // sp, 12-32
     val lyricsPosition: LyricsPosition = LyricsPosition.LEFT,
     val lyricsClickToSeek: Boolean = true,
+    // Car / USB export
+    val carExportDualMono: Boolean = false,    // fold L+R together for tracks mastered on one side
 )
 
 object PreferencesManager {
@@ -161,6 +163,7 @@ object PreferencesManager {
                         try { LyricsPosition.valueOf(it) } catch (_: Exception) { null }
                     } ?: LyricsPosition.LEFT,
                     lyricsClickToSeek = props.getProperty("lyricsClickToSeek")?.toBoolean() ?: true,
+                    carExportDualMono = props.getProperty("carExportDualMono")?.toBoolean() ?: false,
                 )
             }
         } catch (e: Exception) {
@@ -219,6 +222,7 @@ object PreferencesManager {
             props.setProperty("lyricsTextSize", prefs.lyricsTextSize.toString())
             props.setProperty("lyricsPosition", prefs.lyricsPosition.name)
             props.setProperty("lyricsClickToSeek", prefs.lyricsClickToSeek.toString())
+            props.setProperty("carExportDualMono", prefs.carExportDualMono.toString())
 
             prefsFile.outputStream().use {
                 props.store(it, "Metrolist Desktop Preferences")
@@ -260,6 +264,11 @@ object PreferencesManager {
 
     fun setCacheSize(sizeBytes: Long) {
         _preferences.value = _preferences.value.copy(cacheSize = sizeBytes)
+        savePreferences()
+    }
+
+    fun setCarExportDualMono(enabled: Boolean) {
+        _preferences.value = _preferences.value.copy(carExportDualMono = enabled)
         savePreferences()
     }
 

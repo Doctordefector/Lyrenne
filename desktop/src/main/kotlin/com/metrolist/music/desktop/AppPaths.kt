@@ -20,6 +20,9 @@ object AppPaths {
         dir
     }
 
+    /** The directory the executable lives in — used to find bundled tools like ffmpeg */
+    val appDir: File by lazy { getAppDirectory() }
+
     /** preferences.properties */
     val preferencesFile: File get() = File(dataDir, "preferences.properties")
 

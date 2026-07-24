@@ -9,201 +9,45 @@ import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
-enum class BrowserType {
-    CHROMIUM, FIREFOX
-}
-
-data class BrowserProfile(
-    val name: String,
-    val userDataDir: File,
-    val cookieDbPath: File,
-    val localStatePath: File,
-    val type: BrowserType = BrowserType.CHROMIUM
-)
-
 sealed class CookieExtractResult {
     data class Success(val cookie: String, val browserName: String) : CookieExtractResult()
     data class Error(val message: String) : CookieExtractResult()
 }
 
+/**
+ * Reads YouTube cookies out of a Chromium cookie database.
+ *
+ * Only ever pointed at the dedicated login profile that [BrowserLoginHelper] creates —
+ * importing from an installed browser was removed, because Chrome/Edge 127+ encrypt every
+ * cookie with app-bound (v20) keys that are wrapped in SYSTEM-scoped DPAPI and cannot be
+ * read from user space. A fresh profile still writes v10 cookies, which decrypt fine.
+ */
 object BrowserCookieExtractor {
 
-    fun detectBrowsers(): List<BrowserProfile> {
-        val browsers = mutableListOf<BrowserProfile>()
-        val localAppData = System.getenv("LOCALAPPDATA") ?: return browsers
-        val appData = System.getenv("APPDATA") ?: return browsers
-
-        // Chromium-based browsers
-        val chromiumCandidates = listOf(
-            Pair("Chrome", File(localAppData, "Google/Chrome/User Data")),
-            Pair("Edge", File(localAppData, "Microsoft/Edge/User Data")),
-            Pair("Opera", File(appData, "Opera Software/Opera Stable")),
-            Pair("Opera GX", File(appData, "Opera Software/Opera GX Stable")),
-            Pair("Brave", File(localAppData, "BraveSoftware/Brave-Browser/User Data")),
-            Pair("Vivaldi", File(localAppData, "Vivaldi/User Data")),
-        )
-
-        for ((name, dir) in chromiumCandidates) {
-            if (!dir.exists()) continue
-            val cookieDb = File(dir, "Default/Network/Cookies").takeIf { it.exists() }
-                ?: File(dir, "Default/Cookies").takeIf { it.exists() }
-                ?: File(dir, "Network/Cookies").takeIf { it.exists() }
-                ?: File(dir, "Cookies").takeIf { it.exists() }
-            val localState = File(dir, "Local State")
-
-            if (cookieDb != null && localState.exists()) {
-                browsers.add(BrowserProfile(name, dir, cookieDb, localState, BrowserType.CHROMIUM))
-            }
-        }
-
-        // Firefox
-        detectFirefoxProfiles(appData)?.let { browsers.add(it) }
-
-        return browsers
-    }
-
-    private fun detectFirefoxProfiles(appData: String): BrowserProfile? {
-        val firefoxDir = File(appData, "Mozilla/Firefox")
-        val profilesIni = File(firefoxDir, "profiles.ini")
-        if (!profilesIni.exists()) return null
-
-        // Parse profiles.ini to find the default profile
-        var defaultProfilePath: String? = null
-        var currentPath: String? = null
-        var currentIsDefault = false
-
-        for (line in profilesIni.readLines()) {
-            val trimmed = line.trim()
-            if (trimmed.startsWith("[") && currentPath != null) {
-                if (currentIsDefault) {
-                    defaultProfilePath = currentPath
-                    break
-                }
-                currentPath = null
-                currentIsDefault = false
-            }
-            when {
-                trimmed.startsWith("Path=", ignoreCase = true) ->
-                    currentPath = trimmed.substringAfter("=")
-                trimmed.equals("Default=1", ignoreCase = true) ->
-                    currentIsDefault = true
-            }
-        }
-        // Check last section
-        if (defaultProfilePath == null && currentIsDefault && currentPath != null) {
-            defaultProfilePath = currentPath
-        }
-
-        // If no explicit default, try the first profile with cookies
-        if (defaultProfilePath == null) {
-            // Try installs.ini default or just find any profile with cookies
-            val installsIni = File(firefoxDir, "installs.ini")
-            if (installsIni.exists()) {
-                for (line in installsIni.readLines()) {
-                    if (line.trim().startsWith("Default=", ignoreCase = true)) {
-                        defaultProfilePath = line.trim().substringAfter("=")
-                        break
-                    }
-                }
-            }
-        }
-
-        // Resolve profile directory
-        val profileDir = if (defaultProfilePath != null) {
-            val path = defaultProfilePath.replace("\\", "/")
-            if (File(path).isAbsolute) File(path) else File(firefoxDir, path)
-        } else {
-            // Last resort: find any profile directory with cookies.sqlite
-            firefoxDir.resolve("Profiles").listFiles()
-                ?.firstOrNull { File(it, "cookies.sqlite").exists() }
-        }
-
-        val cookieDb = profileDir?.let { File(it, "cookies.sqlite") }
-        if (cookieDb != null && cookieDb.exists()) {
-            return BrowserProfile(
-                name = "Firefox",
-                userDataDir = profileDir,
-                cookieDbPath = cookieDb,
-                localStatePath = profileDir, // not used for Firefox
-                type = BrowserType.FIREFOX
-            )
-        }
-        return null
-    }
-
-    fun extractYouTubeCookies(browser: BrowserProfile): CookieExtractResult {
-        return when (browser.type) {
-            BrowserType.CHROMIUM -> extractChromiumCookies(browser)
-            BrowserType.FIREFOX -> extractFirefoxCookies(browser)
-        }
-    }
-
-    private fun extractFirefoxCookies(browser: BrowserProfile): CookieExtractResult {
-        val tempDb = Files.createTempFile("ml_ff_cookies_", ".db").toFile()
-        try {
-            browser.cookieDbPath.copyTo(tempDb, overwrite = true)
-        } catch (_: Exception) {
-            try {
-                copyLockedFile(browser.cookieDbPath, tempDb)
-            } catch (_: Exception) {
-                tempDb.delete()
-                return CookieExtractResult.Error("Can't access Firefox cookies. Try closing Firefox and retry.")
-            }
-        }
-
-        val cookieMap = mutableMapOf<String, String>()
-        val cookieDomain = mutableMapOf<String, String>()
-        try {
-            Class.forName("org.sqlite.JDBC")
-            DriverManager.getConnection("jdbc:sqlite:${tempDb.absolutePath}").use { conn ->
-                val stmt = conn.prepareStatement(
-                    """SELECT name, value, host FROM moz_cookies
-                       WHERE host LIKE '%youtube.com' OR host LIKE '%.google.com'
-                       ORDER BY CASE WHEN host LIKE '%youtube.com' THEN 1 ELSE 2 END"""
-                )
-                val rs = stmt.executeQuery()
-                while (rs.next()) {
-                    val name = rs.getString("name")
-                    val host = rs.getString("host")
-                    val value = rs.getString("value")
-
-                    if (name in cookieMap && cookieDomain[name]?.contains("youtube") == true) continue
-
-                    if (!value.isNullOrBlank()) {
-                        cookieMap[name] = value
-                        cookieDomain[name] = host
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            return CookieExtractResult.Error("Failed to read Firefox cookie database: ${e.message}")
-        } finally {
-            tempDb.delete()
-        }
-
-        return buildCookieResult(cookieMap, browser.name)
-    }
-
-    private fun extractChromiumCookies(browser: BrowserProfile): CookieExtractResult {
-        Timber.i("Extracting cookies from ${browser.name}: db=${browser.cookieDbPath}, localState=${browser.localStatePath}")
-        val masterKey = decryptMasterKey(browser.localStatePath)
-            ?: return CookieExtractResult.Error("Failed to decrypt ${browser.name}'s encryption key. Make sure ${browser.name} is installed properly.")
+    fun extractChromiumCookies(
+        cookieDbPath: File,
+        localStatePath: File,
+        browserName: String
+    ): CookieExtractResult {
+        Timber.i("Extracting cookies from $browserName: db=$cookieDbPath")
+        val masterKey = decryptMasterKey(localStatePath)
+            ?: return CookieExtractResult.Error("Failed to decrypt $browserName's encryption key.")
 
         val tempDb = Files.createTempFile("ml_cookies_", ".db").toFile()
         val tempWal = File(tempDb.absolutePath + "-wal")
         val tempShm = File(tempDb.absolutePath + "-shm")
         try {
-            browser.cookieDbPath.copyTo(tempDb, overwrite = true)
-            val walFile = File(browser.cookieDbPath.absolutePath + "-wal")
-            val shmFile = File(browser.cookieDbPath.absolutePath + "-shm")
+            cookieDbPath.copyTo(tempDb, overwrite = true)
+            val walFile = File(cookieDbPath.absolutePath + "-wal")
+            val shmFile = File(cookieDbPath.absolutePath + "-shm")
             if (walFile.exists()) walFile.copyTo(tempWal, overwrite = true)
             if (shmFile.exists()) shmFile.copyTo(tempShm, overwrite = true)
         } catch (_: Exception) {
             try {
-                copyLockedFile(browser.cookieDbPath, tempDb)
+                copyLockedFile(cookieDbPath, tempDb)
             } catch (_: Exception) {
                 tempDb.delete(); tempWal.delete(); tempShm.delete()
-                return CookieExtractResult.Error("Can't access ${browser.name}'s cookies. Try closing ${browser.name} and retry.")
+                return CookieExtractResult.Error("Can't access $browserName's cookies. Try closing $browserName and retry.")
             }
         }
 
@@ -256,17 +100,17 @@ object BrowserCookieExtractor {
             tempDb.delete(); tempWal.delete(); tempShm.delete()
         }
 
-        Timber.i("${browser.name}: found ${cookieMap.size} cookies (keys: ${cookieMap.keys.take(10)})")
+        Timber.i("$browserName: found ${cookieMap.size} cookies (keys: ${cookieMap.keys.take(10)})")
 
         val hasAuth = cookieMap.containsKey("SAPISID") || cookieMap.containsKey("__Secure-3PAPISID")
         if (!hasAuth && appBoundBlocked) {
             return CookieExtractResult.Error(
-                "${browser.name} uses app-bound cookie encryption (Chrome/Edge 127+), which can't be " +
-                "read without admin rights. Use \"Sign in with browser\" above instead, or import from Firefox."
+                "$browserName wrote app-bound encrypted cookies (v20), which can't be read from " +
+                "user space. Try signing in with a different browser (Edge works)."
             )
         }
 
-        return buildCookieResult(cookieMap, browser.name)
+        return buildCookieResult(cookieMap, browserName)
     }
 
     private fun copyLockedFile(source: File, dest: File) {
@@ -289,12 +133,12 @@ object BrowserCookieExtractor {
 
     private fun buildCookieResult(cookieMap: Map<String, String>, browserName: String): CookieExtractResult {
         if (cookieMap.isEmpty()) {
-            return CookieExtractResult.Error("No YouTube cookies found in $browserName. Make sure you're signed in to music.youtube.com.")
+            return CookieExtractResult.Error("No YouTube cookies found. Make sure you signed in to music.youtube.com.")
         }
 
         val hasAuth = cookieMap.containsKey("SAPISID") || cookieMap.containsKey("__Secure-3PAPISID")
         if (!hasAuth) {
-            return CookieExtractResult.Error("You're not signed in to YouTube Music in $browserName. Sign in first, then try again.")
+            return CookieExtractResult.Error("You're not signed in to YouTube Music. Sign in first, then close the browser.")
         }
 
         val priority = listOf(

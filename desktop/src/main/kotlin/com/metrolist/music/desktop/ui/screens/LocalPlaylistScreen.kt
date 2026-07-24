@@ -20,11 +20,14 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.metrolist.music.desktop.db.DatabaseHelper
 import com.metrolist.music.desktop.db.Song
+import com.metrolist.music.desktop.download.CarExport
 import com.metrolist.music.desktop.download.DownloadManager
 import com.metrolist.music.desktop.media.suppressMediaKeys
 import com.metrolist.music.desktop.playback.DesktopPlayer
 import com.metrolist.music.desktop.playback.SongInfo
 import com.metrolist.music.desktop.ui.AutoPlaylistType
+import com.metrolist.music.desktop.ui.components.CarExportStatus
+import com.metrolist.music.desktop.ui.components.chooseExportFolder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -147,7 +150,18 @@ fun LocalPlaylistScreen(
                     Spacer(Modifier.width(4.dp))
                     Text("Shuffle")
                 }
+                OutlinedButton(onClick = {
+                    val targetDir = chooseExportFolder(playlist?.name ?: "Playlist")
+                    if (targetDir != null) {
+                        CarExport.exportSongs(songs.map { it.toPlaylistSongInfo(artistNamesMap) }, targetDir)
+                    }
+                }) {
+                    Icon(Icons.Default.DirectionsCar, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Export to Folder")
+                }
             }
+            CarExportStatus()
             Spacer(Modifier.height(12.dp))
         }
 

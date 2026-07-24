@@ -321,6 +321,11 @@ object ListenTogetherManager {
                                 client.sendPlaybackAction(PlaybackActions.PLAY, position = currentState.position)
                             }
                         }
+
+                        // cleanup() stopped the heartbeat on the disconnect, and the role
+                        // StateFlow re-emits the same HOST value so the role collector won't
+                        // restart it. Restart it here or guests stop receiving position updates.
+                        startHeartbeat()
                     } else {
                         // Guest: sync to host's state
                         applyPlaybackState(
@@ -647,7 +652,10 @@ object ListenTogetherManager {
                     val vol = action.volume
                     if (vol != null) {
                         Timber.tag(TAG).d("Guest: SET_VOLUME $vol")
-                        p.setVolume(vol.coerceIn(0f, 1f))
+                        val clamped = vol.coerceIn(0f, 1f)
+                        // Keep the stored preference in step or the MiniPlayer slider lies.
+                        com.metrolist.music.desktop.settings.PreferencesManager.setVolume(clamped)
+                        p.setVolume(clamped)
                     }
                 }
 
@@ -872,8 +880,12 @@ object ListenTogetherManager {
     private fun startHeartbeat() {
         if (heartbeatJob?.isActive == true) return
         heartbeatJob = scope.launch {
-            while (isInRoom && isHost) {
+            // Runs until cancelled by stopHeartbeat()/cleanup(). Checking isInRoom as the loop
+            // condition raced with the client setting roomState just after the role changed,
+            // which killed the job on the first tick.
+            while (true) {
                 delay(HEARTBEAT_INTERVAL_MS)
+                if (!isInRoom || !isHost) continue
                 val p = player ?: continue
                 val state = p.state.value
                 if (state.isPlaying && state.currentSong != null) {
@@ -898,8 +910,10 @@ object ListenTogetherManager {
     private fun startGuestResync() {
         guestResyncJob?.cancel()
         guestResyncJob = scope.launch {
-            while (isInRoom && !isHost) {
+            // Same race as the heartbeat: role flips to GUEST before roomState is populated.
+            while (true) {
                 delay(GUEST_RESYNC_INTERVAL_MS)
+                if (!isInRoom || isHost) continue
                 val p = player ?: continue
                 val state = p.state.value
                 val duration = state.currentSong?.durationMs?.toLong() ?: 0L

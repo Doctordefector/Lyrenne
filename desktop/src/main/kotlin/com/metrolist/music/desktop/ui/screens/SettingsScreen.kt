@@ -19,6 +19,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.metrolist.music.desktop.auth.AuthManager
+import com.metrolist.music.desktop.download.CarExport
 import com.metrolist.music.desktop.settings.AudioQuality
 import com.metrolist.music.desktop.settings.PreferencesManager
 import com.metrolist.music.desktop.settings.ThemeMode
@@ -895,6 +896,64 @@ fun SettingsScreen(
                     }) {
                         Icon(Icons.Default.FolderOpen, "Open folder")
                     }
+                }
+            )
+        }
+
+        item {
+            val exportState by CarExport.state.collectAsState()
+            val exportRunning = exportState is CarExport.ExportState.Running
+            SettingsItem(
+                icon = Icons.Default.DirectionsCar,
+                title = "Normalize Folder for Car / USB",
+                subtitle = when (val s = exportState) {
+                    is CarExport.ExportState.Running ->
+                        "Converting ${s.done + 1}/${s.total}: ${s.current}"
+                    is CarExport.ExportState.Finished ->
+                        "Done — ${s.ok} file(s) in ${s.outDir.absolutePath}" +
+                            if (s.failed > 0) " (${s.failed} failed)" else ""
+                    is CarExport.ExportState.Failed -> s.message
+                    else -> "Pick a folder of downloaded tracks — writes evened-out stereo MP3s to a Normalized subfolder"
+                },
+                onClick = {
+                    if (exportRunning) return@SettingsItem
+                    val chooser = JFileChooser(PreferencesManager.getDownloadDirectory()).apply {
+                        fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
+                        dialogTitle = "Choose Folder to Normalize"
+                    }
+                    if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
+                        CarExport.normalizeFolder(chooser.selectedFile)
+                    }
+                },
+                trailing = {
+                    if (exportRunning) {
+                        TextButton(onClick = { CarExport.cancel() }) { Text("Cancel") }
+                    } else {
+                        val done = exportState as? CarExport.ExportState.Finished
+                        if (done != null) {
+                            IconButton(onClick = {
+                                try {
+                                    if (done.outDir.exists()) Desktop.getDesktop().open(done.outDir)
+                                } catch (_: Exception) {}
+                            }) {
+                                Icon(Icons.Default.FolderOpen, "Open folder")
+                            }
+                        }
+                    }
+                }
+            )
+        }
+
+        item {
+            SettingsItem(
+                icon = Icons.Default.Speaker,
+                title = "Force Dual Mono on Export",
+                subtitle = "Fold left and right together so tracks mastered on one side play from both car speakers",
+                trailing = {
+                    Switch(
+                        checked = preferences.carExportDualMono,
+                        onCheckedChange = { PreferencesManager.setCarExportDualMono(it) }
+                    )
                 }
             )
         }

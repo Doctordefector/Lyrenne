@@ -413,14 +413,6 @@ class DesktopPlayer {
         return options
     }
 
-    fun applySkipSilence(enabled: Boolean) {
-        Timber.d("Skip silence ${if (enabled) "enabled" else "disabled"} (applied on next track)")
-    }
-
-    fun applyNormalizeAudio(enabled: Boolean) {
-        Timber.d("Normalize audio ${if (enabled) "enabled" else "disabled"} (applied on next track)")
-    }
-
     fun togglePlayPause() {
         audioPlayer?.mediaPlayer()?.let { player ->
             if (player.status().isPlaying) {

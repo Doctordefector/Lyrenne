@@ -1,6 +1,10 @@
 package com.metrolist.music.desktop.media
 
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -36,21 +40,8 @@ object MediaKeyHandler {
      */
     internal val focusedTextFieldCount = AtomicInteger(0)
 
-    /**
-     * True when any text input has focus. Uses TWO checks:
-     * 1. Compose counter (suppressMediaKeys modifier)
-     * 2. AWT focus owner fallback (checks if focused component is a text component)
-     * The AWT fallback catches cases where the counter gets out of sync.
-     */
-    val textInputActive: Boolean get() {
-        if (focusedTextFieldCount.get() > 0) return true
-        // Fallback: check AWT focus owner class name for text-related components.
-        // Compose Desktop wraps text fields in various ways; check common patterns.
-        val focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().focusOwner
-            ?: return false
-        val className = focusOwner.javaClass.name.lowercase()
-        return "text" in className || "edit" in className || "input" in className
-    }
+    /** True when any text field tagged with [suppressMediaKeys] currently has focus. */
+    val textInputActive: Boolean get() = focusedTextFieldCount.get() > 0
 
     fun initialize(desktopPlayer: DesktopPlayer) {
         if (isInitialized) return
@@ -94,53 +85,6 @@ object MediaKeyHandler {
         }
     }
 
-    /**
-     * Handle keyboard shortcuts from Compose's onPreviewKeyEvent.
-     * Called from App.kt ONLY when textInputActive is false.
-     * Returns true if the key event was consumed.
-     */
-    fun handleComposeKeyEvent(key: Key, isCtrl: Boolean, player: DesktopPlayer): Boolean {
-        return when (key) {
-            Key.Spacebar -> { player.togglePlayPause(); true }
-            Key.DirectionRight -> {
-                if (isCtrl) { scope.launch { player.playNext() } }
-                else {
-                    val pos = player.state.value.position
-                    val dur = player.state.value.duration
-                    player.seekTo((pos + 10000).coerceAtMost(dur))
-                }
-                true
-            }
-            Key.DirectionLeft -> {
-                if (isCtrl) { scope.launch { player.playPrevious() } }
-                else {
-                    val pos = player.state.value.position
-                    player.seekTo((pos - 10000).coerceAtLeast(0))
-                }
-                true
-            }
-            Key.P -> if (isCtrl) { player.togglePlayPause(); true } else false
-            Key.S -> if (isCtrl) { player.toggleShuffle(); true } else false
-            Key.R -> if (isCtrl) { player.toggleRepeat(); true } else false
-            Key.DirectionUp -> if (isCtrl) {
-                val current = PreferencesManager.preferences.value.volume
-                val newVol = (current + 0.05f).coerceAtMost(1f)
-                PreferencesManager.setVolume(newVol)
-                player.setVolume(newVol); true
-            } else false
-            Key.DirectionDown -> if (isCtrl) {
-                val current = PreferencesManager.preferences.value.volume
-                val newVol = (current - 0.05f).coerceAtLeast(0f)
-                PreferencesManager.setVolume(newVol)
-                player.setVolume(newVol); true
-            } else false
-            Key.M -> {
-                toggleMute(player); true
-            }
-            else -> false
-        }
-    }
-
     /** Toggle mute with proper volume memory */
     fun toggleMute(player: DesktopPlayer) {
         val prefs = PreferencesManager.preferences.value
@@ -180,12 +124,29 @@ object MediaKeyHandler {
  * KEY_PRESSED here prevents bubbling to the parent's shortcut handler without
  * affecting text input.
  */
-fun Modifier.suppressMediaKeys(): Modifier = this
-    .onFocusChanged { state ->
-        if (state.hasFocus) {
-            MediaKeyHandler.focusedTextFieldCount.incrementAndGet()
-        } else {
-            MediaKeyHandler.focusedTextFieldCount.decrementAndGet()
+fun Modifier.suppressMediaKeys(): Modifier = composed {
+    // Track this field's own contribution to the counter. onFocusChanged also fires once on
+    // first composition with hasFocus=false — blindly decrementing there drove the counter
+    // negative (one per text field on screen) and permanently disabled the typing guard.
+    val counted = remember { mutableStateOf(false) }
+    DisposableEffect(Unit) {
+        onDispose {
+            // A field can be removed from the tree while still focused; release its count.
+            if (counted.value) {
+                counted.value = false
+                MediaKeyHandler.focusedTextFieldCount.decrementAndGet()
+            }
+        }
+    }
+
+    onFocusChanged { state ->
+        if (state.hasFocus != counted.value) {
+            counted.value = state.hasFocus
+            if (state.hasFocus) {
+                MediaKeyHandler.focusedTextFieldCount.incrementAndGet()
+            } else {
+                MediaKeyHandler.focusedTextFieldCount.decrementAndGet()
+            }
         }
     }
     .onKeyEvent { event ->
@@ -195,3 +156,4 @@ fun Modifier.suppressMediaKeys(): Modifier = this
             event.key == Key.Spacebar || event.key == Key.M
         } else false
     }
+}

@@ -39,9 +39,9 @@ object BrowserLoginHelper {
         else -> "Browser"
     }
 
+    /** Lives under the portable data dir — nothing goes to %APPDATA%. */
     private fun getLoginProfileDir(): File {
-        val appData = System.getenv("APPDATA") ?: System.getProperty("user.home")
-        val dir = File(appData, "Metrolist/login-profile")
+        val dir = File(com.metrolist.music.desktop.AppPaths.dataDir, "login-profile")
         dir.mkdirs()
         return dir
     }
@@ -153,15 +153,6 @@ object BrowserLoginHelper {
             return CookieExtractResult.Error("Browser profile incomplete (no Local State)")
         }
 
-        // Reuse the existing Chromium cookie extractor
-        val profile = BrowserProfile(
-            name = "$browserName (login)",
-            userDataDir = profileDir,
-            cookieDbPath = cookieDb,
-            localStatePath = localState,
-            type = BrowserType.CHROMIUM
-        )
-
-        return BrowserCookieExtractor.extractYouTubeCookies(profile)
+        return BrowserCookieExtractor.extractChromiumCookies(cookieDb, localState, browserName)
     }
 }

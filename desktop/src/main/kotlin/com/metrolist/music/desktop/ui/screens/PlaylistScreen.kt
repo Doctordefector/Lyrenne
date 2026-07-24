@@ -22,8 +22,11 @@ import coil3.compose.AsyncImage
 import com.metrolist.innertube.YouTube
 import com.metrolist.innertube.models.SongItem
 import com.metrolist.innertube.pages.PlaylistPage
+import com.metrolist.music.desktop.download.CarExport
 import com.metrolist.music.desktop.download.DownloadManager
 import com.metrolist.music.desktop.playback.DesktopPlayer
+import com.metrolist.music.desktop.ui.components.CarExportStatus
+import com.metrolist.music.desktop.ui.components.chooseExportFolder
 import kotlinx.coroutines.launch
 
 @Composable
@@ -211,7 +214,30 @@ fun PlaylistScreen(
                                         Spacer(Modifier.width(4.dp))
                                         Text("Download All")
                                     }
+
+                                    OutlinedButton(
+                                        onClick = {
+                                            val targetDir = chooseExportFolder(page.playlist.title) ?: return@OutlinedButton
+                                            scope.launch {
+                                                var cont = continuation
+                                                while (cont != null) {
+                                                    YouTube.playlistContinuation(cont).onSuccess { p ->
+                                                        allSongs = allSongs + p.songs
+                                                        cont = p.continuation
+                                                    }.onFailure { cont = null }
+                                                }
+                                                continuation = null
+                                                CarExport.exportSongs(allSongs.map { it.toDesktopSongInfo() }, targetDir)
+                                            }
+                                        }
+                                    ) {
+                                        Icon(Icons.Default.DirectionsCar, null, Modifier.size(18.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("Export to Folder")
+                                    }
                                 }
+
+                                CarExportStatus()
                             }
                         }
                     }

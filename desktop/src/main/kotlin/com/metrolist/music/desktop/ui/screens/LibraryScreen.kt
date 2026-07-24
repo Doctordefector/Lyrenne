@@ -886,7 +886,7 @@ private fun PlaylistsTab(
                     onClick = {
                         if (newPlaylistName.isNotBlank()) {
                             scope.launch(Dispatchers.IO) {
-                                scope.launch { YouTubeWrites.createPlaylist(newPlaylistName.trim()) }
+                                YouTubeWrites.createPlaylist(newPlaylistName.trim())
                             }
                             newPlaylistName = ""
                             showCreateDialog = false

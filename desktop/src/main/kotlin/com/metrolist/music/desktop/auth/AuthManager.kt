@@ -6,6 +6,10 @@ import com.metrolist.innertube.utils.sha1
 import io.ktor.client.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,6 +44,7 @@ data class AuthState(
 )
 
 object AuthManager {
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val json = Json {
         ignoreUnknownKeys = true
         prettyPrint = true
@@ -52,6 +57,29 @@ object AuthManager {
 
     fun initialize() {
         loadCredentials()
+        if (_authState.value.isLoggedIn) validateSession()
+    }
+
+    /**
+     * Confirm the stored cookies are actually still good.
+     *
+     * An expired YouTube session does not fail loudly — the API answers HTTP 200 with an
+     * anonymous response, so browses return zero items and writes 401. Having credentials.json
+     * on disk therefore said nothing about being signed in, and the app presented a dead
+     * session as a live one: an empty library and silently discarded edits, with no hint that
+     * signing in again was all that was needed.
+     */
+    private fun validateSession() {
+        scope.launch {
+            val valid = runCatching { YouTube.accountInfo().getOrThrow() }.isSuccess
+            if (!valid) {
+                Timber.w("Stored YouTube session is no longer valid — marking signed out")
+                _authState.value = AuthState(
+                    isLoggedIn = false,
+                    error = "Your YouTube session expired. Sign in again to sync your library."
+                )
+            }
+        }
     }
 
     private fun loadCredentials() {

@@ -7,6 +7,8 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
@@ -40,6 +42,8 @@ object DiscordRPC {
     // seek (position jumps out of step with elapsed time) from normal playback drift.
     private var lastPosition = 0L
     private var lastPositionWall = 0L
+    private var seekJob: Job? = null
+    private val presenceMutex = Mutex()
 
     // IPC opcodes
     private const val OP_HANDSHAKE = 0
@@ -86,14 +90,17 @@ object DiscordRPC {
 
                     if (songChanged) {
                         lastSongId = song.id
-                        setPresence(song, wall / 1000 - pos / 1000, state.duration)
+                        sendPresence(song, wall / 1000 - pos / 1000, state.duration)
                     } else if (seeked) {
-                        // Debounce: a newer emission (still scrubbing) cancels this,
-                        // so only the position the user lands on is sent. The anchor
-                        // is the absolute time position would have been 0 (wall - pos),
-                        // so it stays correct across the delay.
-                        delay(700)
-                        setPresence(song, wall / 1000 - pos / 1000, state.duration)
+                        // The debounce MUST live outside this collectLatest block. Playback
+                        // emits a new position every ~200ms, and collectLatest cancels the
+                        // block on every emission — so an inline `delay(700)` was killed by
+                        // the very next tick and the seek was never sent. By then the jump
+                        // is no longer detectable, so the update was simply lost.
+                        // Rewinding showed this every time; seeking forward only appeared
+                        // to work because re-buffering paused emissions long enough for the
+                        // delay to survive.
+                        scheduleSeekPresence(player)
                     }
                 } else {
                     if (lastSongId != null) {
@@ -105,7 +112,30 @@ object DiscordRPC {
         }
     }
 
+    /**
+     * Debounced seek update, running in [scope] so routine position ticks can't cancel it.
+     * A further seek restarts the timer; once the user settles, the CURRENT state is read
+     * and sent — so the anchor is right no matter how long the scrub took.
+     */
+    private fun scheduleSeekPresence(player: DesktopPlayer) {
+        seekJob?.cancel()
+        seekJob = scope.launch {
+            delay(700)
+            val state = player.state.value
+            val song = state.currentSong ?: return@launch
+            if (!state.isPlaying) return@launch
+            sendPresence(song, System.currentTimeMillis() / 1000 - state.position / 1000, state.duration)
+        }
+    }
+
+    /** Serializes pipe writes — song-change and seek updates come from different coroutines. */
+    private suspend fun sendPresence(song: SongInfo, startEpoch: Long, durationMs: Long) {
+        presenceMutex.withLock { setPresence(song, startEpoch, durationMs) }
+    }
+
     private suspend fun stopPresenceUpdates() {
+        seekJob?.cancel()
+        seekJob = null
         updateJob?.cancel()
         updateJob = null
         lastSongId = null

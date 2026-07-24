@@ -290,6 +290,34 @@ endpoints existed the whole time — nothing called them.
 
 Text field suppression uses `Modifier.suppressMediaKeys()` on all OutlinedTextField instances + `MediaKeyHandler.textInputActive` check in both AWT KeyEventDispatcher and Compose `onPreviewKeyEvent`.
 
+## Testing: NEVER run the app from the build folder
+
+Use a copy extracted outside the build tree — `S:\Dev\Metrolist PC\Metrolist-App\` is set up
+for this. Reason:
+
+1. `AppPaths` writes `data/` (credentials, DB, preferences) next to `Metrolist.exe`, so running
+   `build/compose/binaries/main/app/Metrolist/Metrolist.exe` puts a real login in the build tree
+2. `packagePortableZip` **purges that `data/`** every build — that is the credential-leak guard
+3. On the next launch `AppPaths.migrateFromAppData` sees an empty `data/` and restores whatever
+   is in `%APPDATA%/Metrolist` — which can be *years-old* credentials
+
+Net effect: every release build silently signs the tester out and swaps in a stale session.
+This burned most of a night on 2026-07-24, presenting as "playlist sync is broken", "can't
+create playlists", and "sync fetches nothing" — all of which were just a dead login.
+
+## Expired YouTube sessions fail SILENTLY
+
+An expired session does not error. The API returns **HTTP 200 with an anonymous response**:
+browses come back with zero items, writes return 401. Symptoms look like broken features, not
+broken auth.
+
+- Diagnose by checking for a logged-in marker (`accountName`) in a `browse` response, not by
+  HTTP status. A `playlist/create` returning 401 while `browse` returns 200 is the signature.
+- `AuthManager.initialize()` now validates stored cookies with `YouTube.accountInfo()` and marks
+  the state signed out if they're dead. Do not remove this — without it, `credentials.json`
+  merely existing was treated as proof of being signed in.
+- When every sync category fails at once, it is the shared session, never four separate faults.
+
 ## Startup Performance
 
 **CRITICAL: `desktop/resources/windows-x64/vlc/plugins/plugins.dat` must exist.**

@@ -102,19 +102,19 @@ object LibrarySync {
                     if (playlistsResult.isSuccess) prunePlaylists(playlists)
                 }
 
-                val failures = listOfNotNull(
-                    "songs".takeIf { songsResult.isFailure },
-                    "playlists".takeIf { playlistsResult.isFailure },
-                    "albums".takeIf { albumsResult.isFailure },
-                    "artists".takeIf { artistsResult.isFailure }
+                val results = mapOf(
+                    "songs" to songsResult,
+                    "playlists" to playlistsResult,
+                    "albums" to albumsResult,
+                    "artists" to artistsResult
                 )
+                val failures = results.filterValues { it.isFailure }
 
                 _syncState.value = SyncState(
                     isSyncing = false,
                     lastSyncTime = LocalDateTime.now().toString(),
                     progress = "Synced ${songs.size} songs, ${albums.size} albums, ${artists.size} artists, ${playlists.size} playlists",
-                    error = if (failures.isEmpty()) null
-                        else "Could not fetch ${failures.joinToString(", ")} — those were left untouched"
+                    error = failures.takeIf { it.isNotEmpty() }?.let { describeFailure(it) }
                 )
 
                 // Clear progress message after delay
@@ -136,6 +136,28 @@ object LibrarySync {
     fun cancelSync() {
         syncJob?.cancel()
         _syncState.value = SyncState(progress = "Sync cancelled")
+    }
+
+    /**
+     * Turn fetch failures into something actionable.
+     *
+     * When every category fails at once the cause is almost never four separate faults — it is
+     * the shared session. YouTube's SID/SAPISID cookies expire and the __Secure-*PSIDTS pair
+     * rotates, so a login left alone for weeks starts failing every authenticated call.
+     */
+    private fun describeFailure(failures: Map<String, Result<*>>): String {
+        val first = failures.values.first().exceptionOrNull()
+        val detail = first?.message?.take(160).orEmpty()
+        val looksLikeAuth = failures.size == 4 ||
+            detail.contains("401") || detail.contains("403") ||
+            detail.contains("Unauthorized", true) || detail.contains("login", true)
+
+        return if (looksLikeAuth) {
+            "Sync failed for ${failures.keys.joinToString(", ")}. Your YouTube session has most " +
+                "likely expired — sign out and sign in again in Settings. ($detail)"
+        } else {
+            "Could not fetch ${failures.keys.joinToString(", ")} — those were left untouched. ($detail)"
+        }
     }
 
     // ============ Network Fetch (no DB writes) ============

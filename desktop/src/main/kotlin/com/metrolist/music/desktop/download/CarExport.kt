@@ -8,11 +8,16 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import timber.log.Timber
@@ -50,6 +55,11 @@ object CarExport {
         .build()
 
     private val audioExtensions = setOf("mp3", "m4a", "aac", "flac", "wav", "ogg", "opus", "wma", "webm")
+
+    /** Concurrent ffmpeg processes. Leave a core free so the UI and playback stay smooth. */
+    private val exportSemaphore = Semaphore(
+        (Runtime.getRuntime().availableProcessors() - 1).coerceIn(2, 6)
+    )
 
     private val isWindows = System.getProperty("os.name").orEmpty().lowercase().contains("win")
     private val ffmpegExe = if (isWindows) "ffmpeg.exe" else "ffmpeg"
@@ -97,43 +107,47 @@ object CarExport {
      */
     fun exportSongs(songs: List<SongInfo>, targetDir: File) {
         startJob(targetDir, songs.size) { ffmpeg, report ->
-            var ok = 0
-            var failed = 0
             val tempDir = File(AppPaths.cacheDir, "carexport").apply { mkdirs() }
+            val done = java.util.concurrent.atomic.AtomicInteger(0)
 
-            songs.forEachIndexed { index, song ->
-                coroutineContext.ensureActive()
-                report(index, "${song.artist} - ${song.title}")
+            // Run several tracks concurrently — one ffmpeg process barely saturates a core,
+            // and downloads overlap with transcodes instead of waiting in line.
+            val results = songs.mapIndexed { index, song ->
+                async {
+                    exportSemaphore.withPermit {
+                        coroutineContext.ensureActive()
+                        report(done.getAndIncrement(), "${song.artist} - ${song.title}")
 
-                val name = "%02d - %s".format(index + 1, DownloadManager.sanitizeFilename("${song.artist} - ${song.title}"))
-                val out = File(targetDir, "$name.mp3")
-                if (out.exists() && out.length() > 0) {
-                    ok++
-                    return@forEachIndexed
+                        val name = "%02d - %s".format(
+                            index + 1,
+                            DownloadManager.sanitizeFilename("${song.artist} - ${song.title}")
+                        )
+                        val out = File(targetDir, "$name.mp3")
+                        if (out.exists() && out.length() > 0) return@withPermit true
+
+                        // Prefer the already-downloaded local file; otherwise pull the stream.
+                        val existing = DownloadManager.getDownloadPathById(song.id)
+                        var temp: File? = null
+                        val source = existing ?: run {
+                            val dest = File(tempDir, "${song.id}.tmp")
+                            temp = dest
+                            if (fetchToFile(song, dest)) dest else null
+                        }
+
+                        val success = if (source == null) {
+                            Timber.w("Car export: no source for ${song.id}")
+                            false
+                        } else {
+                            transcode(ffmpeg, source, out)
+                        }
+                        temp?.delete()
+                        success
+                    }
                 }
-
-                // Prefer the already-downloaded local file; otherwise pull the stream to a temp file.
-                val existing = DownloadManager.getDownloadPathById(song.id)
-                var temp: File? = null
-                val source = existing ?: run {
-                    val dest = File(tempDir, "${song.id}.tmp")
-                    temp = dest
-                    if (fetchToFile(song, dest)) dest else null
-                }
-
-                if (source == null) {
-                    Timber.w("Car export: no source for ${song.id}")
-                    failed++
-                } else if (transcode(ffmpeg, source, out)) {
-                    ok++
-                } else {
-                    failed++
-                }
-                temp?.delete()
-            }
+            }.awaitAll()
 
             tempDir.deleteRecursively()
-            ok to failed
+            results.count { it } to results.count { !it }
         }
     }
 
@@ -153,17 +167,21 @@ object CarExport {
         }
 
         startJob(outDir, files.size) { ffmpeg, report ->
-            var ok = 0
-            var failed = 0
-            files.forEachIndexed { index, file ->
-                coroutineContext.ensureActive()
-                report(index, file.name)
-                val out = File(outDir, "${file.nameWithoutExtension}.mp3")
-                if (out.exists() && out.length() > 0) ok++
-                else if (transcode(ffmpeg, file, out)) ok++
-                else failed++
-            }
-            ok to failed
+            // Transcoding is CPU-bound and single-file ffmpeg barely uses one core, so run
+            // several at once — this is where nearly all the wall-clock time went.
+            val done = java.util.concurrent.atomic.AtomicInteger(0)
+            val results = files.map { file ->
+                async {
+                    exportSemaphore.withPermit {
+                        coroutineContext.ensureActive()
+                        report(done.getAndIncrement(), file.name)
+                        val out = File(outDir, "${file.nameWithoutExtension}.mp3")
+                        if (out.exists() && out.length() > 0) true
+                        else transcode(ffmpeg, file, out)
+                    }
+                }
+            }.awaitAll()
+            results.count { it } to results.count { !it }
         }
     }
 
@@ -178,7 +196,7 @@ object CarExport {
     private fun startJob(
         outDir: File,
         total: Int,
-        work: suspend (ffmpeg: File, report: (Int, String) -> Unit) -> Pair<Int, Int>
+        work: suspend CoroutineScope.(ffmpeg: File, report: (Int, String) -> Unit) -> Pair<Int, Int>
     ) {
         if (isRunning) return
         val ffmpeg = findFfmpeg()

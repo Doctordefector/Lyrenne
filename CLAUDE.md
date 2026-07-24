@@ -341,6 +341,9 @@ All data is fully portable — stored next to the executable via centralized `Ap
 - Local copy has `nul` file that breaks git — use temp dir copy for pushing
 - Push workflow: robocopy to temp dir (excluding .gradle/.kotlin/build/.claude/nul), git init, commit, force push
 - `gh` CLI at `C:\Program Files\GitHub CLI\gh.exe` (not in bash PATH, use full path), authenticated as Doctordefector
+- **ALWAYS pass `--repo Doctordefector/Metrolist-Desktop` to every `gh release` command.** This repo has two
+  remotes and bare `gh release list` resolves to `upstream` (MetrolistGroup/Metrolist), silently showing
+  v13.x Android releases instead of our v2.x desktop ones
 - Robocopy for push: Must use PowerShell `robocopy` (bash `robocopy` has path issues with /E flag)
 - Upload ONLY the portable ZIP to each GitHub release
 

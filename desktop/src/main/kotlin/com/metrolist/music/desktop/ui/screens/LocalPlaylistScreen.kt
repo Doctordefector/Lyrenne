@@ -25,6 +25,7 @@ import com.metrolist.music.desktop.download.DownloadManager
 import com.metrolist.music.desktop.media.suppressMediaKeys
 import com.metrolist.music.desktop.playback.DesktopPlayer
 import com.metrolist.music.desktop.playback.SongInfo
+import com.metrolist.music.desktop.sync.YouTubeWrites
 import com.metrolist.music.desktop.ui.AutoPlaylistType
 import com.metrolist.music.desktop.ui.components.CarExportStatus
 import com.metrolist.music.desktop.ui.components.chooseExportFolder
@@ -66,6 +67,7 @@ fun LocalPlaylistScreen(
                         if (renameText.isNotBlank()) {
                             scope.launch(Dispatchers.IO) {
                                 DatabaseHelper.renamePlaylist(playlistId, renameText.trim())
+                                YouTubeWrites.renamePlaylist(playlistId, renameText.trim())
                             }
                         }
                         showRenameDialog = false
@@ -89,6 +91,7 @@ fun LocalPlaylistScreen(
                     showDeleteDialog = false
                     scope.launch(Dispatchers.IO) {
                         DatabaseHelper.deletePlaylist(playlistId)
+                        YouTubeWrites.deletePlaylist(playlistId)
                     }
                     onBack()
                 }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
@@ -220,6 +223,7 @@ fun LocalPlaylistScreen(
                         onRemove = {
                             scope.launch(Dispatchers.IO) {
                                 DatabaseHelper.removeSongFromPlaylist(playlistId, song.id)
+                                YouTubeWrites.removeFromPlaylist(playlistId, song.id)
                             }
                         }
                     )

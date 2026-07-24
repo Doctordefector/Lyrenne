@@ -314,6 +314,24 @@ object DatabaseHelper {
     fun getPlaylistById(id: String) =
         queries.getPlaylistById(id).asFlow().mapToOneOrNull(Dispatchers.IO)
 
+    // Synchronous snapshots — sync uses these to work out what the remote no longer has.
+    fun getAllPlaylistsOnce() = queries.getAllPlaylists().executeAsList()
+
+    fun getAllAlbumsOnce() = queries.getAllAlbums().executeAsList()
+
+    fun getAllArtistsOnce() = queries.getAllArtists().executeAsList()
+
+    fun getLikedSongsOnce() = queries.getLikedSongs { id, title, duration, thumbnailUrl, albumId, albumName, explicit, year, liked, likedDate, totalPlayTime, inLibrary, dateDownload, isLocal, isDownloaded, localPath, _rowOrder ->
+        Song(id, title, duration, thumbnailUrl, albumId, albumName, explicit, year, liked, likedDate, totalPlayTime, inLibrary, dateDownload, isLocal, isDownloaded, localPath)
+    }.executeAsList()
+
+    fun updatePlaylistBookmarked(id: String, bookmarked: Boolean) {
+        queries.updatePlaylistBookmarked(
+            bookmarkedAt = if (bookmarked) LocalDateTime.now().toString() else null,
+            id = id
+        )
+    }
+
     fun getSongsForPlaylist(playlistId: String) =
         queries.getSongsForPlaylist(playlistId).asFlow().mapToList(Dispatchers.IO)
 

@@ -32,6 +32,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.jetbrains.skia.Image
 import timber.log.Timber
+import java.io.File
+import java.io.FileOutputStream
+import java.io.PrintStream
+import kotlin.system.exitProcess
 
 /**
  * Apply content locale and proxy settings to the InnerTube client.
@@ -67,7 +71,63 @@ fun applyNetworkPreferences() {
     }
 }
 
+/**
+ * Where the log lives: next to the exe, or the temp dir if that folder is not writable.
+ * Resolved before anything else runs, so it must not depend on app state.
+ */
+private fun logFile(): File {
+    val next = File(AppPaths.appDir, "metrolist.log")
+    return if (next.parentFile?.canWrite() == true) next
+    else File(System.getProperty("java.io.tmpdir"), "metrolist.log")
+}
+
+/**
+ * The Windows launcher is a GUI-subsystem exe, so stderr goes nowhere: a crash during startup
+ * shows the user an empty desktop and nothing else. Send stderr to a file instead — that also
+ * catches SLF4J/Timber output and JNA's native-load failures — and report anything fatal in a
+ * dialog, because a user who never sees a window has no other way to find out what broke.
+ *
+ * ponytail: truncated per launch rather than rotated — one session's log is what's diagnostic.
+ */
+private fun installCrashReporting(): File {
+    val log = logFile()
+    try {
+        System.setErr(PrintStream(FileOutputStream(log, false), true))
+    } catch (e: Exception) {
+        // Read-only folder or the file is locked by another instance — keep the default stderr.
+    }
+    Thread.setDefaultUncaughtExceptionHandler { _, e -> reportFatal(e, log) }
+    return log
+}
+
+private fun reportFatal(e: Throwable, log: File) {
+    try {
+        System.err.println("FATAL: ${e.stackTraceToString()}")
+    } catch (ignored: Exception) {
+    }
+    try {
+        javax.swing.JOptionPane.showMessageDialog(
+            null,
+            "Metrolist could not start.\n\n${e::class.simpleName}: ${e.message}\n\nDetails: ${log.absolutePath}",
+            "Metrolist",
+            javax.swing.JOptionPane.ERROR_MESSAGE
+        )
+    } catch (ignored: Throwable) {
+        // Headless or AWT itself is broken — the log file is the fallback.
+    }
+}
+
 fun main() {
+    val log = installCrashReporting()
+    try {
+        runApp()
+    } catch (e: Throwable) {
+        reportFatal(e, log)
+        exitProcess(1)
+    }
+}
+
+private fun runApp() {
     // Every remaining Swing dialog (folder pickers, backup/restore) defaults to the
     // cross-platform Metal look — grey 1990s widgets. The system L&F makes them render
     // as native Windows dialogs instead. Must be set before any Swing class loads.

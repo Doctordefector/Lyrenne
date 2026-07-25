@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 320" width="1280" height="320" role="img" aria-label="Metrolist Desktop — YouTube Music, unlocked on your PC">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#12101a"/>
+      <stop offset="55%" stop-color="#0d0f14"/>
+      <stop offset="100%" stop-color="#1b1024"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%" stop-color="#7c5cff"/>
+      <stop offset="50%" stop-color="#b56cff"/>
+      <stop offset="100%" stop-color="#ff5c8a"/>
+    </linearGradient>
+    <linearGradient id="fade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#7c5cff" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#ff5c8a" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="320" rx="18" fill="url(#bg)"/>
+  <rect width="1280" height="320" rx="18" fill="url(#fade)"/>
+
+  <!-- app tile -->
+  <g transform="translate(72 96)">
+    <rect width="128" height="128" rx="30" fill="#000"/>
+    <g fill="none" stroke="#fff" stroke-width="17" stroke-linecap="square">
+      <path d="M78 26 L78 78"/>
+      <path d="M78 26 L110 58"/>
+      <path d="M78 78 A26 26 0 0 1 52 104 A26 26 0 0 1 26 78 A26 26 0 0 1 52 52"/>
+    </g>
+  </g>
+
+  <!-- wordmark -->
+  <g font-family="Segoe UI, Inter, Helvetica Neue, Arial, sans-serif">
+    <!-- one text node, two tspans: the second word flows after the first, so it cannot
+         collide when the viewer's font metrics differ from ours -->
+    <text x="248" y="150" font-size="62" letter-spacing="1.5">
+      <tspan font-weight="700" fill="#ffffff">Metrolist</tspan>
+      <tspan font-weight="300" fill="url(#accent)" dx="16">Desktop</tspan>
+    </text>
+    <text x="250" y="196" font-size="24" font-weight="500" fill="#9aa0ad">YouTube Music on your PC — portable, adless, no installer.</text>
+    <text x="250" y="238" font-size="17" font-weight="600" fill="#6f7686" letter-spacing="2.2">WINDOWS · COMPOSE DESKTOP · GPL-3.0</text>
+  </g>
+
+  <!-- waveform -->
+  <g fill="url(#accent)" opacity="0.92">
+    <rect x="944"  y="176" width="10" height="48"  rx="5"/>
+    <rect x="968"  y="146" width="10" height="108" rx="5"/>
+    <rect x="992"  y="106" width="10" height="188" rx="5"/>
+    <rect x="1016" y="160" width="10" height="80"  rx="5"/>
+    <rect x="1040" y="72"  width="10" height="256" rx="5" opacity="0.75"/>
+    <rect x="1064" y="130" width="10" height="140" rx="5"/>
+    <rect x="1088" y="92"  width="10" height="216" rx="5" opacity="0.8"/>
+    <rect x="1112" y="164" width="10" height="72"  rx="5"/>
+    <rect x="1136" y="118" width="10" height="164" rx="5"/>
+    <rect x="1160" y="152" width="10" height="96"  rx="5"/>
+    <rect x="1184" y="98"  width="10" height="204" rx="5" opacity="0.7"/>
+    <rect x="1208" y="168" width="10" height="64"  rx="5"/>
+  </g>
+</svg>

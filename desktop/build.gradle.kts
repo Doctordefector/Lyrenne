@@ -1,5 +1,6 @@
 import com.google.protobuf.gradle.*
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import java.net.URI
 import java.util.zip.ZipFile
 
 plugins {
@@ -16,7 +17,7 @@ kotlin {
 }
 
 // Must match AutoUpdater.CURRENT_VERSION — both are checked on every release
-val metrolistVersion = "2.8.1"
+val metrolistVersion = "2.9.0"
 
 // Include shared module sources directly (they are Android library modules but pure Kotlin/JVM code)
 sourceSets {
@@ -128,6 +129,57 @@ compose.desktop {
         }
     }
 }
+
+/**
+ * Fetch the bundled ffmpeg used by car/USB export.
+ *
+ * Not committed: the binary is ~114 MB and GitHub rejects files over 100 MB, so the repo would
+ * need Git LFS purely to carry a build input. Downloading it on demand keeps the checkout light
+ * while the release ZIP still ships it, so export works with no user setup.
+ *
+ * BtbN's LGPL build is the smallest official one that still carries what CarExport needs —
+ * verified present: libmp3lame, loudnorm (EBU R128), aformat, pan, and aac/opus/mp3/flac/vorbis
+ * decoders.
+ */
+val ffmpegDir = layout.projectDirectory.dir("resources/windows-x64/ffmpeg")
+
+tasks.register("fetchFfmpeg") {
+    val target = ffmpegDir.file("ffmpeg.exe").asFile
+    val downloadUrl =
+        "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl.zip"
+    outputs.file(target)
+    onlyIf { !target.exists() }
+
+    doLast {
+        logger.lifecycle("Downloading ffmpeg (~147 MB) — one time, cached at ${target.absolutePath}")
+        target.parentFile.mkdirs()
+        val tmpZip = File(temporaryDir, "ffmpeg.zip")
+        URI(downloadUrl).toURL().openStream().use { input ->
+            tmpZip.outputStream().use { input.copyTo(it) }
+        }
+
+        var extracted = false
+        ZipFile(tmpZip).use { zip ->
+            val entry = zip.entries().asSequence()
+                .firstOrNull { it.name.endsWith("bin/ffmpeg.exe") }
+                ?: throw GradleException("ffmpeg.exe not found inside $downloadUrl")
+            zip.getInputStream(entry).use { input ->
+                target.outputStream().use { input.copyTo(it) }
+            }
+            extracted = true
+        }
+        tmpZip.delete()
+        if (!extracted || target.length() == 0L) {
+            throw GradleException("Failed to extract ffmpeg.exe")
+        }
+        logger.lifecycle("ffmpeg ready: ${target.length() / 1024 / 1024} MB")
+    }
+}
+
+// The distributable copies resources/ wholesale, so ffmpeg must exist before it runs. Matched
+// lazily — the Compose plugin registers these tasks after this script body has run.
+tasks.matching { it.name == "createDistributable" || it.name == "prepareAppResources" }
+    .configureEach { dependsOn("fetchFfmpeg") }
 
 // Post-build task: patch icon into portable exe using Resource Hacker
 // (Compose Desktop's iconFile only works for MSI, not createDistributable)

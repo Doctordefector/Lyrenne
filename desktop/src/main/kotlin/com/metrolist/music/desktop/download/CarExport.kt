@@ -64,14 +64,25 @@ object CarExport {
     private val isWindows = System.getProperty("os.name").orEmpty().lowercase().contains("win")
     private val ffmpegExe = if (isWindows) "ffmpeg.exe" else "ffmpeg"
 
-    /** Locate ffmpeg: bundled next to the app (portable), then PATH. Null if unavailable. */
+    /**
+     * Locate ffmpeg. The packaged app ships its own copy under the Compose resources dir, the
+     * same place bundled VLC lives, so export works with no user setup. The remaining paths
+     * cover running from source and anyone who would rather use their own build.
+     */
     fun findFfmpeg(): File? {
-        val bundled = listOf(
+        val candidates = listOfNotNull(
+            // Packaged distributable — resources/ffmpeg/ffmpeg.exe
+            System.getProperty("compose.application.resources.dir")
+                ?.let { File(it, "ffmpeg/$ffmpegExe") },
+            // Running from gradle / IDE
+            File("desktop/resources/windows-x64/ffmpeg/$ffmpegExe"),
+            File("resources/windows-x64/ffmpeg/$ffmpegExe"),
+            // User-supplied, next to the exe
             File(AppPaths.appDir, ffmpegExe),
             File(AppPaths.appDir, "ffmpeg/$ffmpegExe"),
             File(AppPaths.appDir, "ffmpeg/bin/$ffmpegExe")
-        ).firstOrNull { it.isFile }
-        if (bundled != null) return bundled
+        )
+        candidates.firstOrNull { it.isFile }?.let { return it }
 
         return System.getenv("PATH")
             ?.split(File.pathSeparator)
@@ -81,7 +92,8 @@ object CarExport {
     }
 
     const val FFMPEG_MISSING =
-        "ffmpeg not found — put ffmpeg.exe next to Metrolist.exe (or install it on PATH), then try again"
+        "ffmpeg not found. It ships with Metrolist, so this build may be incomplete — " +
+            "reinstall, or put ffmpeg.exe next to Metrolist.exe."
 
     /**
      * Loudness-normalize to a consistent level and guarantee a real two-channel stereo file,

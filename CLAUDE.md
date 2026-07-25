@@ -290,6 +290,26 @@ endpoints existed the whole time — nothing called them.
 
 Text field suppression uses `Modifier.suppressMediaKeys()` on all OutlinedTextField instances + `MediaKeyHandler.textInputActive` check in both AWT KeyEventDispatcher and Compose `onPreviewKeyEvent`.
 
+## Bundled binaries (VLC + ffmpeg)
+
+| Binary | Version | In git? | Notes |
+|---|---|---|---|
+| VLC | 3.0.23 | yes, `desktop/resources/windows-x64/vlc/` | latest 3.0.x; 4.x not stable. Needs `plugins.dat` — see Startup Performance |
+| ffmpeg | BtbN win64 **LGPL** master | **no** — fetched at build time | ~114 MB, over GitHub's 100 MB file limit |
+
+`./gradlew :desktop:fetchFfmpeg` downloads and caches it into
+`desktop/resources/windows-x64/ffmpeg/` (gitignored). `createDistributable` and
+`prepareAppResources` depend on it, so a normal build just works; the download only happens
+when the file is missing.
+
+- Task matching must be lazy (`tasks.matching { ... }.configureEach`) — the Compose plugin
+  registers `createDistributable` after the build script body runs
+- In `build.gradle.kts`, `java.net.URI` / `java.util.zip.ZipFile` need explicit imports: bare
+  `java` resolves to Gradle's `java` extension, not the package
+- Chose LGPL over GPL/full purely on size. Verified it still carries everything CarExport needs:
+  `libmp3lame`, `loudnorm` (EBU R128), `aformat`, `pan`, and aac/opus/mp3/flac/vorbis decoders
+- Bundling ffmpeg takes the release ZIP from ~162 MB to ~206 MB
+
 ## Testing: NEVER run the app from the build folder
 
 Use a copy extracted outside the build tree — `S:\Dev\Metrolist PC\Metrolist-App\` is set up

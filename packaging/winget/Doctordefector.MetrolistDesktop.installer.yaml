@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json
+PackageIdentifier: Doctordefector.MetrolistDesktop
+PackageVersion: 2.9.2
+InstallerType: zip
+NestedInstallerType: portable
+NestedInstallerFiles:
+  - RelativeFilePath: Metrolist\Metrolist.exe
+    PortableCommandAlias: metrolist
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/Doctordefector/Metrolist-Desktop/releases/download/v2.9.2/Metrolist-2.9.2-portable.zip
+    InstallerSha256: 6F1602574424E45080D51EC5A17B4B4AADF264EEC607CAB184B374AEAB52A87C
+ReleaseDate: 2026-07-25
+ManifestType: installer
+ManifestVersion: 1.6.0

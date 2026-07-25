@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://doctordefector.github.io/Metrolist-Desktop/sitemap.xml

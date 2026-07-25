@@ -1,263 +1,191 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Metrolist - The open-source YouTube Music client for Android.">
-    <title>Metrolist | YT Music Client</title>
-    
-    <link rel="icon" type="image/png" href="images/logo.png">
-    <link rel="stylesheet" href="style.css">
-    
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Metrolist Desktop: Free YouTube Music App for Windows</title>
+<meta name="description" content="Metrolist Desktop is a free, open source YouTube Music client for Windows 10 and 11. Portable, no installer, no ads. Plays your real library, playlists and synced lyrics.">
+<link rel="canonical" href="https://doctordefector.github.io/Metrolist-Desktop/">
+<link rel="icon" type="image/png" href="images/logo.png">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Metrolist Desktop">
+<meta property="og:title" content="Metrolist Desktop: Free YouTube Music App for Windows">
+<meta property="og:description" content="A free, open source YouTube Music desktop client for Windows. Portable, no installer, no ads.">
+<meta property="og:url" content="https://doctordefector.github.io/Metrolist-Desktop/">
+<meta property="og:image" content="https://doctordefector.github.io/Metrolist-Desktop/images/social-preview.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Metrolist Desktop: Free YouTube Music App for Windows">
+<meta name="twitter:description" content="A free, open source YouTube Music desktop client for Windows. Portable, no installer, no ads.">
+<meta name="twitter:image" content="https://doctordefector.github.io/Metrolist-Desktop/images/social-preview.png">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Metrolist Desktop",
+  "alternateName": "Metrolist YouTube Music Desktop Client",
+  "applicationCategory": "MultimediaApplication",
+  "applicationSubCategory": "Music Player",
+  "operatingSystem": "Windows 10, Windows 11",
+  "downloadUrl": "https://github.com/Doctordefector/Metrolist-Desktop/releases/latest",
+  "installUrl": "https://github.com/Doctordefector/Metrolist-Desktop/releases/latest",
+  "license": "https://www.gnu.org/licenses/gpl-3.0.html",
+  "isAccessibleForFree": true,
+  "screenshot": "https://doctordefector.github.io/Metrolist-Desktop/images/social-preview.png",
+  "description": "A free, open source YouTube Music client for Windows. Portable, no installer, no ads.",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {"@type":"Question","name":"Is there a YouTube Music desktop app for Windows?","acceptedAnswer":{"@type":"Answer","text":"YouTube does not ship an official desktop app. Metrolist Desktop is a free, open source native client for Windows 10 and 11 that signs in to your own YouTube Music account and plays your real library."}},
+    {"@type":"Question","name":"Is Metrolist Desktop free?","acceptedAnswer":{"@type":"Answer","text":"Yes. It is free and open source under GPL-3.0. There is no paid tier, no account of its own and no telemetry."}},
+    {"@type":"Question","name":"Does it need an installer?","acceptedAnswer":{"@type":"Answer","text":"No. It ships as a portable ZIP. Extract it anywhere and run Metrolist.exe. Everything it writes stays in its own folder, so deleting that folder removes it completely."}},
+    {"@type":"Question","name":"Do I need VLC or Java installed?","acceptedAnswer":{"@type":"Answer","text":"No. The download bundles the VLC playback engine, ffmpeg and its own Java runtime."}},
+    {"@type":"Question","name":"Does Metrolist Desktop play music without ads?","acceptedAnswer":{"@type":"Answer","text":"Metrolist streams through the same API the mobile app uses and shows no advertising of its own."}}
+  ]
+}
+</script>
+
+<style>
+  :root{
+    --bg:#0d0f14; --bg2:#12101a; --panel:#15131f; --line:#241f33;
+    --text:#e9eaf0; --muted:#9aa0ad; --dim:#6f7686;
+    --accent:#b56cff; --accent2:#7c5cff; --accent3:#ff5c8a;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:linear-gradient(160deg,var(--bg2),var(--bg) 55%,#1b1024);
+    color:var(--text); font:16px/1.65 "Segoe UI",Inter,system-ui,-apple-system,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:960px;margin:0 auto;padding:0 24px}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  header{padding:72px 0 56px;text-align:center}
+  header img.logo{width:104px;height:104px;border-radius:24px}
+  h1{font-size:clamp(34px,6vw,54px);line-height:1.12;margin:24px 0 14px;letter-spacing:-.5px}
+  h1 span{background:linear-gradient(90deg,var(--accent2),var(--accent),var(--accent3));
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .tag{font-size:clamp(17px,2.6vw,20px);color:var(--muted);max-width:640px;margin:0 auto 32px}
+  .cta{display:inline-block;background:linear-gradient(90deg,var(--accent2),var(--accent3));
+    color:#fff;font-weight:600;font-size:18px;padding:15px 32px;border-radius:12px}
+  .cta:hover{text-decoration:none;filter:brightness(1.1)}
+  .meta{margin-top:14px;color:var(--dim);font-size:13.5px;letter-spacing:.4px}
+
+  h2{font-size:26px;margin:0 0 18px;letter-spacing:-.2px}
+  section{padding:44px 0;border-top:1px solid var(--line)}
+  .grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px}
+  .card h3{margin:0 0 8px;font-size:17px}
+  .card p{margin:0;color:var(--muted);font-size:15px}
+  ol{padding-left:20px} ol li{margin-bottom:10px}
+  code{background:#1d1a2a;border:1px solid var(--line);border-radius:6px;padding:2px 7px;font-size:14px}
+  .warn{background:#2a1520;border:1px solid #52233a;border-radius:12px;padding:16px 20px;color:#f2c9d6;font-size:15px}
+  details{border-bottom:1px solid var(--line);padding:14px 0}
+  details summary{cursor:pointer;font-weight:600;font-size:17px}
+  details p{color:var(--muted);margin:10px 0 0}
+  img.shot{width:100%;height:auto;border-radius:14px;border:1px solid var(--line);margin-top:24px}
+  footer{padding:40px 0 64px;color:var(--dim);font-size:14px;text-align:center;border-top:1px solid var(--line)}
+  footer p{margin:8px 0}
+</style>
 </head>
 <body>
 
-    <nav class="navbar">
-        <div class="container nav-container">
-            <a href="#" class="logo">
-                <img src="images/logo.png" alt="Metrolist Logo">
-                <span>Metrolist</span>
-            </a>
-            
-            <div class="nav-right">
-                <ul class="nav-links">
-                    <li><a href="#features" data-i18n="nav_features">Features</a></li>
-                    <li><a href="#lyrics" data-i18n="nav_lyrics">Lyrics</a></li>
-                    <li><a href="#community" data-i18n="nav_community">Community</a></li>
-                    <li><a href="#faq" data-i18n="nav_faq">FAQ</a></li>
-                    <li><a href="https://github.com/mostafaalagamy/Metrolist" target="_blank" class="github-link"><i class="fab fa-github"></i> GitHub</a></li>
-                </ul>
+<header>
+  <div class="wrap">
+    <img class="logo" src="images/logo.png" width="104" height="104" alt="Metrolist Desktop app icon">
+    <h1>Metrolist Desktop<br><span>YouTube Music for Windows</span></h1>
+    <p class="tag">A free, open source YouTube Music client for Windows 10 and 11. Your real
+       library, your real playlists, synced lyrics and offline downloads. No ads, no installer,
+       no telemetry.</p>
+    <a class="cta" href="https://github.com/Doctordefector/Metrolist-Desktop/releases/latest">Download for Windows</a>
+    <div class="meta">PORTABLE ZIP &middot; 64-BIT &middot; GPL-3.0 &middot; NO INSTALLER</div>
+  </div>
+</header>
 
-                <div class="nav-controls">
-                    <select id="lang-switch" class="lang-select" aria-label="Language">
-                        <option value="en">🇺🇸 EN</option>
-                        <option value="fr">🇫🇷 FR</option>
-                        <option value="es">🇪🇸 ES</option>
-                        <option value="it">🇮🇹 IT</option>
-                        <option value="pt">🇵🇹 PT</option>
-                    </select>
-
-                    <button id="theme-toggle" class="theme-btn" aria-label="Toggle Theme">
-                        <i class="fas fa-magic"></i>
-                        <span id="theme-text" style="font-size: 0.75rem; margin-left: 5px; text-transform: uppercase; font-weight: 700;">Auto</span>
-                    </button>
-
-                    <div class="menu-toggle" id="mobile-menu">
-                        <span class="bar"></span>
-                        <span class="bar"></span>
-                        <span class="bar"></span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </nav>
-
-    <header class="hero">
-        <div class="container hero-container">
-            <div class="hero-content">
-                <a href="https://github.com/mostafaalagamy/Metrolist/releases" target="_blank" class="badge version-badge" id="version-badge">Metrolist</a>
-                <h1><span data-i18n="hero_title_1">Music Experience</span> <br><span class="gradient-text" data-i18n="hero_title_2">Redefined.</span></h1>
-                <p data-i18n="hero_desc">Metrolist is a lightweight, open-source YouTube Music client. Experience ad-free listening, background playback, and Material Design 3 aesthetics.</p>
-                
-                <div class="security-row">
-                    <div class="security-badge safe"><i class="fas fa-check-shield"></i> <span data-i18n="sec_safe">100% Safe</span></div>
-                    <div class="security-badge open"><i class="fas fa-code"></i> <span data-i18n="sec_open">Open Source</span></div>
-                    <div class="security-badge license"><i class="fas fa-scale-balanced"></i> GPL-3.0</div>
-                </div>
-
-                <div class="hero-buttons">
-                    <a href="https://github.com/mostafaalagamy/Metrolist/releases" class="btn btn-primary btn-glow">
-                        <i class="fas fa-download"></i> <span data-i18n="btn_download">Download APK</span>
-                    </a>
-                    <a href="#features" class="btn btn-secondary" data-i18n="btn_learn">Learn More</a>
-                </div>
-            </div>
-            
-            <div class="hero-image">
-                <img src="images/hero-mockup.png" alt="Metrolist App Interface" class="app-mockup">
-            </div>
-        </div>
-    </header>
-
-    <section id="features" class="features">
-        <div class="container">
-            <h2 class="section-title" data-i18n="features_title">Why Metrolist?</h2>
-            <div class="features-grid">
-                <div class="feature-card">
-                    <div class="icon-box"><i class="fas fa-ban"></i></div>
-                    <h3 data-i18n="feat_adfree_title">Ad-Free</h3>
-                    <p data-i18n="feat_adfree_desc">Enjoy your music without interruptions. No video ads, no audio ads.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="icon-box"><i class="fas fa-headphones"></i></div>
-                    <h3 data-i18n="feat_bgplay_title">Background Play</h3>
-                    <p data-i18n="feat_bgplay_desc">Keep listening while using other apps or when your screen is locked.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="icon-box"><i class="fas fa-palette"></i></div>
-                    <h3 data-i18n="feat_theme_title">Adaptive Themes</h3>
-                    <p data-i18n="feat_theme_desc">Dynamic colors based on album art (Material You) or pure black mode.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="icon-box"><i class="fas fa-wifi"></i></div>
-                    <h3 data-i18n="feat_offline_title">Offline Mode</h3>
-                    <p data-i18n="feat_offline_desc">Download songs and playlists to cache them for offline listening.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="icon-box"><i class="fab fa-discord"></i></div>
-                    <h3 data-i18n="feat_discord_title">Discord RPC</h3>
-                    <p data-i18n="feat_discord_desc">Show your friends what you're listening to automatically via Discord.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="icon-box"><i class="fas fa-sliders-h"></i></div>
-                    <h3 data-i18n="feat_audio_title">Audio Tools</h3>
-                    <p data-i18n="feat_audio_desc">Pitch control, tempo adjustment, silence skipper, and normalization.</p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <section id="lyrics" class="lyrics-showcase">
-        <div class="container">
-            <div class="lyrics-content">
-                <div class="text-side">
-                    <span class="badge-small" data-i18n="lyrics_badge">Powered by LRCLIB & Better Lyrics</span>
-                    <h2><span data-i18n="lyrics_title_1">Synchronized</span> <br> <span class="gradient-text" data-i18n="lyrics_title_2">Lyrics Support</span></h2>
-                    <p data-i18n="lyrics_desc">Metrolist uses advanced open-source libraries to provide the best lyrical experience.</p>
-                    
-                    <div class="provider-logos">
-                        <div class="provider-badge"><i class="fas fa-code-branch"></i> LRCLIB</div>
-                        <div class="provider-badge"><i class="fas fa-music"></i> Musixmatch</div>
-                        <div class="provider-badge"><i class="fas fa-closed-captioning"></i> Better Lyrics</div>
-                    </div>
-
-                    <ul class="feature-list">
-                        <li><i class="fas fa-check-circle"></i> <strong data-i18n="lyrics_check_1">Real-time Sync:</strong> <span data-i18n="lyrics_check_1_desc">Karaoke style word-by-word.</span></li>
-                        <li><i class="fas fa-check-circle"></i> <strong data-i18n="lyrics_check_2">Multi-Source:</strong> <span data-i18n="lyrics_check_2_desc">Fetches from multiple databases.</span></li>
-                    </ul>
-                </div>
-                <div class="video-side">
-                    <video autoplay loop muted playsinline class="lyrics-video">
-                        <source src="images/preview.webm" type="video/webm">
-                        <source src="images/preview.mp4" type="video/mp4">
-                    </video>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <section id="community" class="community">
-        <div class="container community-container">
-            <div class="community-box new-style">
-                <div class="big-icon">
-                    <i class="fas fa-language"></i>
-                </div>
-                <h3 data-i18n="comm_trans_title">Help Translate</h3>
-                <p data-i18n="comm_trans_desc">Metrolist is available in many languages thanks to volunteers. Join us on Weblate.</p>
-                <a href="https://hosted.weblate.org/projects/Metrolist/" target="_blank" class="btn btn-outline" data-i18n="btn_weblate">Open Weblate</a>
-            </div>
-            
-            <div class="community-box new-style">
-                <div class="big-icon">
-                    <i class="fab fa-github"></i>
-                </div>
-                <h3 data-i18n="comm_code_title">Contribute Code</h3>
-                <p data-i18n="comm_code_desc">Developers are welcome! Check out the Issues tab on GitHub to get started.</p>
-                <a href="https://github.com/mostafaalagamy/Metrolist" target="_blank" class="btn btn-outline" data-i18n="btn_repo">View Code</a>
-            </div>
-        </div>
-    </section>
-
-    <section id="screenshots" class="screenshots">
-        <div class="container">
-            <h2 class="section-title" data-i18n="gallery_title">Interface Gallery</h2>
-            <div class="gallery-wrapper">
-                <img src="images/screenshot-1.jpg" alt="Home Screen">
-                <img src="images/screenshot-2.jpg" alt="Player Screen">
-                <img src="images/screenshot-3.jpg" alt="Settings Screen">
-				<img src="images/screenshot-4.jpg" alt="Settings Screen">
-				<img src="images/screenshot-5.jpg" alt="Settings Screen">
-				<img src="images/screenshot-6.jpg" alt="Settings Screen">
-            </div>
-        </div>
-    </section>
-
-<section id="faq" class="faq">
-    <div class="container">
-        <h2 class="section-title" data-i18n="faq_title">FAQ</h2>
-        <div class="accordion">
-            <div class="accordion-item">
-                <button class="accordion-header" data-i18n="faq_1_q">Is it safe to use?</button>
-                <div class="accordion-content">
-                    <p data-i18n="faq_1_a">Yes. Metrolist is open-source (GPL-3.0), meaning the code is public and auditable.</p>
-                </div>
-            </div>
-            <div class="accordion-item">
-                <button class="accordion-header" data-i18n="faq_2_q">Why isn't it on the Play Store?</button>
-                <div class="accordion-content">
-                    <p data-i18n="faq_2_a">Google does not allow third-party YouTube clients on the Play Store. You can safely download updates from GitHub.</p>
-                </div>
-            </div>
-            <div class="accordion-item">
-                <button class="accordion-header" data-i18n="faq_3_q">How to update?</button>
-                <div class="accordion-content">
-                    <p data-i18n="faq_3_a">Download the latest APK from Releases and install it over the old version.</p>
-                </div>
-            </div>
-            <div class="accordion-item">
-                <button class="accordion-header" data-i18n="faq_4_q">Can I log in with my Google account?</button>
-                <div class="accordion-content">
-                    <p data-i18n="faq_4_a">Yes, Metrolist supports account login to sync your playlists and library.</p>
-                </div>
-            </div>
-            <div class="accordion-item">
-                <button class="accordion-header" data-i18n="faq_5_q">Is there an iOS version?</button>
-                <div class="accordion-content">
-                    <p data-i18n="faq_5_a">No, Metrolist is currently only available for Android.</p>
-                </div>
-            </div>
-        </div>
-    </div>
+<section>
+  <div class="wrap">
+    <h2>What it is</h2>
+    <p>YouTube ships no desktop app for YouTube Music, and a browser tab is not a music player.
+       Metrolist Desktop is a native Windows application that signs in to your own account and
+       talks to the same API the mobile app uses. It is not a wrapper around the website and not a
+       repackaged Android build: it has its own player, database and sync layer.</p>
+    <img class="shot" src="images/social-preview.png" width="1280" height="640"
+         alt="Metrolist Desktop, a free YouTube Music client for Windows">
+  </div>
 </section>
 
-    <footer>
-        <div class="container footer-container">
-            <div class="footer-top">
-                <div class="footer-brand">
-                    <h3>Metrolist</h3>
-                    <p data-i18n="footer_tagline">Open Source Music Client</p>
-                </div>
-                <div class="footer-links">
-                    <a href="https://hosted.weblate.org/projects/Metrolist/" target="_blank">Weblate</a>
-                    <a href="https://github.com/mostafaalagamy/Metrolist/issues" target="_blank">Issues</a>
-                    <a href="https://github.com/mostafaalagamy/Metrolist/releases" target="_blank">Releases</a>
-                </div>
-            </div>
-            
-            <div class="footer-legal">
-                <h4>Disclaimer / Mentions Légales</h4>
-                <p>
-                    Metrolist is an <strong>open-source project</strong> licensed under GPL-3.0. 
-                    This application is <strong>strictly for educational purposes</strong>.
-                </p>
-                <p>
-                    Metrolist is <strong>not affiliated with, authorized, maintained, sponsored or endorsed by Google LLC or any of its affiliates or subsidiaries.</strong> 
-                    The name "YouTube" and "YouTube Music" are registered trademarks of Google LLC.
-                </p>
-                <p>
-                    The developers do not support piracy. This app is a third-party client using public APIs.
-                </p>
-            </div>
+<section>
+  <div class="wrap">
+    <h2>Features</h2>
+    <div class="grid">
+      <div class="card"><h3>Your real library</h3><p>Liked songs, albums, artists and playlists sync
+        both ways. Edits you make on the desktop show up in YouTube Music.</p></div>
+      <div class="card"><h3>Proper playback</h3><p>Bundled VLC engine, gapless queue, crossfade,
+        10-band equalizer, playback speed, sleep timer, skip silence, volume normalization.</p></div>
+      <div class="card"><h3>Synced lyrics</h3><p>Five providers chained together, so a track one
+        source misses is usually covered by the next.</p></div>
+      <div class="card"><h3>Downloads</h3><p>Keep tracks offline, plus loudness-normalized MP3
+        export for a car stereo or a USB stick.</p></div>
+      <div class="card"><h3>Discovery</h3><p>Home feed, Explore, charts, moods and genres, radio,
+        auto-queue, podcasts, and search with filters.</p></div>
+      <div class="card"><h3>Desktop extras</h3><p>Media keys, system tray mini player, Discord Rich
+        Presence, Last.fm scrobbling, Listen Together rooms, Shazam recognition.</p></div>
+    </div>
+  </div>
+</section>
 
-            <div class="footer-bottom">
-                <p>&copy; 2025 Metrolist Project. Made with ❤️ by Mo Agamy.</p>
-                <p class="creator-credit">Website by <a href="https://github.com/SanoBld" target="_blank">Sano Bld</a></p>
-            </div>
-        </div>
-    </footer>
+<section>
+  <div class="wrap">
+    <h2>Install</h2>
+    <ol>
+      <li>Download <code>Metrolist-X.Y.Z-portable.zip</code> from
+        <a href="https://github.com/Doctordefector/Metrolist-Desktop/releases/latest">the latest release</a>.</li>
+      <li>Extract it anywhere, for example <code>C:\Metrolist</code>.</li>
+      <li>Run <code>Metrolist.exe</code> and sign in with your browser.</li>
+    </ol>
+    <p>There is nothing else to install. VLC, ffmpeg and the Java runtime all ship inside the archive.</p>
+    <p class="warn"><strong>Do not extract into OneDrive, Dropbox or a synced Desktop folder.</strong>
+      Metrolist keeps its database, login and downloads next to the exe, and a sync client that
+      reopens those files mid-write will lock or corrupt them.</p>
+  </div>
+</section>
 
-    <script src="script.js"></script>
+<section>
+  <div class="wrap">
+    <h2>Questions</h2>
+    <details><summary>Is there an official YouTube Music desktop app for Windows?</summary>
+      <p>No. YouTube ships mobile apps and the web player, nothing native for Windows. Metrolist
+         Desktop is an independent open source client.</p></details>
+    <details><summary>Is Metrolist Desktop free?</summary>
+      <p>Yes, free and open source under GPL-3.0. No paid tier, no account of its own, no telemetry.</p></details>
+    <details><summary>Do I need a YouTube Music Premium subscription?</summary>
+      <p>No, but it signs in to whichever account you give it, so a Premium account keeps its benefits.</p></details>
+    <details><summary>Does it need VLC or Java installed?</summary>
+      <p>No. Both are bundled in the download, along with ffmpeg for exporting.</p></details>
+    <details><summary>Does it work on macOS or Linux?</summary>
+      <p>The code is Compose Desktop on the JVM, so it is portable in principle, but only Windows
+         builds are published today.</p></details>
+    <details><summary>How do I uninstall it?</summary>
+      <p>Delete the folder. Everything it wrote lives inside it.</p></details>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p><a href="https://github.com/Doctordefector/Metrolist-Desktop">Source on GitHub</a> &middot;
+       <a href="https://github.com/Doctordefector/Metrolist-Desktop/releases">All releases</a> &middot;
+       <a href="https://github.com/Doctordefector/Metrolist-Desktop/issues">Report a bug</a></p>
+    <p>Desktop port of <a href="https://github.com/MetrolistGroup/Metrolist">Metrolist</a>, GPL-3.0.
+       Not affiliated with YouTube, Google or Alphabet.</p>
+  </div>
+</footer>
+
 </body>
 </html>

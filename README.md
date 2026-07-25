@@ -1,8 +1,9 @@
 <div align="center">
 
-<img src=".github/metrolist-banner.svg" alt="Metrolist Desktop" width="100%">
+<img src=".github/metrolist-banner.svg" width="100%"
+     alt="Metrolist Desktop, a free open source YouTube Music client for Windows">
 
-<br>
+# Metrolist Desktop: YouTube Music for Windows
 
 [![Latest release](https://img.shields.io/github/v/release/Doctordefector/Metrolist-Desktop?style=for-the-badge&label=download&labelColor=12101a&color=7c5cff)](https://github.com/Doctordefector/Metrolist-Desktop/releases/latest)
 [![Portable](https://img.shields.io/badge/install-portable%20zip-b56cff?style=for-the-badge&labelColor=12101a)](https://github.com/Doctordefector/Metrolist-Desktop/releases/latest)
@@ -10,10 +11,11 @@
 [![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-6f7686?style=for-the-badge&labelColor=12101a)](https://github.com/Doctordefector/Metrolist-Desktop/releases/latest)
 
 **The original desktop port of [Metrolist](https://github.com/MetrolistGroup/Metrolist).**
-A full YouTube Music client for Windows: your real library, your real playlists, no ads, no
-installer, no telemetry. Unzip it and it runs.
+A free, open source YouTube Music client for Windows 10 and 11: your real library, your real
+playlists, no ads, no installer, no telemetry. Unzip it and it runs.
 
 [**Download**](https://github.com/Doctordefector/Metrolist-Desktop/releases/latest) ·
+[Website](https://doctordefector.github.io/Metrolist-Desktop/) ·
 [Features](#features) · [Troubleshooting](#troubleshooting) · [Build from source](#build-from-source)
 
 </div>

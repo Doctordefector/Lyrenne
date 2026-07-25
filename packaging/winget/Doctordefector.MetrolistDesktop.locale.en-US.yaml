@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+PackageIdentifier: Doctordefector.MetrolistDesktop
+PackageVersion: 2.9.2
+PackageLocale: en-US
+Publisher: Doctordefector
+PublisherUrl: https://github.com/Doctordefector
+PublisherSupportUrl: https://github.com/Doctordefector/Metrolist-Desktop/issues
+PackageName: Metrolist Desktop
+PackageUrl: https://github.com/Doctordefector/Metrolist-Desktop
+License: GPL-3.0-only
+LicenseUrl: https://github.com/Doctordefector/Metrolist-Desktop/blob/main/LICENSE
+ShortDescription: Free, open source YouTube Music client for Windows. Portable, no installer, no ads.
+Description: |-
+  Metrolist Desktop is a free and open source YouTube Music client for Windows 10 and 11.
+  It signs in to your own YouTube Music account and plays your real library: liked songs,
+  albums, artists and playlists, with two-way sync so edits made on the desktop reach your
+  account. Playback runs on a bundled VLC engine with crossfade, a 10-band equalizer,
+  playback speed, sleep timer and volume normalization. It also covers synced lyrics from
+  five providers, offline downloads, MP3 export for car stereos, Discord Rich Presence,
+  Last.fm scrobbling, media keys and a system tray mini player.
+
+  The app is portable: it ships as a ZIP with its own Java runtime, VLC and ffmpeg, and
+  everything it writes stays in its own folder.
+Moniker: metrolist
+Tags:
+  - youtube-music
+  - music
+  - music-player
+  - streaming
+  - audio
+  - player
+  - lyrics
+  - portable
+  - open-source
+ReleaseNotesUrl: https://github.com/Doctordefector/Metrolist-Desktop/releases/latest
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

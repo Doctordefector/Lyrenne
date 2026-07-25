@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src=".github/banner.svg" alt="Metrolist Desktop" width="100%">
+<img src=".github/metrolist-banner.svg" alt="Metrolist Desktop" width="100%">
 
 <br>
 

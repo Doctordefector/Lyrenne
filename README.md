@@ -5,8 +5,7 @@
 <br>
 
 [![Latest release](https://img.shields.io/github/v/release/Doctordefector/Metrolist-Desktop?style=for-the-badge&label=download&labelColor=12101a&color=7c5cff)](https://github.com/Doctordefector/Metrolist-Desktop/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/Doctordefector/Metrolist-Desktop/total?style=for-the-badge&labelColor=12101a&color=b56cff)](https://github.com/Doctordefector/Metrolist-Desktop/releases)
-[![Stars](https://img.shields.io/github/stars/Doctordefector/Metrolist-Desktop?style=for-the-badge&labelColor=12101a&color=ff5c8a)](https://github.com/Doctordefector/Metrolist-Desktop/stargazers)
+[![Portable](https://img.shields.io/badge/install-portable%20zip-b56cff?style=for-the-badge&labelColor=12101a)](https://github.com/Doctordefector/Metrolist-Desktop/releases/latest)
 [![License](https://img.shields.io/badge/license-GPL--3.0-6f7686?style=for-the-badge&labelColor=12101a)](LICENSE)
 [![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-6f7686?style=for-the-badge&labelColor=12101a)](https://github.com/Doctordefector/Metrolist-Desktop/releases/latest)
 

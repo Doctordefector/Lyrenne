@@ -37,6 +37,30 @@ our domain, so it was replaced wholesale.
 Without that, indexing a brand new GitHub Pages path can take weeks. Same for
 [Bing Webmaster Tools](https://www.bing.com/webmasters).
 
+### 1b. Visual language
+
+The site, the README banner, the badges and the social preview all follow the same design as the
+author's personal site (`S:\Dev\Portfolio`), so the project reads as one person's work rather than
+as a generated template:
+
+| Token | Value |
+|---|---|
+| Background | `#0a0a0a`, panels `#111`, hairlines `#333` |
+| Text | `#e0e0e0`, headings `#fff`, muted `#777` to `#999` |
+| Accent | `#A37C43` (bronze). No purple, no blue, no gradients outside the accent ramp |
+| Headings | Space Mono, uppercase, wide letter-spacing |
+| Body | Inter |
+| Corners | Square. `border-radius` above 3px belongs to the app icon only |
+
+Interaction idioms carried over: cards lift 4px on hover with a bronze glow and a 2px gradient
+line across the top, section headings shimmer, `@property --angle` conic borders spin around the
+download button and framed images, and everything reveals on scroll through one
+IntersectionObserver adding `.visible` to `.fade-in`. The hero uses the same text-scramble effect.
+
+Keep any future asset inside this palette. The generated look people distrust is purple-to-pink
+gradients, rounded cards and emoji headings, which is exactly what the first version of this page
+had.
+
 ### 2. Repo metadata
 
 - **Description** is the Google result title: results render as

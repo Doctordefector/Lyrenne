@@ -16,7 +16,6 @@ import java.time.LocalDateTime
 data class SyncState(
     val isSyncing: Boolean = false,
     val progress: String = "",
-    val lastSyncTime: String? = null,
     val error: String? = null
 )
 
@@ -112,7 +111,6 @@ object LibrarySync {
 
                 _syncState.value = SyncState(
                     isSyncing = false,
-                    lastSyncTime = LocalDateTime.now().toString(),
                     progress = "Synced ${songs.size} songs, ${albums.size} albums, ${artists.size} artists, ${playlists.size} playlists",
                     error = failures.takeIf { it.isNotEmpty() }?.let { describeFailure(it) }
                 )
@@ -131,11 +129,6 @@ object LibrarySync {
                 )
             }
         }
-    }
-
-    fun cancelSync() {
-        syncJob?.cancel()
-        _syncState.value = SyncState(progress = "Sync cancelled")
     }
 
     /**

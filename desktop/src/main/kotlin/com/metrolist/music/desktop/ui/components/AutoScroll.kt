@@ -1,8 +1,5 @@
 package com.metrolist.music.desktop.ui.components
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -31,8 +28,8 @@ import kotlin.math.sign
 object AutoScroll {
 
     /** Anchor position in screen coordinates, or null when inactive. */
-    var anchor by mutableStateOf<Pair<Int, Int>?>(null)
-        private set
+    @Volatile
+    private var anchor: Pair<Int, Int>? = null
 
     val isActive: Boolean get() = anchor != null
 

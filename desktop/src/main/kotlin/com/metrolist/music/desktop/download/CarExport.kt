@@ -61,15 +61,15 @@ object CarExport {
         (Runtime.getRuntime().availableProcessors() - 1).coerceIn(2, 6)
     )
 
-    private val isWindows = System.getProperty("os.name").orEmpty().lowercase().contains("win")
-    private val ffmpegExe = if (isWindows) "ffmpeg.exe" else "ffmpeg"
+    private val ffmpegExe =
+        if ("win" in System.getProperty("os.name").orEmpty().lowercase()) "ffmpeg.exe" else "ffmpeg"
 
     /**
      * Locate ffmpeg. The packaged app ships its own copy under the Compose resources dir, the
      * same place bundled VLC lives, so export works with no user setup. The remaining paths
      * cover running from source and anyone who would rather use their own build.
      */
-    fun findFfmpeg(): File? {
+    private fun findFfmpeg(): File? {
         val candidates = listOfNotNull(
             // Packaged distributable — resources/ffmpeg/ffmpeg.exe
             System.getProperty("compose.application.resources.dir")
@@ -91,7 +91,7 @@ object CarExport {
             ?.firstOrNull { it.isFile }
     }
 
-    const val FFMPEG_MISSING =
+    private const val FFMPEG_MISSING =
         "ffmpeg not found. It ships with Metrolist, so this build may be incomplete — " +
             "reinstall, or put ffmpeg.exe next to Metrolist.exe."
 

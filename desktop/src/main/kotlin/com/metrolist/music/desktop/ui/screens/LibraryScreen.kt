@@ -143,8 +143,11 @@ fun LibraryScreen(
             }
         }
 
-        // Sync error
-        if (syncState.error != null) {
+        // Sync error, or a library edit that failed to reach YouTube. Writes are
+        // fire-and-forget, so without this a failed push would be entirely silent.
+        val writeError by YouTubeWrites.lastError.collectAsState()
+        val bannerError = syncState.error ?: writeError
+        if (bannerError != null) {
             Spacer(Modifier.height(8.dp))
             Card(
                 colors = CardDefaults.cardColors(
@@ -162,11 +165,14 @@ fun LibraryScreen(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        syncState.error!!,
+                        bannerError,
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.bodySmall
                     )
-                    IconButton(onClick = { LibrarySync.clearError() }) {
+                    IconButton(onClick = {
+                        LibrarySync.clearError()
+                        YouTubeWrites.clearError()
+                    }) {
                         Icon(Icons.Default.Close, "Dismiss")
                     }
                 }

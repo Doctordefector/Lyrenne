@@ -1,7 +1,9 @@
 import com.google.protobuf.gradle.*
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import java.net.URI
+import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
 
 plugins {
     kotlin("jvm")
@@ -17,7 +19,7 @@ kotlin {
 }
 
 // Must match AutoUpdater.CURRENT_VERSION — both are checked on every release
-val metrolistVersion = "2.9.0"
+val metrolistVersion = "2.9.1"
 
 // Include shared module sources directly (they are Android library modules but pure Kotlin/JVM code)
 sourceSets {
@@ -141,10 +143,8 @@ compose.desktop {
  * verified present: libmp3lame, loudnorm (EBU R128), aformat, pan, and aac/opus/mp3/flac/vorbis
  * decoders.
  */
-val ffmpegDir = layout.projectDirectory.dir("resources/windows-x64/ffmpeg")
-
 tasks.register("fetchFfmpeg") {
-    val target = ffmpegDir.file("ffmpeg.exe").asFile
+    val target = layout.projectDirectory.file("resources/windows-x64/ffmpeg/ffmpeg.exe").asFile
     val downloadUrl =
         "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl.zip"
     outputs.file(target)
@@ -158,7 +158,6 @@ tasks.register("fetchFfmpeg") {
             tmpZip.outputStream().use { input.copyTo(it) }
         }
 
-        var extracted = false
         ZipFile(tmpZip).use { zip ->
             val entry = zip.entries().asSequence()
                 .firstOrNull { it.name.endsWith("bin/ffmpeg.exe") }
@@ -166,12 +165,9 @@ tasks.register("fetchFfmpeg") {
             zip.getInputStream(entry).use { input ->
                 target.outputStream().use { input.copyTo(it) }
             }
-            extracted = true
         }
         tmpZip.delete()
-        if (!extracted || target.length() == 0L) {
-            throw GradleException("Failed to extract ffmpeg.exe")
-        }
+        if (target.length() == 0L) throw GradleException("Failed to extract ffmpeg.exe")
         logger.lifecycle("ffmpeg ready: ${target.length() / 1024 / 1024} MB")
     }
 }
@@ -247,6 +243,33 @@ tasks.register("packagePortableZip") {
                 logger.lifecycle("Purged runtime dir: $name")
             }
         }
+
+        // 1b. sqlite-jdbc ships native libraries for Linux, Android, musl, FreeBSD and macOS.
+        // A Windows-only distributable needs none of them — ~9 MB of the 12.9 MB jar.
+        File(imageDir, "app").listFiles { f -> f.name.startsWith("sqlite-jdbc") && f.extension == "jar" }
+            ?.forEach { jar ->
+                val before = jar.length()
+                val stripped = File(jar.parentFile, "${jar.name}.stripped")
+                ZipOutputStream(stripped.outputStream().buffered()).use { out ->
+                    ZipFile(jar).use { zip ->
+                        zip.entries().asSequence()
+                            .filter {
+                                !it.name.startsWith("org/sqlite/native/") ||
+                                    it.name.startsWith("org/sqlite/native/Windows/x86_64/")
+                            }
+                            .forEach { entry ->
+                                out.putNextEntry(ZipEntry(entry.name))
+                                if (!entry.isDirectory) zip.getInputStream(entry).use { it.copyTo(out) }
+                                out.closeEntry()
+                            }
+                    }
+                }
+                jar.delete()
+                stripped.renameTo(jar)
+                logger.lifecycle(
+                    "Stripped foreign sqlite natives: ${before / 1024 / 1024} MB -> ${jar.length() / 1024 / 1024} MB"
+                )
+            }
 
         // 2. Always start from a fresh archive — `7z a` ADDS to an existing zip, which would
         //    silently retain entries that were just purged from disk.

@@ -36,10 +36,10 @@ fun chooseExportFolder(name: String): File? {
 
 /** Progress/result line for a running or finished car export. Renders nothing when idle. */
 @Composable
-fun CarExportStatus(modifier: Modifier = Modifier) {
+fun CarExportStatus() {
     val state by CarExport.state.collectAsState()
     when (val s = state) {
-        is CarExport.ExportState.Running -> Column(modifier.padding(top = 8.dp)) {
+        is CarExport.ExportState.Running -> Column(Modifier.padding(top = 8.dp)) {
             Text(
                 "Exporting ${s.done + 1}/${s.total} — ${s.current}",
                 style = MaterialTheme.typography.bodySmall
@@ -55,14 +55,14 @@ fun CarExportStatus(modifier: Modifier = Modifier) {
                 if (s.failed > 0) " — ${s.failed} failed" else "",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.primary,
-            modifier = modifier.padding(top = 8.dp)
+            modifier = Modifier.padding(top = 8.dp)
         )
 
         is CarExport.ExportState.Failed -> Text(
             s.message,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.error,
-            modifier = modifier.padding(top = 8.dp)
+            modifier = Modifier.padding(top = 8.dp)
         )
 
         else -> Unit

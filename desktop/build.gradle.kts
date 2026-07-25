@@ -19,7 +19,7 @@ kotlin {
 }
 
 // Must match AutoUpdater.CURRENT_VERSION — both are checked on every release
-val metrolistVersion = "2.9.1"
+val metrolistVersion = "2.9.2"
 
 // Include shared module sources directly (they are Android library modules but pure Kotlin/JVM code)
 sourceSets {
@@ -242,6 +242,12 @@ tasks.register("packagePortableZip") {
                 dir.deleteRecursively()
                 logger.lifecycle("Purged runtime dir: $name")
             }
+        }
+        // The crash log sits next to the exe and records song titles and the account name,
+        // so it is user data too — never ship one left behind by a smoke test.
+        File(imageDir, "metrolist.log").takeIf { it.exists() }?.let {
+            it.delete()
+            logger.lifecycle("Purged metrolist.log")
         }
 
         // 1b. sqlite-jdbc ships native libraries for Linux, Android, musl, FreeBSD and macOS.

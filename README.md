@@ -98,6 +98,8 @@ produces the release archive.
 
 ## Credits
 
+Built and maintained by **[Andrei Chapliuk](https://andrevich.netlify.app)**.
+
 - [Metrolist](https://github.com/MetrolistGroup/Metrolist) by mostafaalagamy and the Metrolist
   Group: the Android app this port descends from, and the source of the shared InnerTube,
   LrcLib, KuGou, BetterLyrics and ShazamKit modules.

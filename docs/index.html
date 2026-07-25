@@ -38,7 +38,13 @@
   "isAccessibleForFree": true,
   "screenshot": "https://doctordefector.github.io/Metrolist-Desktop/images/social-preview.png",
   "description": "A free, open source YouTube Music client for Windows. Portable, no installer, no ads.",
-  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "author": {
+    "@type": "Person",
+    "name": "Andrei Chapliuk",
+    "url": "https://andrevich.netlify.app",
+    "sameAs": ["https://github.com/Doctordefector"]
+  }
 }
 </script>
 <script type="application/ld+json">
@@ -233,6 +239,8 @@ footer { background-color: var(--bg-color); padding: 2rem; border-top: 1px solid
     gap: 1rem; flex-wrap: wrap; font-size: 0.85rem; color: #888;
 }
 .footer-right { display: flex; gap: 2rem; flex-wrap: wrap; }
+.footer-content .author { color: var(--accent-color); }
+.footer-content .author:hover { color: var(--heading-color); }
 
 /* --- Reveal --- */
 .fade-in { opacity: 0; transform: translateY(20px); transition: opacity 0.6s ease-out, transform 0.6s ease-out; }
@@ -399,7 +407,9 @@ footer { background-color: var(--bg-color); padding: 2rem; border-top: 1px solid
 
 <footer>
     <div class="footer-content">
-        <span>Desktop port of <a href="https://github.com/MetrolistGroup/Metrolist">Metrolist</a>, GPL-3.0. Not affiliated with YouTube or Google.</span>
+        <span>Built by <a class="author" href="https://andrevich.netlify.app" rel="noopener">Andrei Chapliuk</a>.
+            Desktop port of <a href="https://github.com/MetrolistGroup/Metrolist">Metrolist</a>, GPL-3.0.
+            Not affiliated with YouTube or Google.</span>
         <span class="footer-right">
             <a href="https://github.com/Doctordefector/Metrolist-Desktop">Source</a>
             <a href="https://github.com/Doctordefector/Metrolist-Desktop/releases">Releases</a>

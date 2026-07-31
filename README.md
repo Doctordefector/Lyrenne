@@ -31,11 +31,7 @@ playlists, no ads, no installer, no telemetry. Unzip it and it runs.
 2. Extract it **anywhere except a cloud-synced folder** (see the warning below).
 3. Run `Metrolist.exe` and sign in with your browser.
 
-Or use a package manager:
-
-```powershell
-winget install Doctordefector.MetrolistDesktop
-```
+Or install it with [Scoop](https://scoop.sh):
 
 ```powershell
 scoop bucket add metrolist https://github.com/Doctordefector/scoop-metrolist

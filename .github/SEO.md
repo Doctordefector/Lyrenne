@@ -94,41 +94,35 @@ pages, fifty long-tail entry points.
 
 ### 6. Package manifests (`packaging/`)
 
-Package managers are discovery channels, not just installers. `scoop search`, winstall.app and
-winget.run all generate pages that get indexed, and a lot of Windows users never look at GitHub.
+Package managers are discovery channels, not just installers. `scoop search` and the Scoop
+Directory generate pages that get indexed, and a lot of Windows users never look at GitHub.
 
-**Scoop** (`packaging/scoop/metrolist.json`). Portable ZIP fits scoop exactly. Users can install
-straight from the raw URL today:
-
-```
-scoop install https://raw.githubusercontent.com/Doctordefector/Metrolist-Desktop/main/packaging/scoop/metrolist.json
-```
-
-For a listing that shows up in `scoop search`, submit the same file to
-[ScoopInstaller/Extras](https://github.com/ScoopInstaller/Extras) as a pull request. `checkver`
-and `autoupdate` are already wired to the GitHub releases feed, so their bot handles later
-versions on its own. `persist` keeps `data` and `Downloads` across updates, which matters because
-Metrolist stores everything next to the exe.
-
-**Winget** (`packaging/winget/`). Three manifests, schema 1.6, `zip` installer with a nested
-`portable` exe. Not yet submitted. To publish, fork
-[microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs), copy the three files to
-`manifests/d/Doctordefector/MetrolistDesktop/<version>/` and open a PR. Their CI validates the
-hash and the install. Easiest path is [wingetcreate](https://github.com/microsoft/winget-create):
+**Scoop** is the one channel in use. The manifest lives in its own bucket repo,
+[Doctordefector/scoop-metrolist](https://github.com/Doctordefector/scoop-metrolist), and an
+Excavator workflow there bumps version, URL and hash daily, so releases need no manual step:
 
 ```
-wingetcreate update Doctordefector.MetrolistDesktop --version <X.Y.Z> --urls <zip url> --submit
+scoop bucket add metrolist https://github.com/Doctordefector/scoop-metrolist
+scoop install metrolist-desktop
 ```
+
+A listing in [ScoopInstaller/Extras](https://github.com/ScoopInstaller/Extras) would show up in a
+plain `scoop search`, but they require 100+ stars or 50+ forks. Resubmit once the repo clears
+that bar.
+
+**Winget is deliberately not used.** A manifest was submitted and then withdrawn: winget would
+install into `%LOCALAPPDATA%\Microsoft\WinGet\Packages\`, and since this app stores its database,
+credentials and downloads next to the exe, `winget upgrade` would delete the user's library.
+winget has no `persist` equivalent to prevent that. `packaging/README.md` has the full reasoning
+and what would have to change in `AppPaths` first.
 
 ## Per-release checklist
 
 1. Bump the version in `desktop/build.gradle.kts` and `AutoUpdater.CURRENT_VERSION`.
 2. `./gradlew :desktop:createDistributable :desktop:packagePortableZip`.
 3. `gh release create vX.Y.Z <zip> --repo Doctordefector/Metrolist-Desktop --title "Metrolist Desktop vX.Y.Z - YouTube Music for Windows" --notes-file <notes>`.
-4. Update `packaging/scoop/metrolist.json`: `version`, `url`, `hash`
-   (`sha256sum` of the ZIP). Skip this if the manifest is in Extras, the bot does it.
-5. Update the three files in `packaging/winget/` and submit, or run `wingetcreate update`.
-6. Release notes: no em dashes, and lead with what the user sees rather than the internals.
+4. Package managers: nothing to do. Excavator bumps the Scoop bucket on its own daily run.
+5. Release notes: no em dashes, and lead with what the user sees rather than the internals.
 
 ## Channels not yet used
 

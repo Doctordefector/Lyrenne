@@ -394,12 +394,11 @@ Total app startup went 13.5 s → 2.4 s.
    ```
    gh release create vX.Y.Z Metrolist-X.Y.Z-portable.zip --title "Metrolist Desktop vX.Y.Z" --notes "..."
    ```
-6. **Bump the winget manifest** — this is the only package-manager step that is not automatic:
-   ```
-   wingetcreate update Doctordefector.MetrolistDesktop --version X.Y.Z --urls <release asset URL> --submit
-   ```
-   Scoop needs nothing: the bucket at Doctordefector/scoop-metrolist runs Excavator on a daily
-   cron and bumps itself. Full details and the manual fallback: `packaging/README.md`.
+6. **Package managers: nothing to do.** The Scoop bucket at Doctordefector/scoop-metrolist runs
+   Excavator on a daily cron and bumps its own version, URL and hash. There is deliberately no
+   winget listing — winget would delete the user's library on upgrade, because this app stores
+   data next to the exe and winget has no `persist` equivalent. See `packaging/README.md` before
+   reconsidering that.
 
 ## Distribution Strategy
 - **PORTABLE ONLY** — no EXE installers, no MSI packages. Just the portable ZIP.

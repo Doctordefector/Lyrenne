@@ -1,1 +1,8 @@
 blank_issues_enabled: false
+contact_links:
+  - name: Troubleshooting
+    url: https://github.com/Doctordefector/Metrolist-Desktop#troubleshooting
+    about: App won't start, "VLC not found", empty library after signing in, car export doing nothing. Check here first, these are the common ones.
+  - name: Looking for the Android app?
+    url: https://github.com/MetrolistGroup/Metrolist
+    about: This repo is the Windows desktop port. Bugs in the Android app belong upstream.

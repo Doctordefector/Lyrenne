@@ -1,18 +1,15 @@
 name: Feature request
-description: Suggest an idea for Metrolist
+description: Suggest an idea for Metrolist Desktop
 labels: [enhancement]
 body:
   - type: checkboxes
     id: checklist
     attributes:
-      label: Checklist
-      description: You should ensure the completion of the task before proceeding to check it off the checklist. Neglecting to do so may impede the efficiency of the issue resolution process. The developer has the right to delete the issue directly if you check the list blindly.
+      label: Before submitting
       options:
-        - label: I've checked that there is no other issue about this feature request.
+        - label: I searched open and closed issues and didn't find this request.
           required: true
-        - label: This issue contains only one feature request.
-          required: true
-        - label: The title of this issue accurately describes the feature request.
+        - label: This is a single feature request.
           required: true
 
   - type: textarea

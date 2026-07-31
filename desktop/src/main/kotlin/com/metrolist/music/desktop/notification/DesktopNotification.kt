@@ -34,13 +34,16 @@ object DesktopNotification {
         }
 
         try {
+            // icon-small.png, not icon.png: the tray renders at 16px, where the full mark's gold
+            // ring is most of the pixels and the icon reads as a gold box instead of a lyre.
             val iconStream = Thread.currentThread().contextClassLoader
-                .getResourceAsStream("icon.png")
-                ?: DesktopNotification::class.java.getResourceAsStream("/icon.png")
+                .getResourceAsStream("icon-small.png")
+                ?: DesktopNotification::class.java.getResourceAsStream("/icon-small.png")
+                ?: Thread.currentThread().contextClassLoader.getResourceAsStream("icon.png")
             val image = if (iconStream != null) {
                 javax.imageio.ImageIO.read(iconStream)
             } else {
-                Timber.w("icon.png not found for notification tray icon")
+                Timber.w("no tray icon artwork found on the classpath")
                 java.awt.Toolkit.getDefaultToolkit().createImage(ByteArray(0))
             }
 

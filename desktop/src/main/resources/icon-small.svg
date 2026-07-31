@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512"
+     role="img" aria-label="Lyrenne">
+  <!--
+    Small-size variant of the mark, used for the 16/32/48 entries of icon.ico.
+
+    The full logo carries a gold ring. At tray and taskbar size that ring is most of the pixels,
+    so the icon reads as a gold box rather than a lyre and stands out next to the glyph-style
+    icons Windows puts in the notification area. This variant drops the ring.
+
+    The dark tile stays. Dropping it too would leave a white glyph on transparency, which
+    vanishes entirely on a light-theme taskbar. The tile keeps the icon visible on both.
+
+    The lyre is scaled up to fill the space the ring used to occupy. Larger entries keep the
+    full mark: see docs/images/logo.svg.
+  -->
+  <rect x="0" y="0" width="512" height="512" rx="112" fill="#0a0a0a"/>
+
+  <g transform="translate(256 262) scale(1.16) translate(-256 -262)">
+    <g fill="#ffffff" stroke="none">
+      <rect x="216" y="146" width="8" height="206"/>
+      <rect x="236" y="146" width="8" height="206"/>
+      <rect x="256" y="146" width="8" height="206"/>
+      <rect x="276" y="146" width="8" height="206"/>
+      <rect x="296" y="146" width="8" height="206"/>
+      <path d="M203 352 C 130 306 122 210 164 134 L 187 145 C 152 214 160 298 222 340 Z"/>
+      <path d="M309 352 C 382 306 390 210 348 134 L 325 145 C 360 214 352 298 290 340 Z"/>
+      <path d="M147 133 L365 133 L373 146 L365 161 L147 161 L139 146 Z"/>
+      <path d="M196 330 C 220 344 292 344 316 330 C 314 384 292 404 256 404 C 220 404 198 384 196 330 Z"/>
+    </g>
+  </g>
+</svg>

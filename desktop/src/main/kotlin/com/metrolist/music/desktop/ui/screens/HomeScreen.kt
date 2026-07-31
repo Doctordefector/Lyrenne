@@ -189,7 +189,7 @@ fun HomeScreen(
                 ) {
                     item {
                         Text(
-                            "Welcome to Metrolist",
+                            "Welcome to Lyrenne",
                             style = MaterialTheme.typography.headlineMedium
                         )
                     }

@@ -1009,7 +1009,7 @@ fun SettingsScreen(
                     if (source != null) {
                         com.metrolist.music.desktop.backup.BackupManager.importBackup(source)
                             .onSuccess { count ->
-                                restoreStatus = "Restored $count files — restart Metrolist to apply"
+                                restoreStatus = "Restored $count files — restart Lyrenne to apply"
                                 showRestartNotice = true
                             }
                             .onFailure { e ->
@@ -1183,11 +1183,9 @@ fun SettingsScreen(
             if (showEasterEgg) {
                 AlertDialog(
                     onDismissRequest = { showEasterEgg = false },
-                    title = { Text("💌", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
                     text = {
                         Text(
-                            "Amazingly Variable Mixtape 1 got its first song as of 25/7/26 " +
-                                "exactly 6 months since my first date with my beloved :)",
+                            "🪲U found da bug !🪲",
                             style = MaterialTheme.typography.titleMedium,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth()
@@ -1218,7 +1216,7 @@ fun SettingsScreen(
                 subtitle = "View on GitHub",
                 onClick = {
                     try {
-                        Desktop.getDesktop().browse(URI("https://github.com/Doctordefector/Metrolist-Desktop"))
+                        Desktop.getDesktop().browse(URI("https://github.com/Doctordefector/Lyrenne"))
                     } catch (e: Exception) {
                         // Ignore
                     }
@@ -1233,7 +1231,7 @@ fun SettingsScreen(
                 subtitle = "Help improve the app",
                 onClick = {
                     try {
-                        Desktop.getDesktop().browse(URI("https://github.com/Doctordefector/Metrolist-Desktop/issues/new"))
+                        Desktop.getDesktop().browse(URI("https://github.com/Doctordefector/Lyrenne/issues/new"))
                     } catch (e: Exception) {
                         // Ignore
                     }

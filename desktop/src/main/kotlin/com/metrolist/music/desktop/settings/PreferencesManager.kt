@@ -229,7 +229,7 @@ object PreferencesManager {
             props.setProperty("syncPruneBackupDone", prefs.syncPruneBackupDone.toString())
 
             prefsFile.outputStream().use {
-                props.store(it, "Metrolist Desktop Preferences")
+                props.store(it, "Lyrenne Preferences")
             }
         } catch (e: Exception) {
             Timber.e("Failed to save preferences: ${e.message}")

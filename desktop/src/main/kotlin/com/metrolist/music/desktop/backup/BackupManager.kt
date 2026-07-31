@@ -22,7 +22,7 @@ object BackupManager {
 
     fun defaultBackupFileName(): String {
         val stamp = SimpleDateFormat("yyyy-MM-dd_HHmm", Locale.US).format(Date())
-        return "Metrolist-backup-$stamp.zip"
+        return "Lyrenne-backup-$stamp.zip"
     }
 
     /** Write a backup ZIP to [target]. Returns the number of files included. */
@@ -74,7 +74,7 @@ object BackupManager {
                 entry = zip.nextEntry
             }
         }
-        if (count == 0) error("No Metrolist data found in this ZIP")
+        if (count == 0) error("No Lyrenne data found in this ZIP")
         count
     }
 }

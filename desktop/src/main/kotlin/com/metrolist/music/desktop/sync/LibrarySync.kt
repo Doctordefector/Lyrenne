@@ -330,7 +330,7 @@ object LibrarySync {
         if (com.metrolist.music.desktop.settings.PreferencesManager.preferences.value.syncPruneBackupDone) return
         val target = java.io.File(
             com.metrolist.music.desktop.AppPaths.appDir,
-            "Metrolist-backup-before-sync-cleanup.zip"
+            "Lyrenne-backup-before-sync-cleanup.zip"
         )
         com.metrolist.music.desktop.backup.BackupManager.exportBackup(target)
             .onSuccess {

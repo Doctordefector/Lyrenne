@@ -92,8 +92,8 @@ object CarExport {
     }
 
     private const val FFMPEG_MISSING =
-        "ffmpeg not found. It ships with Metrolist, so this build may be incomplete — " +
-            "reinstall, or put ffmpeg.exe next to Metrolist.exe."
+        "ffmpeg not found. It ships with Lyrenne, so this build may be incomplete — " +
+            "reinstall, or put ffmpeg.exe next to Lyrenne.exe."
 
     /**
      * Loudness-normalize to a consistent level and guarantee a real two-channel stereo file,

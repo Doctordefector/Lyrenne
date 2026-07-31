@@ -254,7 +254,7 @@ object AutoUpdater {
         val updateDir = getUpdateDirectory()
         val pid = ProcessHandle.current().pid()
         val logFile = File(updateDir, "update.log").absolutePath
-        val scriptFile = File(updateDir, "metrolist-update.ps1")
+        val scriptFile = File(updateDir, "lyrenne-update.ps1")
 
         scriptFile.writeText(buildPortableUpdateScript(
             pid = pid,
@@ -486,7 +486,7 @@ object AutoUpdater {
         }
 
         // Last resort: temp directory (always writable)
-        return File(System.getProperty("java.io.tmpdir"), "metrolist-updates")
+        return File(System.getProperty("java.io.tmpdir"), "lyrenne-updates")
     }
 
     private fun findAppDirectory(): File? {

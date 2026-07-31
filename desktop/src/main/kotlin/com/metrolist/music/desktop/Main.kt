@@ -117,6 +117,21 @@ private fun reportFatal(e: Throwable, log: File) {
     }
 }
 
+/**
+ * Read a bundled PNG from the classpath, or null if it is missing or unreadable.
+ *
+ * Callers pick between "icon.png", the full mark with its gold ring, and "icon-small.png", the
+ * same lyre without it. The ring dominates once the artwork is scaled to tray or taskbar size.
+ */
+private fun loadResourceImage(name: String): java.awt.image.BufferedImage? = try {
+    Thread.currentThread().contextClassLoader.getResourceAsStream(name)
+        ?.use { javax.imageio.ImageIO.read(it) }
+        ?: run { Timber.w("$name not found in classpath resources"); null }
+} catch (e: Exception) {
+    Timber.w("Failed to read $name: ${e.message}")
+    null
+}
+
 fun main() {
     val log = installCrashReporting()
     try {
@@ -253,24 +268,24 @@ private fun runApp() {
             // Set AWT icon images for taskbar/alt-tab (multiple sizes for best quality)
             LaunchedEffect(Unit) {
                 try {
-                    val iconStream = Thread.currentThread().contextClassLoader
-                        .getResourceAsStream("icon.png")
-                    if (iconStream != null) {
-                        val awtImage = javax.imageio.ImageIO.read(iconStream)
-                        if (awtImage != null) {
-                            // Provide multiple sizes for Windows taskbar (small=16/24, large=32/48/256)
-                            val sizes = listOf(16, 24, 32, 48, 64, 128, 256)
-                            val scaledImages = sizes.map { size ->
-                                val scaled = java.awt.image.BufferedImage(size, size, java.awt.image.BufferedImage.TYPE_INT_ARGB)
-                                val g2d = scaled.createGraphics()
-                                g2d.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BICUBIC)
-                                g2d.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON)
-                                g2d.drawImage(awtImage, 0, 0, size, size, null)
-                                g2d.dispose()
-                                scaled as java.awt.Image
-                            }
-                            window.iconImages = scaledImages
+                    // Two artworks, picked by size. The full mark has a gold ring that is most of
+                    // the pixels once it is scaled to taskbar size, so it reads as a gold box
+                    // rather than a lyre. icon-small.png is the same lyre without the ring.
+                    val full = loadResourceImage("icon.png")
+                    val small = loadResourceImage("icon-small.png") ?: full
+                    if (full != null) {
+                        val sizes = listOf(16, 24, 32, 48, 64, 128, 256)
+                        val scaledImages = sizes.map { size ->
+                            val source = if (size <= 48) small else full
+                            val scaled = java.awt.image.BufferedImage(size, size, java.awt.image.BufferedImage.TYPE_INT_ARGB)
+                            val g2d = scaled.createGraphics()
+                            g2d.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BICUBIC)
+                            g2d.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON)
+                            g2d.drawImage(source, 0, 0, size, size, null)
+                            g2d.dispose()
+                            scaled as java.awt.Image
                         }
+                        window.iconImages = scaledImages
                     }
                 } catch (e: Exception) {
                     Timber.w("Failed to set AWT window icons: ${e.message}")
@@ -306,7 +321,10 @@ private fun runApp() {
                 resizable = false,
                 alwaysOnTop = true,
                 focusable = true,
-                title = "Lyrenne"
+                title = "Lyrenne",
+                // Without this the popup gets Compose's default Java icon, which shows up in the
+                // taskbar as a stray coffee cup whenever the tray panel is opened.
+                icon = appIcon
             ) {
                 // Dismiss when the user clicks elsewhere, the way a real menu behaves.
                 DisposableEffect(Unit) {

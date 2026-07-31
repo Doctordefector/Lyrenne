@@ -36,7 +36,7 @@
   "installUrl": "https://github.com/Doctordefector/Metrolist-Desktop/releases/latest",
   "license": "https://www.gnu.org/licenses/gpl-3.0.html",
   "isAccessibleForFree": true,
-  "screenshot": "https://doctordefector.github.io/Metrolist-Desktop/images/social-preview.png",
+  "screenshot": "https://doctordefector.github.io/Metrolist-Desktop/images/screenshot.jpg",
   "description": "A free, open source YouTube Music client for Windows. Portable, no installer, no ads.",
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
   "author": {
@@ -199,6 +199,12 @@ code {
     background-color: #1a1a1a; border: 1px solid var(--light-grey);
     padding: 0.15rem 0.5rem; border-radius: 2px;
 }
+pre.cmd {
+    max-width: 760px; margin: 0.9rem auto 0; overflow-x: auto;
+    background-color: #1a1a1a; border: 1px solid var(--light-grey); border-radius: 2px;
+    padding: 0.9rem 1.1rem;
+}
+pre.cmd code { background: none; border: 0; padding: 0; white-space: pre; }
 .notice {
     max-width: 760px; margin: 2rem auto 0; padding: 1.5rem 1.8rem;
     background-color: #16130d; border: 1px solid rgba(163, 124, 67, 0.35);
@@ -291,6 +297,8 @@ footer { background-color: var(--bg-color); padding: 2rem; border-top: 1px solid
         <span class="lux-frame-content">Download</span>
     </a>
     <div class="hero-meta">Portable ZIP &middot; 64-bit &middot; GPL-3.0</div>
+    <div class="hero-meta">This is the Windows desktop app. Looking for the Android version?
+        &rarr; <a href="https://github.com/MetrolistGroup/Metrolist">Metrolist for Android</a></div>
 </section>
 
 <section id="what" class="fade-in">
@@ -301,8 +309,8 @@ footer { background-color: var(--bg-color); padding: 2rem; border-top: 1px solid
     <p class="prose">It is <strong>not a wrapper around the website</strong> and not a repackaged
         Android build. It has its own player, database and sync layer, written for the desktop.</p>
     <div class="shot-frame fade-in" style="margin-top:3rem">
-        <img src="images/social-preview.png" width="1280" height="640"
-             alt="Metrolist Desktop, a free YouTube Music client for Windows">
+        <img src="images/screenshot.jpg" width="1600" height="979" loading="lazy"
+             alt="Metrolist Desktop running on Windows 11, showing the YouTube Music home feed with quick picks and the player bar">
     </div>
 </section>
 
@@ -372,6 +380,10 @@ footer { background-color: var(--bg-color); padding: 2rem; border-top: 1px solid
                 Java runtime are already inside the archive, so there is nothing else to install.</p>
         </div>
     </div>
+    <p class="prose" style="margin-top:2.5rem">Prefer a package manager? Either of these works:</p>
+    <pre class="cmd"><code>winget install Doctordefector.MetrolistDesktop</code></pre>
+    <pre class="cmd"><code>scoop bucket add metrolist https://github.com/Doctordefector/scoop-metrolist
+scoop install metrolist-desktop</code></pre>
     <div class="notice fade-in">
         <span class="notice-label">Do not install into OneDrive</span>
         Metrolist keeps its database, your login and your downloads next to the exe by design. A

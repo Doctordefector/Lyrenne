@@ -18,6 +18,9 @@ playlists, no ads, no installer, no telemetry. Unzip it and it runs.
 [Website](https://doctordefector.github.io/Metrolist-Desktop/) ·
 [Features](#features) · [Troubleshooting](#troubleshooting) · [Build from source](#build-from-source)
 
+<sub>This is the **Windows desktop** app. Looking for the Android version? →
+[MetrolistGroup/Metrolist](https://github.com/MetrolistGroup/Metrolist)</sub>
+
 </div>
 
 ---
@@ -27,6 +30,17 @@ playlists, no ads, no installer, no telemetry. Unzip it and it runs.
 1. Grab `Metrolist-X.Y.Z-portable.zip` from [the latest release](https://github.com/Doctordefector/Metrolist-Desktop/releases/latest).
 2. Extract it **anywhere except a cloud-synced folder** (see the warning below).
 3. Run `Metrolist.exe` and sign in with your browser.
+
+Or use a package manager:
+
+```powershell
+winget install Doctordefector.MetrolistDesktop
+```
+
+```powershell
+scoop bucket add metrolist https://github.com/Doctordefector/scoop-metrolist
+scoop install metrolist-desktop
+```
 
 There is nothing else to install. VLC and ffmpeg ship inside the archive, and the app carries its
 own Java runtime. Windows 10 or 11, 64-bit.

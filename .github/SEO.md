@@ -1,7 +1,7 @@
 # Discoverability playbook
 
 How people are meant to find Lyrenne, what is already set up, and what to redo on each
-release. Written 2026-07-25 against v2.9.2.
+release. Written 2026-07-25, updated 2026-07-31 against v2.9.7.
 
 ## The problem this works around
 
@@ -88,8 +88,8 @@ Reddit, Discord or X renders as a grey generic card, which costs clicks.
 
 ### 5. Release titles
 
-Each release page is indexed on its own. `Lyrenne v2.9.2` ranks for nothing, so titles
-carry a keyword suffix: `Lyrenne v2.9.2 - YouTube Music for Windows`. Fifty release
+Each release page is indexed on its own. `Lyrenne v2.9.7` ranks for nothing, so titles
+carry a keyword suffix: `Lyrenne v2.9.7 - YouTube Music for Windows`. Fifty release
 pages, fifty long-tail entry points.
 
 ### 6. Package manifests (`packaging/`)
@@ -135,6 +135,35 @@ Worth more than any meta tag, and all of them are one-time:
 - **Awesome lists**: awesome-windows, awesome-open-source-alternatives. PRs, slow but permanent.
 - **Screenshots.** Not SEO, but the biggest conversion problem left: the README and the site both
   describe the app without showing it. Visitors who see no screenshots leave.
+
+## Open problem: the name collides with Lyrion Music Server
+
+Searching *lyrenne github music* returns **Lyrion Music Server** and nothing else. That is not
+simple cold-start: Google has a strong prior that a fuzzy `lyr__n` string in a GitHub-plus-music
+context means Lyrion, and it is backed by a corpus this project cannot match yet.
+
+| | Lyrion Music Server | Lyrenne |
+|---|---|---|
+| GitHub stars | 1,747 (+372 forks) | 33 |
+| repos mentioning it | 361 | 2, both ours |
+| own domain | lyrion.org | none |
+| what it is | open-source music **server** | open-source music **player** |
+
+Split the impact, because it is not uniform:
+
+- **The generic-query strategy is unaffected.** Lyrion is a Squeezebox server and does not compete
+  on *youtube music desktop app* or *youtube music client windows*, which is where the traffic is.
+- **Word of mouth pays a tax.** Someone hears the name, types it, and lands on a bigger project in
+  the same category.
+
+A coined word returning nothing is normal and resolves once a corpus exists, roughly twenty solid
+third-party mentions. What is not normal is *what* fills the void here. **This was left undecided
+on 2026-07-31.** The three options were: push through and let the corpus fix it, rename again with
+near-miss and phonetic screening added, or always compound the name as "Lyrenne Music Player" so
+Google learns a distinctive two-token phrase.
+
+If a rename is ever reconsidered, note that the cost only rises: it is cheapest while there are
+still zero third-party mentions to chase down.
 
 ## Rules of thumb
 

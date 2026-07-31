@@ -31,7 +31,7 @@ Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop 
 
 ### Fully Working
 - Authentication via browser cookie extraction (Opera, Chrome, Edge, Brave, Vivaldi, Firefox)
-- Two login paths: "New Browser" (temp profile) or "Import from Installed" (extract cookies)
+- One login path: "Sign in with browser" (temp profile). Import-from-installed was removed in 2.5.1, see Authentication System
 - Personalized home feed with continuations (up to 5 pages)
 - YouTube Music library sync (songs, albums, artists, playlists)
 - Search with filters (songs, videos, albums, artists, playlists) + suggestions
@@ -312,16 +312,16 @@ when the file is missing.
 
 ## Testing: NEVER run the app from the build folder
 
-Use a copy extracted outside the build tree — `S:\Dev\Lyrenne PC\Lyrenne-App\` is set up
+Use a copy extracted outside the build tree — `S:\Dev\Metrolist PC\Metrolist-App\` is set up
 for this. Reason:
 
 1. `AppPaths` writes `data/` (credentials, DB, preferences) next to `Lyrenne.exe`, so running
    `build/compose/binaries/main/app/Lyrenne/Lyrenne.exe` puts a real login in the build tree
 2. `packagePortableZip` **purges that `data/`** every build — that is the credential-leak guard
-3. On the next launch `AppPaths.migrateFromAppData` sees an empty `data/` and restores whatever
-   is in `%APPDATA%/Lyrenne` — which can be *years-old* credentials
+3. The tester is then signed out, because nothing restores that data — 2.9.4 removed the
+   `%APPDATA%` migration entirely
 
-Net effect: every release build silently signs the tester out and swaps in a stale session.
+Net effect: every release build silently signs the tester out.
 This burned most of a night on 2026-07-24, presenting as "playlist sync is broken", "can't
 create playlists", and "sync fetches nothing" — all of which were just a dead login.
 
@@ -358,26 +358,116 @@ Total app startup went 13.5 s → 2.4 s.
 - Startup order is already correct: window paints at ~1.6 s, VLC/auth/queue init happen
   off the main thread afterwards. Don't move that work back into `main()`
 
+## The 2.9.3 to 2.9.7 rename (read before touching names or paths)
+
+The project was Metrolist Desktop until 2.9.3. Upstream MetrolistGroup asked for disaffiliation
+and is building its own desktop client, so this is now an independent project called **Lyrenne**.
+
+**2.9.4 was a deliberate clean break.** Installs older than it do not upgrade cleanly, and that was
+the chosen trade:
+
+- `metrolist.db` became `lyrenne.db`. Users carry their library over by renaming the file; the
+  release notes say so.
+- The `%APPDATA%/Metrolist` migration was deleted outright.
+- `AutoUpdater` stopped recognising `Metrolist.exe`, and `packagePortableZip` stopped shipping the
+  compatibility launcher. The archive holds one launcher.
+- Package namespace `com.metrolist.music.desktop` became **`com.lyrenne.desktop`**, protobuf with
+  it. `Metrolist.sq` became `Lyrenne.sq`, which is why the generated accessor is `lyrenneQueries`.
+
+**What still says metrolist, and must:** the `com.metrolist.*` imports for the vendored upstream
+modules (innertube, lrclib, kugou, lastfm, shazamkit, betterlyrics). Those are upstream's GPL
+sources pulled in via `kotlin.srcDir()`; renaming them would conflict with every future sync. The
+README credit to the Metrolist Group also stays, because GPL-3.0 requires preserving it.
+
+`app/` is upstream's Android source, kept only as a porting reference and never built. Anything
+inside it legitimately still says Metrolist.
+
+## Theming
+
+Two hand-tuned schemes in `ui/theme/Theme.kt`, neither generated from a seed colour.
+
+- **Dark**: the project's own bronze on near-black, matching the site and the app mark.
+- **Light**: the flag of Cyprus, using the official values exactly — copper `#D57800`
+  (Pantone 1385), olive `#4E5B31` (Pantone 574), white.
+
+Two rules that keep them legible, both learned the hard way:
+
+1. **A brand colour is a fill, not a text colour.** Copper on white is 3.1:1 and bronze on
+   near-black is 4.0:1, both under the 4.5:1 AA wants for body text. Rather than distort the brand
+   values, they stay exact and the *text on them* changes. Never set a brand colour as a foreground.
+2. **Set every Material role explicitly.** Anything left unset falls back to Material's
+   purple-tinted baseline, which both clashes and puts text on surfaces nobody has contrast-checked.
+   That includes the surface container ramp, the inverse roles and the error roles.
+
+Every text pairing in both schemes measures at or above 4.5:1. When changing a colour, re-check
+rather than eyeballing it. Note also that in a **dark** scheme `primaryContainer` is a *dark* tone
+carrying light text: setting it to the mid-tone brand colour made cards render as flat brown slabs.
+
+## Library sync: empty is not the same as failed
+
+`YouTube.library()` throws `IllegalStateException("No content found for browseId=...")` when a
+browse response carries neither a `gridRenderer` nor a `musicShelfRenderer` — which is exactly what
+an **empty category** looks like. Someone with no saved albums was therefore told their YouTube
+session had expired.
+
+`LibraryFetch` in `sync/LibrarySync.kt` separates the three outcomes, and `Empty` is deliberately
+not `Items(emptyList())`:
+
+- `Empty` clears the error, **and skips the prune**. An outage or a response-format change produces
+  the same shape, and pruning on it would delete that whole category from the local library.
+  Finding nothing is not the same as there being nothing.
+- The cost is that removing your last album on YouTube is not mirrored locally until you have one
+  again. Far cheaper than deleting a library.
+
+Matched on the exception message rather than patching the vendored InnerTube module. If upstream
+changes that string the symptom is the old spurious error returning, not data loss.
+
+## Icons: two artworks, picked by size
+
+- `icon.png` — the full mark with its gold ring. Large sizes, the site, the 256px `.ico` entry.
+- `icon-small.png` — the same lyre without the ring. The tray, the window icon at 48px and below,
+  and the 16/32/48 `.ico` entries.
+
+The ring is most of the pixels at 16px, so the full mark reads as a gold box rather than a lyre.
+The small variant keeps the dark tile: dropping that too would leave a white glyph on transparency,
+which vanishes on a light-theme taskbar.
+
+`patchPortableIcon` is **dead code**. It looks for Resource Hacker at a path that does not exist, so
+it warns and skips every build. Its comment claiming Compose only applies `iconFile` to MSI is
+outdated — jpackage embeds the `.ico` into the app-image exe fine.
+
+## Discord Rich Presence
+
+The name Discord shows above the activity is the **application's** name, not anything this code
+sends. Until 2.9.7 the app used application `1411019391843172514`, which came across with the port
+and belongs to upstream: every user's Discord announced them as running Metrolist. It now uses
+Lyrenne's own application, and the small badge references an uploaded art asset by key rather than
+a URL, because Discord does not reliably render external images in activity assets.
+
+Neither the name nor the art assets can be changed from code. Both are Developer Portal actions.
+
 ## Development Notes
 - VLC must be installed on the system for playback to work (bundled VLC also supported)
 - Stream URLs fetched using InnerTube clients: ANDROID_VR_NO_AUTH → IOS → WEB_REMIX fallback
-- Not a git repo locally (Windows `nul` file causes issues); sync via robocopy from fresh clone
-- Platform paths: Windows `%APPDATA%/Lyrenne`, Mac `~/Library/Application Support/Lyrenne`, Linux `~/.config/lyrenne`
-- Credentials stored at `<appdata>/Lyrenne/credentials.json`
+- This working copy IS a git clone with a working `origin`. Commit and push directly; older notes describing a robocopy-to-temp-dir push workflow are obsolete
+- **Nothing is written outside the app folder.** All state lives in `<app-dir>/data/`:
+  `lyrenne.db`, `credentials.json`, `preferences.properties`, `cache/`, plus the Listen Together
+  session. 2.9.4 removed the last `%APPDATA%` paths and the migration that read them
+- Credentials stored at `<app-dir>/data/credentials.json`
 - Delete credentials.json to force re-login
 - All debug println converted to Timber logging (SLF4J-backed shim)
 - DatabaseHelper.database is private — use DatabaseHelper methods, not direct DB access
 - SQLDelight accessor is `lyrenneQueries`, named after the `Lyrenne.sq` file (rename the file and the accessor renames with it)
 
 ## Version Management
-- **Current version**: v2.6.0
+- **Current version**: v2.9.7
 - **Version must be updated in TWO places** when releasing:
-  1. `desktop/build.gradle.kts` → `packageVersion = "X.Y.Z"`
+  1. `desktop/build.gradle.kts` → `lyrenneVersion = "X.Y.Z"`
   2. `desktop/.../update/AutoUpdater.kt` → `CURRENT_VERSION = "X.Y.Z"`
-- Both MUST match — `packageVersion` controls the ZIP filename, `CURRENT_VERSION` is shown in Settings and used for update comparison
+- Both MUST match — `lyrenneVersion` controls the ZIP filename, `CURRENT_VERSION` is shown in Settings and used for update comparison
 
 ## Release Process (Step by Step)
-1. **Bump version** in both places (build.gradle.kts `packageVersion` + AutoUpdater.kt `CURRENT_VERSION`)
+1. **Bump version** in both places (build.gradle.kts `lyrenneVersion` + AutoUpdater.kt `CURRENT_VERSION`)
 2. **Build the portable distributable**:
    ```
    ./gradlew :desktop:createDistributable
@@ -389,7 +479,7 @@ Total app startup went 13.5 s → 2.4 s.
    ```
    Purges runtime data, zips with 7z, and refuses to produce an archive containing
    credentials/DB/prefs or backslash entries. Output: `desktop/build/compose/binaries/main/app/Lyrenne-X.Y.Z-portable.zip`
-4. **Push code** to GitHub (robocopy to temp dir, git init, commit, force push)
+4. **Push code**: `git push origin main`
 5. **Create GitHub release** with portable ZIP only:
    ```
    gh release create vX.Y.Z Lyrenne-X.Y.Z-portable.zip --title "Lyrenne vX.Y.Z" --notes "..."

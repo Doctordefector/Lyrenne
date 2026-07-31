@@ -19,7 +19,7 @@ kotlin {
 }
 
 // Must match AutoUpdater.CURRENT_VERSION — both are checked on every release
-val metrolistVersion = "2.9.2"
+val metrolistVersion = "2.9.3"
 
 // Include shared module sources directly (they are Android library modules but pure Kotlin/JVM code)
 sourceSets {

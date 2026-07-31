@@ -32,12 +32,14 @@ object DiscordRPC {
      * The Discord application this presence is published under.
      *
      * **The name Discord shows above the presence is the application's name, not anything sent
-     * from here.** Application 1411019391843172514 is still called "Metrolist" on Discord's side,
-     * which is why the activity reads that way no matter what this file sends. Renaming it is done
-     * at <https://discord.com/developers/applications> under General Information; there is no API
-     * for it and no code change here can affect it.
+     * from here.** Until 2.9.7 this was 1411019391843172514, which came across with the port and
+     * belongs to upstream's Android app: every Lyrenne user's Discord was announcing them as
+     * running Metrolist, under an application this project does not control and could not rename.
+     *
+     * This is Lyrenne's own application. If it ever needs replacing, the name and the art assets
+     * are managed at <https://discord.com/developers/applications>; neither can be set from here.
      */
-    private const val APPLICATION_ID = "1411019391843172514"
+    private const val APPLICATION_ID = "1532842629308354801"
 
     /**
      * Art asset key for the small badge, uploaded under Rich Presence → Art Assets on the

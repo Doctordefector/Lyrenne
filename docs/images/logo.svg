@@ -1,27 +1,61 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512"
      role="img" aria-label="Lyrenne">
   <defs>
-    <linearGradient id="edge" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%"   stop-color="#d8b57c"/>
-      <stop offset="50%"  stop-color="#A37C43"/>
-      <stop offset="100%" stop-color="#7a5c31"/>
+    <linearGradient id="edge" gradientUnits="userSpaceOnUse" x1="60" y1="40" x2="452" y2="472">
+      <stop offset="0%"   stop-color="#e8cd9c"/>
+      <stop offset="45%"  stop-color="#A37C43"/>
+      <stop offset="100%" stop-color="#6d5029"/>
     </linearGradient>
+    <linearGradient id="ivory" gradientUnits="userSpaceOnUse" x1="0" y1="128" x2="0" y2="408">
+      <stop offset="0%"   stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#ece8e1"/>
+    </linearGradient>
+
+    <!--
+      Both gradients are userSpaceOnUse on purpose. The default, objectBoundingBox, restarts the
+      gradient inside every shape, so the yoke ramped white to ivory across its 28px height while
+      the strings ramped across 206px and the two never matched. Shared coordinates give the whole
+      mark one light source.
+    -->
+
+    <!-- The lyre body, referenced twice: once to make the gold rim, once for the white fill. -->
+    <g id="body">
+      <path d="M203 352 C 130 306 122 210 164 134 L 187 145 C 152 214 160 298 222 340 Z"/>
+      <path d="M309 352 C 382 306 390 210 348 134 L 325 145 C 360 214 352 298 290 340 Z"/>
+      <path d="M147 133 L365 133 L373 146 L365 161 L147 161 L139 146 Z"/>
+      <path d="M196 330 C 220 344 292 344 316 330 C 314 384 292 404 256 404 C 220 404 198 384 196 330 Z"/>
+    </g>
   </defs>
 
-  <!-- tile -->
-  <rect x="12" y="12" width="488" height="488" rx="76" fill="#0a0a0a"/>
-  <rect x="12" y="12" width="488" height="488" rx="76" fill="none"
-        stroke="url(#edge)" stroke-width="14"/>
+  <!-- tile: the ring is thinner than anything inside it, so it reads as a hairline -->
+  <rect x="10" y="10" width="492" height="492" rx="104" fill="#0a0a0a"/>
+  <rect x="15" y="15" width="482" height="482" rx="99" fill="none"
+        stroke="url(#edge)" stroke-width="9"/>
 
-  <!-- note: flag -> stem -> diamond hook, open at the top right.
-       Gold underlay is drawn wider than the white stroke to read as an outline.
-       The group is scaled to 0.9 so the mark keeps the official's breathing room
-       inside the tile instead of crowding the ring. -->
-  <g transform="translate(19.55 21) scale(0.9)"
-     fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M420 246 L276 102 L276 336 L193 418 L111 336 L193 254"
-          stroke="url(#edge)" stroke-width="91"/>
-    <path d="M420 246 L276 102 L276 336 L193 418 L111 336 L193 254"
-          stroke="#ffffff" stroke-width="75"/>
+  <!--
+    Built from filled, tapered paths rather than uniform strokes: strokes give round caps and a
+    constant width, which reads soft and hand-drawn, while filled shapes let the arms thin as they
+    rise into a sharp scroll.
+
+    The gold is ONE silhouette pass under the whole body, not a stroke per shape. Stroking each
+    shape separately leaves visible seams wherever two of them overlap, so the arm tips showed a
+    gold line through the yoke and through the soundbox. Drawing the rim first and then covering it
+    with unstroked white fills means gold survives only around the outside.
+  -->
+  <g stroke="none">
+    <!-- strings first, so the yoke and soundbox close over their ends -->
+    <g fill="url(#ivory)">
+      <rect x="216" y="146" width="8" height="206"/>
+      <rect x="236" y="146" width="8" height="206"/>
+      <rect x="256" y="146" width="8" height="206"/>
+      <rect x="276" y="146" width="8" height="206"/>
+      <rect x="296" y="146" width="8" height="206"/>
+    </g>
+
+    <!-- gold rim: same shapes, fattened by the stroke -->
+    <use href="#body" fill="url(#edge)" stroke="url(#edge)" stroke-width="11" stroke-linejoin="round"/>
+
+    <!-- white body on top, unstroked, hiding every internal edge -->
+    <use href="#body" fill="url(#ivory)"/>
   </g>
 </svg>

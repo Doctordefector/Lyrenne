@@ -9,20 +9,35 @@
       <stop offset="0%" stop-color="#A37C43"/>
       <stop offset="100%" stop-color="#333333"/>
     </linearGradient>
+    <g id="bannerBody">
+      <path d="M203 352 C 130 306 122 210 164 134 L 187 145 C 152 214 160 298 222 340 Z"/>
+      <path d="M309 352 C 382 306 390 210 348 134 L 325 145 C 360 214 352 298 290 340 Z"/>
+      <path d="M147 133 L365 133 L373 146 L365 161 L147 161 L139 146 Z"/>
+      <path d="M196 330 C 220 344 292 344 316 330 C 314 384 292 404 256 404 C 220 404 198 384 196 330 Z"/>
+    </g>
   </defs>
 
   <rect width="1280" height="320" fill="#0a0a0a"/>
   <rect x="0.5" y="0.5" width="1279" height="319" fill="none" stroke="#333333"/>
 
-  <!-- app tile: same mark as docs/images/logo.svg, scaled from its 512 grid to 112 -->
+  <!--
+    App tile: the same lyre as docs/images/logo.svg, scaled from its 512 grid to 112.
+    Gold is drawn as one silhouette pass and then covered by unstroked white, so the arms
+    do not show a seam where they pass under the yoke and into the soundbox. Flat fills
+    rather than the logo's gradients, which are invisible at 112px.
+  -->
   <g transform="translate(80 104)">
     <rect width="112" height="112" rx="26" fill="#0a0a0a" stroke="url(#accent)" stroke-width="3"/>
-    <g transform="scale(0.21875) translate(19.55 21) scale(0.9)"
-       fill="none" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M420 246 L276 102 L276 336 L193 418 L111 336 L193 254"
-            stroke="url(#accent)" stroke-width="91"/>
-      <path d="M420 246 L276 102 L276 336 L193 418 L111 336 L193 254"
-            stroke="#ffffff" stroke-width="75"/>
+    <g transform="scale(0.21875)" stroke="none">
+      <g fill="#ffffff">
+        <rect x="216" y="146" width="8" height="206"/>
+        <rect x="236" y="146" width="8" height="206"/>
+        <rect x="256" y="146" width="8" height="206"/>
+        <rect x="276" y="146" width="8" height="206"/>
+        <rect x="296" y="146" width="8" height="206"/>
+      </g>
+      <use href="#bannerBody" fill="#A37C43" stroke="#A37C43" stroke-width="11" stroke-linejoin="round"/>
+      <use href="#bannerBody" fill="#ffffff"/>
     </g>
   </g>
 

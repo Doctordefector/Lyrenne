@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512"
+     role="img" aria-label="Metrolist Desktop">
+  <defs>
+    <linearGradient id="edge" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#d8b57c"/>
+      <stop offset="50%"  stop-color="#A37C43"/>
+      <stop offset="100%" stop-color="#7a5c31"/>
+    </linearGradient>
+  </defs>
+
+  <!-- tile -->
+  <rect x="12" y="12" width="488" height="488" rx="76" fill="#0a0a0a"/>
+  <rect x="12" y="12" width="488" height="488" rx="76" fill="none"
+        stroke="url(#edge)" stroke-width="14"/>
+
+  <!-- note: flag -> stem -> diamond hook, open at the top right.
+       Gold underlay is drawn wider than the white stroke to read as an outline.
+       The group is scaled to 0.9 so the mark keeps the official's breathing room
+       inside the tile instead of crowding the ring. -->
+  <g transform="translate(19.55 21) scale(0.9)"
+     fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M420 246 L276 102 L276 336 L193 418 L111 336 L193 254"
+          stroke="url(#edge)" stroke-width="91"/>
+    <path d="M420 246 L276 102 L276 336 L193 418 L111 336 L193 254"
+          stroke="#ffffff" stroke-width="75"/>
+  </g>
+</svg>

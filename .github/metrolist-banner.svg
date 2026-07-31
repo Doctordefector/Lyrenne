@@ -14,13 +14,15 @@
   <rect width="1280" height="320" fill="#0a0a0a"/>
   <rect x="0.5" y="0.5" width="1279" height="319" fill="none" stroke="#333333"/>
 
-  <!-- app tile -->
+  <!-- app tile: same mark as docs/images/logo.svg, scaled from its 512 grid to 112 -->
   <g transform="translate(80 104)">
-    <rect width="112" height="112" rx="26" fill="#111111" stroke="#333333"/>
-    <g fill="none" stroke="#ffffff" stroke-width="15" stroke-linecap="square">
-      <path d="M68 24 L68 68"/>
-      <path d="M68 24 L96 52"/>
-      <path d="M68 68 A23 23 0 0 1 45 91 A23 23 0 0 1 22 68 A23 23 0 0 1 45 45"/>
+    <rect width="112" height="112" rx="26" fill="#0a0a0a" stroke="url(#accent)" stroke-width="3"/>
+    <g transform="scale(0.21875) translate(19.55 21) scale(0.9)"
+       fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M420 246 L276 102 L276 336 L193 418 L111 336 L193 254"
+            stroke="url(#accent)" stroke-width="91"/>
+      <path d="M420 246 L276 102 L276 336 L193 418 L111 336 L193 254"
+            stroke="#ffffff" stroke-width="75"/>
     </g>
   </g>
 

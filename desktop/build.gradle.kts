@@ -19,7 +19,7 @@ kotlin {
 }
 
 // Must match AutoUpdater.CURRENT_VERSION — both are checked on every release
-val metrolistVersion = "2.9.3"
+val lyrenneVersion = "2.9.4"
 
 // Include shared module sources directly (they are Android library modules but pure Kotlin/JVM code)
 sourceSets {
@@ -98,7 +98,7 @@ dependencies {
 
 compose.desktop {
     application {
-        mainClass = "com.metrolist.music.desktop.MainKt"
+        mainClass = "com.lyrenne.desktop.MainKt"
 
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Exe)
@@ -110,7 +110,7 @@ compose.desktop {
             modules("java.sql", "java.naming", "java.net.http", "jdk.unsupported")
 
             packageName = "Lyrenne"
-            packageVersion = metrolistVersion
+            packageVersion = lyrenneVersion
             description = "Lyrenne, a YouTube Music player for Windows"
             vendor = "Lyrenne"
 
@@ -228,7 +228,7 @@ tasks.register("packagePortableZip") {
     // or the Gradle configuration cache refuses to serialize the task.
     val appDir = layout.buildDirectory.dir("compose/binaries/main/app").get().asFile
     val imageDir = File(appDir, "Lyrenne")
-    val zipFile = File(appDir, "Lyrenne-$metrolistVersion-portable.zip")
+    val zipFile = File(appDir, "Lyrenne-$lyrenneVersion-portable.zip")
     val sevenZipCandidates = listOf(
         File("C:/Program Files/7-Zip/7z.exe"),
         File("C:/Program Files (x86)/7-Zip/7z.exe")
@@ -244,13 +244,10 @@ tasks.register("packagePortableZip") {
             }
         }
         // The crash log sits next to the exe and records song titles and the account name,
-        // so it is user data too — never ship one left behind by a smoke test. Both names are
-        // purged: a folder reused from before the Lyrenne rename can still hold metrolist.log.
-        listOf("lyrenne.log", "metrolist.log").forEach { name ->
-            File(imageDir, name).takeIf { it.exists() }?.let {
-                it.delete()
-                logger.lifecycle("Purged $name")
-            }
+        // so it is user data too — never ship one left behind by a smoke test.
+        File(imageDir, "lyrenne.log").takeIf { it.exists() }?.let {
+            it.delete()
+            logger.lifecycle("Purged lyrenne.log")
         }
 
         // 1b. sqlite-jdbc ships native libraries for Linux, Android, musl, FreeBSD and macOS.
@@ -280,25 +277,6 @@ tasks.register("packagePortableZip") {
                 )
             }
 
-        // 1c. Rename-compat bridge for clients still on 2.9.2 and older.
-        //
-        // Those builds ship an AutoUpdater that REJECTS any update package without a file
-        // literally named Metrolist.exe, and their install script relaunches that same name.
-        // Shipping only Lyrenne.exe would therefore strand every existing user on 2.9.2 with
-        // "Invalid update package", forever, with no in-app way out.
-        //
-        // A jpackage launcher resolves its config as app/<own-basename>.cfg, so a copy of the
-        // exe only works if the matching .cfg is copied too. Both copies are harmless for new
-        // users and let old ones update once onto a build that knows both names.
-        //
-        // DELETE THIS BLOCK once 2.9.2 is far enough back that nobody is updating from it.
-        File(imageDir, "Lyrenne.exe").takeIf { it.exists() }?.let { exe ->
-            exe.copyTo(File(imageDir, "Metrolist.exe"), overwrite = true)
-            File(imageDir, "app/Lyrenne.cfg").takeIf { it.exists() }
-                ?.copyTo(File(imageDir, "app/Metrolist.cfg"), overwrite = true)
-            logger.lifecycle("Added Metrolist.exe compat launcher for pre-Lyrenne auto-updaters")
-        }
-
         // 2. Always start from a fresh archive — `7z a` ADDS to an existing zip, which would
         //    silently retain entries that were just purged from disk.
         if (zipFile.exists()) zipFile.delete()
@@ -315,9 +293,8 @@ tasks.register("packagePortableZip") {
         if (exit != 0) throw GradleException("7z failed with exit code $exit")
 
         // 3. Refuse to hand over an artifact containing secrets or a broken entry format
-        // metrolist.db keeps its pre-rename filename on purpose, see AppPaths.databaseFile.
         val forbidden = Regex(
-            "(?i)(^|/)(data/|credentials|preferences\\.properties|metrolist\\.db|login-profile|lyrenne\\.log|metrolist\\.log)"
+            "(?i)(^|/)(data/|credentials|preferences\\.properties|lyrenne\\.db|login-profile|lyrenne\\.log)"
         )
         val offenders = mutableListOf<String>()
         var backslashEntries = 0
@@ -342,8 +319,8 @@ tasks.register("packagePortableZip") {
 
 sqldelight {
     databases {
-        create("MetrolistDatabase") {
-            packageName.set("com.metrolist.music.desktop.db")
+        create("LyrenneDatabase") {
+            packageName.set("com.lyrenne.desktop.db")
         }
     }
 }

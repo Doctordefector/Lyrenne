@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package listentogether;
 
-option java_package = "com.metrolist.music.listentogether.proto";
+option java_package = "com.lyrenne.desktop.listentogether.proto";
 option java_outer_classname = "Listentogether";
 option java_multiple_files = false;
 

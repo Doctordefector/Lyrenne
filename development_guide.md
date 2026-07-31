@@ -57,6 +57,6 @@ build is a key you have published.
 
 ## Releasing
 
-Version lives in **two** places that must match, `desktop/build.gradle.kts` (`metrolistVersion`)
+Version lives in **two** places that must match, `desktop/build.gradle.kts` (`lyrenneVersion`)
 and `AutoUpdater.CURRENT_VERSION`. The full process is in `CLAUDE.md`; packaging specifics are in
 `packaging/README.md`.

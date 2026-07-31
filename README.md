@@ -89,9 +89,9 @@ If your antivirus quarantined it, restore it or drop any `ffmpeg.exe` next to `L
 **Everything looks empty after signing in.** An expired YouTube session returns empty results
 rather than an error. Sign out and sign in again from Settings.
 
-**I used to have Metrolist Desktop.** Same app, renamed at 2.9.2. Your library and login carry
-over: the data lives next to the executable, so keep using the same folder. Old installs get one
-last in-place update onto the renamed build.
+**Upgrading from 2.9.3 or older?** 2.9.4 renamed the data files, so it starts with an empty
+library. To keep yours, close the app and, inside its `data/` folder, rename `metrolist.db`
+to `lyrenne.db`. Preferences and your login carry over on their own.
 
 ## Build from source
 

@@ -15,9 +15,10 @@ Room and Media3 is stale and describes the upstream project it began as.
   dependencies. `app/` is the original Android app, kept only as a porting reference, never built.
 - **Stack**: Compose Desktop UI, VLC through vlcj for playback, SQLDelight for the database,
   singleton managers instead of dependency injection.
-- **Package namespace** is still `com.metrolist.music.desktop`. Deliberate: it is invisible to
-  users, and renaming it would churn every file plus the SQLDelight and protobuf output for
-  nothing.
+- **Package namespace** is `com.lyrenne.desktop`. The `com.metrolist.*` imports you will still
+  see are the vendored upstream modules (innertube, lrclib, kugou, lastfm, shazamkit,
+  betterlyrics). Those are someone else's GPL sources consumed via `kotlin.srcDir()`: renaming
+  them would conflict with every future upstream sync, so leave them alone.
 
 ## Build and test
 
@@ -42,8 +43,9 @@ Each of these exists because breaking it caused real damage.
 3. **Never use PowerShell `Compress-Archive`.** It writes backslash entry names, which breaks
    Java's `ZipEntry.isDirectory()` and therefore the auto-updater. Use 7-Zip.
 4. **Do not encrypt or obfuscate `credentials.json`.** Plaintext is intentional and required.
-5. **Do not rename `metrolist.db`,** or any other user data path, to match branding. Every existing
-   install keeps its library under that name and renaming it orphans them all.
+5. **Renaming a user data path orphans every existing install.** 2.9.4 did exactly that on
+   purpose, trading upgrade smoothness for a clean break, and shipped manual recovery steps in the
+   release notes. Do not do it again casually: if a path must change, ship a migration.
 6. **Discord Rich Presence fires on song change only.** An earlier version re-sent it on position
    ticks, which raced the named pipe and hit Discord's rate limit. Do not reintroduce that.
 7. **Do not bump the version** unless asked. It lives in two places that must match:
@@ -66,6 +68,9 @@ Each of these exists because breaking it caused real damage.
 
 The project was called Metrolist Desktop until 2.9.2 and began as a desktop port of
 [Metrolist](https://github.com/MetrolistGroup/Metrolist). It was renamed at the upstream project's
-request and is independent of them; their GPL-3.0 modules are still used and credited. Expect the
-old name in the package namespace, in `metrolist.db`, and in compatibility paths in `AutoUpdater`.
-All of those are intentional.
+request and is independent of them; their GPL-3.0 modules are still used and credited.
+
+2.9.3 renamed the app. 2.9.4 finished the job: the database filename, the package namespace and
+the legacy `%APPDATA%` migration all changed, and the compatibility launcher was dropped. Installs
+older than 2.9.4 do not upgrade cleanly by design. The only `metrolist` left in the tree is in the
+vendored upstream module packages, which stay.

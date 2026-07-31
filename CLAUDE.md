@@ -82,7 +82,7 @@ Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop 
 - Privacy: pause listen history + pause search history settings
 - Content region/language settings (gl/hl via YouTube.locale, curated lists + system default)
 - Proxy support (HTTP/SOCKS + auth via YouTube.proxy/proxyAuth, settings UI, applyNetworkPreferences() in Main.kt)
-- Backup & restore (ZIP of preferences.properties + metrolist.db + credentials.json, BackupManager, restore needs restart)
+- Backup & restore (ZIP of preferences.properties + lyrenne.db + credentials.json, BackupManager, restore needs restart)
 - Library grid/list view toggle (albums + artists tabs, LibraryViewMode pref)
 - Play All / Shuffle All buttons (library songs tab, local/auto playlists)
 - Car / USB export (`CarExport.kt`): "Export to Folder" button on Album/Playlist/LocalPlaylist writes loudness-normalized 320k MP3s named `01 - Artist - Title.mp3`; Settings → Storage → "Normalize Folder for Car / USB" runs the same pass over an existing folder into `<folder>/Normalized/`. Needs ffmpeg (bundled next to the exe or on PATH); "Force Dual Mono on Export" setting folds L+R for one-sided tracks
@@ -367,7 +367,7 @@ Total app startup went 13.5 s → 2.4 s.
 - Delete credentials.json to force re-login
 - All debug println converted to Timber logging (SLF4J-backed shim)
 - DatabaseHelper.database is private — use DatabaseHelper methods, not direct DB access
-- SQLDelight accessor is `metrolistQueries` (not `metrolistDatabaseQueries`; the generated name follows the SQLDelight `MetrolistDatabase` class, which keeps its pre-rename name)
+- SQLDelight accessor is `lyrenneQueries`, named after the `Lyrenne.sq` file (rename the file and the accessor renames with it)
 
 ## Version Management
 - **Current version**: v2.6.0
@@ -410,7 +410,7 @@ Total app startup went 13.5 s → 2.4 s.
 ## File Storage Paths
 All data is fully portable — stored next to the executable via centralized `AppPaths.kt`:
 - **Preferences**: `<app-dir>/data/preferences.properties`
-- **Database**: `<app-dir>/data/metrolist.db` (SQLDelight)
+- **Database**: `<app-dir>/data/lyrenne.db` (SQLDelight)
 - **Credentials**: `<app-dir>/data/credentials.json` (plaintext, intentional)
 - **Cache**: `<app-dir>/data/cache/`
 - **Downloads**: `<app-dir>/Downloads/` (configurable via Settings folder picker)
@@ -424,7 +424,7 @@ All data is fully portable — stored next to the executable via centralized `Ap
   it is not, and that error contributed to a credential leak in v2.6.0.)
 
 ### CRITICAL: never zip the folder you smoke-tested from
-`AppPaths` writes `data/` (credentials.json, metrolist.db, preferences.properties) next to
+`AppPaths` writes `data/` (credentials.json, lyrenne.db, preferences.properties) next to
 `Lyrenne.exe`. Running the app from `build/compose/binaries/main/app/Lyrenne/` therefore
 plants **real login cookies** inside the exact folder that gets zipped. This shipped once in
 v2.6.0 and was public for ~12 minutes.

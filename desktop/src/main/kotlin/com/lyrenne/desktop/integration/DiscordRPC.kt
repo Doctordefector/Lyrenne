@@ -28,7 +28,27 @@ import java.nio.ByteOrder
  *   Opcodes: 0=HANDSHAKE, 1=FRAME, 2=CLOSE, 3=PING, 4=PONG
  */
 object DiscordRPC {
+    /**
+     * The Discord application this presence is published under.
+     *
+     * **The name Discord shows above the presence is the application's name, not anything sent
+     * from here.** Application 1411019391843172514 is still called "Metrolist" on Discord's side,
+     * which is why the activity reads that way no matter what this file sends. Renaming it is done
+     * at <https://discord.com/developers/applications> under General Information; there is no API
+     * for it and no code change here can affect it.
+     */
     private const val APPLICATION_ID = "1411019391843172514"
+
+    /**
+     * Art asset key for the small badge, uploaded under Rich Presence → Art Assets on the
+     * application above.
+     *
+     * Deliberately a key, not a URL. This previously pointed at a raw.githubusercontent.com link;
+     * Discord does not reliably render arbitrary external images in activity assets, which is why
+     * the badge came up blank. Assets uploaded to the application and referenced by name always
+     * render. If no asset with this key exists the badge is simply omitted, same as today.
+     */
+    private const val SMALL_IMAGE_KEY = "lyrenne"
 
     private var pipe: RandomAccessFile? = null
     private var updateJob: Job? = null
@@ -282,7 +302,7 @@ object DiscordRPC {
                         append(""""large_image":"$thumbnailUrl",""")
                     }
                     append(""""large_text":"$album",""")
-                    append(""""small_image":"https://raw.githubusercontent.com/Doctordefector/Lyrenne/main/desktop/src/main/resources/icon.png",""")
+                    append(""""small_image":"$SMALL_IMAGE_KEY",""")
                     append(""""small_text":"Lyrenne"""")
                     append("""},""")
                     append(""""buttons":[{"label":"Listen on YouTube Music","url":"$ytUrl"}]""")

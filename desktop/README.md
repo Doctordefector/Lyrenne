@@ -1,6 +1,6 @@
-# Metrolist Desktop (Windows)
+# Lyrenne (Windows)
 
-A desktop port of the Metrolist YouTube Music client using Compose Multiplatform.
+A desktop port of the Lyrenne YouTube Music client using Compose Multiplatform.
 
 ## Prerequisites
 
@@ -27,7 +27,7 @@ From the project root directory:
 
 ```
 desktop/
-├── src/main/kotlin/com/metrolist/music/desktop/
+├── src/main/kotlin/com/lyrenne/music/desktop/
 │   ├── Main.kt                    # Application entry point
 │   ├── playback/
 │   │   └── DesktopPlayer.kt       # VLC-based audio player

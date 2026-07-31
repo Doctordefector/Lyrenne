@@ -76,9 +76,9 @@ fun applyNetworkPreferences() {
  * Resolved before anything else runs, so it must not depend on app state.
  */
 private fun logFile(): File {
-    val next = File(AppPaths.appDir, "metrolist.log")
+    val next = File(AppPaths.appDir, "lyrenne.log")
     return if (next.parentFile?.canWrite() == true) next
-    else File(System.getProperty("java.io.tmpdir"), "metrolist.log")
+    else File(System.getProperty("java.io.tmpdir"), "lyrenne.log")
 }
 
 /**
@@ -108,8 +108,8 @@ private fun reportFatal(e: Throwable, log: File) {
     try {
         javax.swing.JOptionPane.showMessageDialog(
             null,
-            "Metrolist could not start.\n\n${e::class.simpleName}: ${e.message}\n\nDetails: ${log.absolutePath}",
-            "Metrolist",
+            "Lyrenne could not start.\n\n${e::class.simpleName}: ${e.message}\n\nDetails: ${log.absolutePath}",
+            "Lyrenne",
             javax.swing.JOptionPane.ERROR_MESSAGE
         )
     } catch (ignored: Throwable) {
@@ -206,7 +206,7 @@ private fun runApp() {
 
         val windowTitle = remember(playerState.currentSong) {
             val song = playerState.currentSong
-            if (song != null) "♪ ${song.title} — ${song.artist} | Metrolist" else "Metrolist"
+            if (song != null) "♪ ${song.title} — ${song.artist} | Lyrenne" else "Lyrenne"
         }
 
         Window(
@@ -306,7 +306,7 @@ private fun runApp() {
                 resizable = false,
                 alwaysOnTop = true,
                 focusable = true,
-                title = "Metrolist"
+                title = "Lyrenne"
             ) {
                 // Dismiss when the user clicks elsewhere, the way a real menu behaves.
                 DisposableEffect(Unit) {

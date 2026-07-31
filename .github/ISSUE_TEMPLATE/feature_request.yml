@@ -1,5 +1,5 @@
 name: Feature request
-description: Suggest an idea for Metrolist Desktop
+description: Suggest an idea for Lyrenne
 labels: [enhancement]
 body:
   - type: checkboxes

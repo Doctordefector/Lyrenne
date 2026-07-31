@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://doctordefector.github.io/Metrolist-Desktop/sitemap.xml
+Sitemap: https://doctordefector.github.io/Lyrenne/sitemap.xml

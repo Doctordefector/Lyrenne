@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 echo ========================================
-echo    Metrolist Desktop Build Script
+echo    Lyrenne Build Script
 echo ========================================
 echo.
 
@@ -33,7 +33,7 @@ goto menu
 
 :run
 echo.
-echo Starting Metrolist Desktop...
+echo Starting Lyrenne...
 call gradlew.bat :desktop:run
 goto done
 

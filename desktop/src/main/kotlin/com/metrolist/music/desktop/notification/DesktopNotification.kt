@@ -18,7 +18,7 @@ object DesktopNotification {
     private var observeJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
-    /** Callback invoked when user clicks "Show Metrolist" in tray menu or double-clicks the icon. */
+    /** Callback invoked when user clicks "Show Lyrenne" in tray menu or double-clicks the icon. */
     var onShowWindow: (() -> Unit)? = null
 
     /** Callback invoked when user clicks "Exit" in tray menu. */
@@ -48,7 +48,7 @@ object DesktopNotification {
             // native Win32 menu — unthemeable, no icons, no custom fonts. Handling the
             // right-click ourselves lets the menu be rendered as ordinary Compose instead
             // (see TrayPanel.kt); AWT only delivers mouse events when no popup is attached.
-            trayIcon = TrayIcon(image, "Metrolist").apply {
+            trayIcon = TrayIcon(image, "Lyrenne").apply {
                 isImageAutoSize = true
                 addActionListener { onShowWindow?.invoke() } // Double-click on Windows
                 addMouseListener(object : java.awt.event.MouseAdapter() {

@@ -1,5 +1,5 @@
 @echo off
 cd /d "%~dp0"
-echo Starting Metrolist Desktop...
+echo Starting Lyrenne...
 call gradlew.bat :desktop:run
 pause

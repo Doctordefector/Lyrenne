@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in Metrolist Desktop is broken
+description: Something in Lyrenne is broken
 labels: [bug]
 body:
   - type: markdown
@@ -10,25 +10,25 @@ body:
         Two things solve most reports before they're filed, so it's worth a look first:
 
         - **The app won't start.** The usual cause is an install folder inside OneDrive, Dropbox
-          or a synced Desktop. Move it to somewhere like `C:\Metrolist` and try again.
+          or a synced Desktop. Move it to somewhere like `C:\Lyrenne` and try again.
         - **Everything is empty after signing in.** An expired YouTube session returns empty
           results instead of an error. Sign out and back in from Settings.
 
         Both are covered in more detail in the
-        [troubleshooting section](https://github.com/Doctordefector/Metrolist-Desktop#troubleshooting).
+        [troubleshooting section](https://github.com/Doctordefector/Lyrenne#troubleshooting).
 
   - type: checkboxes
     id: checklist
     attributes:
       label: Before submitting
       options:
-        - label: I'm on the [latest release](https://github.com/Doctordefector/Metrolist-Desktop/releases/latest) and the bug still happens.
+        - label: I'm on the [latest release](https://github.com/Doctordefector/Lyrenne/releases/latest) and the bug still happens.
           required: true
         - label: I searched open and closed issues and didn't find this one.
           required: true
         - label: This report is about a single bug.
           required: true
-        - label: Metrolist is **not** installed in OneDrive, Dropbox, or a synced Desktop/Documents folder.
+        - label: Lyrenne is **not** installed in OneDrive, Dropbox, or a synced Desktop/Documents folder.
           required: true
 
   - type: textarea
@@ -64,7 +64,7 @@ body:
     attributes:
       label: Log file
       description: |
-        Metrolist writes **`metrolist.log`** next to `Metrolist.exe` on every launch. Attach it
+        Lyrenne writes **`lyrenne.log`** next to `Lyrenne.exe` on every launch. Attach it
         here, or paste the tail of it. This is by far the most useful thing you can include,
         especially for a crash or a window that never appears.
 
@@ -74,7 +74,7 @@ body:
   - type: input
     id: app-version
     attributes:
-      label: Metrolist Desktop version
+      label: Lyrenne version
       description: Shown in Settings, and in the release ZIP filename.
       placeholder: "2.9.2"
     validations:

@@ -282,8 +282,8 @@ object DiscordRPC {
                         append(""""large_image":"$thumbnailUrl",""")
                     }
                     append(""""large_text":"$album",""")
-                    append(""""small_image":"https://raw.githubusercontent.com/Doctordefector/Metrolist-Desktop/main/desktop/src/main/resources/icon.png",""")
-                    append(""""small_text":"Metrolist"""")
+                    append(""""small_image":"https://raw.githubusercontent.com/Doctordefector/Lyrenne/main/desktop/src/main/resources/icon.png",""")
+                    append(""""small_text":"Lyrenne"""")
                     append("""},""")
                     append(""""buttons":[{"label":"Listen on YouTube Music","url":"$ytUrl"}]""")
                     append("""}},"nonce":"${System.nanoTime()}"}""")

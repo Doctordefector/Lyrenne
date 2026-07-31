@@ -1,25 +1,22 @@
 <div align="center">
 
-<img src=".github/metrolist-banner.svg?v=2" width="100%"
-     alt="Metrolist Desktop, a free open source YouTube Music client for Windows">
+<img src=".github/lyrenne-banner.svg?v=1" width="100%"
+     alt="Lyrenne, a free open source YouTube Music player for Windows">
 
-# Metrolist Desktop: YouTube Music for Windows
+# Lyrenne: a YouTube Music Player for Windows
 
-[![Latest release](https://img.shields.io/github/v/release/Doctordefector/Metrolist-Desktop?style=for-the-badge&label=download&labelColor=0a0a0a&color=A37C43)](https://github.com/Doctordefector/Metrolist-Desktop/releases/latest)
-[![Portable](https://img.shields.io/badge/install-portable%20zip-A37C43?style=for-the-badge&labelColor=0a0a0a)](https://github.com/Doctordefector/Metrolist-Desktop/releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/Doctordefector/Lyrenne?style=for-the-badge&label=download&labelColor=0a0a0a&color=A37C43)](https://github.com/Doctordefector/Lyrenne/releases/latest)
+[![Portable](https://img.shields.io/badge/install-portable%20zip-A37C43?style=for-the-badge&labelColor=0a0a0a)](https://github.com/Doctordefector/Lyrenne/releases/latest)
 [![License](https://img.shields.io/badge/license-GPL--3.0-777777?style=for-the-badge&labelColor=0a0a0a)](LICENSE)
-[![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-777777?style=for-the-badge&labelColor=0a0a0a)](https://github.com/Doctordefector/Metrolist-Desktop/releases/latest)
+[![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-777777?style=for-the-badge&labelColor=0a0a0a)](https://github.com/Doctordefector/Lyrenne/releases/latest)
 
-**The original desktop port of [Metrolist](https://github.com/MetrolistGroup/Metrolist).**
-A free, open source YouTube Music client for Windows 10 and 11: your real library, your real
-playlists, no ads, no installer, no telemetry. Unzip it and it runs.
+**A free, open source YouTube Music desktop player for Windows 10 and 11.**
+Your real library, your real playlists, synced lyrics and offline downloads. No ads, no installer,
+no telemetry. Unzip it and it runs.
 
-[**Download**](https://github.com/Doctordefector/Metrolist-Desktop/releases/latest) ·
-[Website](https://doctordefector.github.io/Metrolist-Desktop/) ·
+[**Download**](https://github.com/Doctordefector/Lyrenne/releases/latest) ·
+[Website](https://doctordefector.github.io/Lyrenne/) ·
 [Features](#features) · [Troubleshooting](#troubleshooting) · [Build from source](#build-from-source)
-
-<sub>This is the **Windows desktop** app. Looking for the Android version? →
-[MetrolistGroup/Metrolist](https://github.com/MetrolistGroup/Metrolist)</sub>
 
 </div>
 
@@ -27,25 +24,25 @@ playlists, no ads, no installer, no telemetry. Unzip it and it runs.
 
 ## Install
 
-1. Grab `Metrolist-X.Y.Z-portable.zip` from [the latest release](https://github.com/Doctordefector/Metrolist-Desktop/releases/latest).
+1. Grab `Lyrenne-X.Y.Z-portable.zip` from [the latest release](https://github.com/Doctordefector/Lyrenne/releases/latest).
 2. Extract it **anywhere except a cloud-synced folder** (see the warning below).
-3. Run `Metrolist.exe` and sign in with your browser.
+3. Run `Lyrenne.exe` and sign in with your browser.
 
 Or install it with [Scoop](https://scoop.sh):
 
 ```powershell
-scoop bucket add metrolist https://github.com/Doctordefector/scoop-metrolist
-scoop install metrolist-desktop
+scoop bucket add lyrenne https://github.com/Doctordefector/scoop-lyrenne
+scoop install lyrenne
 ```
 
 There is nothing else to install. VLC and ffmpeg ship inside the archive, and the app carries its
 own Java runtime. Windows 10 or 11, 64-bit.
 
 > [!WARNING]
-> **Do not extract into OneDrive, Dropbox, or a synced Desktop/Documents folder.** Metrolist is
+> **Do not extract into OneDrive, Dropbox, or a synced Desktop/Documents folder.** Lyrenne is
 > portable by design: the database, your login, and your downloads all live next to
-> `Metrolist.exe`. A sync client that reopens those files mid-write will corrupt the database or
-> lock it on startup. `C:\Metrolist` is a good home; the Desktop usually is not.
+> `Lyrenne.exe`. A sync client that reopens those files mid-write will corrupt the database or
+> lock it on startup. `C:\Lyrenne` is a good home; the Desktop usually is not.
 
 ## Features
 
@@ -61,47 +58,52 @@ own Java runtime. Windows 10 or 11, 64-bit.
 Everything the app writes (database, credentials, preferences, cache, downloads) stays in the
 app's own folder. Nothing is written to `%APPDATA%`, and nothing is sent anywhere but YouTube.
 
-## Why this port
+## Why it exists
 
-Metrolist Desktop is not a wrapper around the website and not a repackaged APK. It is a native
-Compose Desktop (JVM) application that talks to the same InnerTube API the Android app uses, with
-its own player, database and sync layer written for the desktop.
+YouTube ships no desktop app for YouTube Music, and a browser tab is not a music player.
 
-- First release **9 March 2026**, the first desktop port of Metrolist, and still the one that
-  gets the updates: 50 releases since.
+Lyrenne is not a wrapper around the website and not a repackaged mobile app. It is a native
+Compose Desktop (JVM) application that talks to the same InnerTube API the mobile clients use,
+with its own VLC playback engine, local database and sync layer written for the desktop.
+
+- First released **9 March 2026**, actively developed, 50+ releases since.
 - Auto-updater built in: it checks GitHub, downloads the new portable ZIP and restarts itself.
-- Shared API modules are kept in sync with upstream Metrolist (currently v13.6.0).
+- Everything runs locally. No account of its own, no analytics, no server in the middle.
 
-Forks are welcome; it is GPL-3.0 and that is the point. This repository is where the work happens.
+Forks are welcome; it is GPL-3.0 and that is the point.
 
 ## Troubleshooting
 
-**The window never appears.** Metrolist writes `metrolist.log` next to `Metrolist.exe` on every
-launch, and a failure to start now reports itself in a dialog *(v2.9.2 and newer)*. Send that log
-with a [bug report](https://github.com/Doctordefector/Metrolist-Desktop/issues). The most common
-cause is a cloud-synced install folder, so move it out of OneDrive and try again.
+**The window never appears.** Lyrenne writes `lyrenne.log` next to `Lyrenne.exe` on every launch,
+and a failure to start reports itself in a dialog. Send that log with a
+[bug report](https://github.com/Doctordefector/Lyrenne/issues). The most common cause is a
+cloud-synced install folder, so move it out of OneDrive and try again.
 
 **"VLC not found".** The bundled copy lives in `app/resources/vlc`. If your unzip tool skipped it
 (some do, on long paths), extract again with 7-Zip or Windows Explorer, or install VLC 3.x 64-bit
-and Metrolist will use that instead.
+and Lyrenne will use that instead.
 
 **Car / USB export does nothing.** That feature shells out to `app/resources/ffmpeg/ffmpeg.exe`.
-If your antivirus quarantined it, restore it or drop any `ffmpeg.exe` next to `Metrolist.exe`.
+If your antivirus quarantined it, restore it or drop any `ffmpeg.exe` next to `Lyrenne.exe`.
 
 **Everything looks empty after signing in.** An expired YouTube session returns empty results
 rather than an error. Sign out and sign in again from Settings.
 
+**I used to have Metrolist Desktop.** Same app, renamed at 2.9.2. Your library and login carry
+over: the data lives next to the executable, so keep using the same folder. Old installs get one
+last in-place update onto the renamed build.
+
 ## Build from source
 
 ```bash
-git clone https://github.com/Doctordefector/Metrolist-Desktop.git
-cd Metrolist-Desktop
+git clone https://github.com/Doctordefector/Lyrenne.git
+cd Lyrenne
 ./gradlew :desktop:createDistributable
 ```
 
 Needs JDK 21. The build downloads ffmpeg once (~114 MB) into `desktop/resources/windows-x64/`;
 VLC is already in the tree. The runnable app lands in
-`desktop/build/compose/binaries/main/app/Metrolist/`, and `./gradlew :desktop:packagePortableZip`
+`desktop/build/compose/binaries/main/app/Lyrenne/`, and `./gradlew :desktop:packagePortableZip`
 produces the release archive.
 
 `./gradlew :desktop:run` starts it straight from the source tree.
@@ -110,12 +112,16 @@ produces the release archive.
 
 Built and maintained by **[Andrei Chapliuk](https://andrevich.netlify.app)**.
 
-- [Metrolist](https://github.com/MetrolistGroup/Metrolist) by mostafaalagamy and the Metrolist
-  Group: the Android app this port descends from, and the source of the shared InnerTube,
-  LrcLib, KuGou, BetterLyrics and ShazamKit modules.
-- [vlcj](https://github.com/caprica/vlcj), [Compose Multiplatform](https://github.com/JetBrains/compose-multiplatform),
-  [SQLDelight](https://github.com/cashapp/sqldelight), [NewPipe Extractor](https://github.com/TeamNewPipe/NewPipeExtractor).
+Lyrenne began as a desktop port of [Metrolist](https://github.com/MetrolistGroup/Metrolist) by
+mostafaalagamy and the Metrolist Group, and still uses their GPL-3.0 licensed InnerTube, LrcLib,
+KuGou, BetterLyrics and ShazamKit modules. Lyrenne is an independent project and is not affiliated
+with, endorsed by, or associated with the Metrolist Group.
+
+Also built on [vlcj](https://github.com/caprica/vlcj),
+[Compose Multiplatform](https://github.com/JetBrains/compose-multiplatform),
+[SQLDelight](https://github.com/cashapp/sqldelight) and
+[NewPipe Extractor](https://github.com/TeamNewPipe/NewPipeExtractor).
 
 ## License
 
-GPL-3.0. See [LICENSE](LICENSE). Metrolist is not affiliated with YouTube, Google, or Alphabet.
+GPL-3.0. See [LICENSE](LICENSE). Lyrenne is not affiliated with YouTube, Google, or Alphabet.

@@ -15,7 +15,7 @@ import java.nio.file.Files
 import java.util.zip.ZipInputStream
 
 /**
- * Auto-updater for Metrolist Desktop.
+ * Auto-updater for Lyrenne.
  *
  * Supports two modes, auto-detected:
  * - **Installed mode**: Downloads EXE installer and launches it. The installer handles everything.
@@ -28,7 +28,17 @@ import java.util.zip.ZipInputStream
 object AutoUpdater {
     const val CURRENT_VERSION = "2.9.2"
     private const val GITHUB_OWNER = "Doctordefector"
-    private const val GITHUB_REPO = "Metrolist-Desktop"
+    private const val GITHUB_REPO = "Lyrenne"
+
+    /**
+     * Launcher names to accept, newest first.
+     *
+     * The app was called Metrolist Desktop until 2.9.2, and installs from that era still have a
+     * Metrolist.exe on disk. Recognising both means an existing install is still found after the
+     * rename instead of being treated as an unknown layout. Drop "Metrolist.exe" once those
+     * versions are far enough back to stop caring about.
+     */
+    private val LAUNCHER_NAMES = listOf("Lyrenne.exe", "Metrolist.exe")
     private const val API_URL = "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/releases/latest"
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -176,12 +186,12 @@ object AutoUpdater {
                     }
 
                     // Verify we have the exe
-                    val hasExe = sourceDir.listFiles()?.any {
-                        it.name.equals("Metrolist.exe", ignoreCase = true)
+                    val hasExe = sourceDir.listFiles()?.any { f ->
+                        LAUNCHER_NAMES.any { f.name.equals(it, ignoreCase = true) }
                     } == true
                     if (!hasExe) {
-                        Timber.e("No Metrolist.exe in: ${sourceDir.listFiles()?.map { it.name }}")
-                        _state.value = UpdateState.Error("Invalid update package — no Metrolist.exe found")
+                        Timber.e("No launcher in: ${sourceDir.listFiles()?.map { it.name }}")
+                        _state.value = UpdateState.Error("Invalid update package, no ${LAUNCHER_NAMES.first()} found")
                         return@launch
                     }
 
@@ -250,7 +260,8 @@ object AutoUpdater {
             pid = pid,
             sourcePath = sourceDir.absolutePath,
             destPath = appDir.absolutePath,
-            exePath = File(appDir, "Metrolist.exe").absolutePath,
+            exePath = LAUNCHER_NAMES.map { File(appDir, it) }.firstOrNull { it.exists() }
+                ?.absolutePath ?: File(appDir, LAUNCHER_NAMES.first()).absolutePath,
             logPath = logFile,
             stagingRoot = sourceDir.parentFile.absolutePath
         ))
@@ -279,7 +290,7 @@ object AutoUpdater {
             ${'$'}ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
             "${'$'}ts  ${'$'}msg" | Out-File -FilePath "$logPath" -Append -Encoding UTF8
         }
-        Log "=== Metrolist Portable Update ==="
+        Log "=== Lyrenne Portable Update ==="
         Log "Source: $sourcePath"
         Log "Destination: $destPath"
 
@@ -307,7 +318,7 @@ object AutoUpdater {
         }
 
         # Restart
-        Log "Starting Metrolist..."
+        Log "Starting Lyrenne..."
         Start-Process -FilePath "$exePath"
 
         Start-Sleep -Seconds 3
@@ -345,7 +356,7 @@ object AutoUpdater {
     private fun fetchLatestRelease(): GitHubRelease? {
         val connection = URI(API_URL).toURL().openConnection() as HttpURLConnection
         connection.setRequestProperty("Accept", "application/vnd.github.v3+json")
-        connection.setRequestProperty("User-Agent", "Metrolist-Desktop/$CURRENT_VERSION")
+        connection.setRequestProperty("User-Agent", "Lyrenne/$CURRENT_VERSION")
         connection.connectTimeout = 10_000
         connection.readTimeout = 10_000
 
@@ -370,7 +381,7 @@ object AutoUpdater {
         val connection: HttpURLConnection
         while (true) {
             val conn = URI(currentUrl).toURL().openConnection() as HttpURLConnection
-            conn.setRequestProperty("User-Agent", "Metrolist-Desktop/$CURRENT_VERSION")
+            conn.setRequestProperty("User-Agent", "Lyrenne/$CURRENT_VERSION")
             conn.instanceFollowRedirects = false
             conn.connectTimeout = 30_000
             conn.readTimeout = 120_000
@@ -484,13 +495,13 @@ object AutoUpdater {
             var dir = File(resDir)
             repeat(4) {
                 dir = dir.parentFile ?: return@let
-                if (File(dir, "Metrolist.exe").exists()) return dir
+                if (LAUNCHER_NAMES.any { File(dir, it).exists() }) return dir
             }
         }
 
         // Strategy 2: user.dir
         File(System.getProperty("user.dir")).let { dir ->
-            if (File(dir, "Metrolist.exe").exists()) return dir
+            if (LAUNCHER_NAMES.any { File(dir, it).exists() }) return dir
         }
 
         // Strategy 3: code source location
@@ -500,18 +511,20 @@ object AutoUpdater {
                 var dir = File(codeSource.location.toURI())
                 repeat(4) {
                     dir = dir.parentFile ?: return@repeat
-                    if (File(dir, "Metrolist.exe").exists()) return dir
+                    if (LAUNCHER_NAMES.any { File(dir, it).exists() }) return dir
                 }
             }
         } catch (_: Exception) {}
 
-        // Strategy 4: common install locations
-        listOfNotNull(
-            System.getenv("LOCALAPPDATA")?.let { File(it, "Metrolist") },
-            File("C:/Program Files/Metrolist"),
-            File("C:/Program Files (x86)/Metrolist")
-        ).forEach { dir ->
-            if (File(dir, "Metrolist.exe").exists()) return dir
+        // Strategy 4: common install locations, under both the current and the pre-2.9.2 name
+        listOf("Lyrenne", "Metrolist").flatMap { name ->
+            listOfNotNull(
+                System.getenv("LOCALAPPDATA")?.let { File(it, name) },
+                File("C:/Program Files/$name"),
+                File("C:/Program Files (x86)/$name")
+            )
+        }.forEach { dir ->
+            if (LAUNCHER_NAMES.any { File(dir, it).exists() }) return dir
         }
 
         return null

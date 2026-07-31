@@ -109,13 +109,13 @@ compose.desktop {
             // Include required JVM modules in the custom runtime
             modules("java.sql", "java.naming", "java.net.http", "jdk.unsupported")
 
-            packageName = "Metrolist"
+            packageName = "Lyrenne"
             packageVersion = metrolistVersion
-            description = "YouTube Music Desktop Client"
-            vendor = "Metrolist"
+            description = "Lyrenne, a YouTube Music player for Windows"
+            vendor = "Lyrenne"
 
             windows {
-                menuGroup = "Metrolist"
+                menuGroup = "Lyrenne"
                 upgradeUuid = "b5e74c38-1c2d-4e8f-9a7b-6d5e4f3c2a1b"
                 iconFile.set(project.file("src/main/resources/icon.ico"))
                 dirChooser = true
@@ -182,7 +182,7 @@ tasks.matching { it.name == "createDistributable" || it.name == "prepareAppResou
 tasks.register("patchPortableIcon") {
     dependsOn("createDistributable")
     doLast {
-        val exeFile = file("build/compose/binaries/main/app/Metrolist/Metrolist.exe")
+        val exeFile = file("build/compose/binaries/main/app/Lyrenne/Lyrenne.exe")
         val iconFile = file("src/main/resources/icon.ico")
         val resourceHacker = file("C:/Temp/ResourceHacker/ResourceHacker.exe")
 
@@ -195,7 +195,7 @@ tasks.register("patchPortableIcon") {
             return@doLast
         }
 
-        val patched = file("build/compose/binaries/main/app/Metrolist/Metrolist-patched.exe")
+        val patched = file("build/compose/binaries/main/app/Lyrenne/Lyrenne-patched.exe")
         val result = ProcessBuilder(
             resourceHacker.absolutePath,
             "-open", exeFile.absolutePath,
@@ -217,7 +217,7 @@ tasks.register("patchPortableIcon") {
  * Build the release ZIP safely.
  *
  * Running the app from the distributable folder makes AppPaths write `data/` right next to
- * Metrolist.exe — credentials.json, the library DB, preferences. Smoke-testing before zipping
+ * Lyrenne.exe — credentials.json, the library DB, preferences. Smoke-testing before zipping
  * therefore bakes real login cookies into the release artifact. This happened once (v2.6.0,
  * published to a PUBLIC repo) so it is now automated rather than left to memory:
  * purge runtime dirs, zip with 7z, then FAIL the build if anything sensitive is inside.
@@ -227,8 +227,8 @@ tasks.register("packagePortableZip") {
     // Resolved at configuration time — doLast must not reference script/project objects
     // or the Gradle configuration cache refuses to serialize the task.
     val appDir = layout.buildDirectory.dir("compose/binaries/main/app").get().asFile
-    val imageDir = File(appDir, "Metrolist")
-    val zipFile = File(appDir, "Metrolist-$metrolistVersion-portable.zip")
+    val imageDir = File(appDir, "Lyrenne")
+    val zipFile = File(appDir, "Lyrenne-$metrolistVersion-portable.zip")
     val sevenZipCandidates = listOf(
         File("C:/Program Files/7-Zip/7z.exe"),
         File("C:/Program Files (x86)/7-Zip/7z.exe")
@@ -244,10 +244,13 @@ tasks.register("packagePortableZip") {
             }
         }
         // The crash log sits next to the exe and records song titles and the account name,
-        // so it is user data too — never ship one left behind by a smoke test.
-        File(imageDir, "metrolist.log").takeIf { it.exists() }?.let {
-            it.delete()
-            logger.lifecycle("Purged metrolist.log")
+        // so it is user data too — never ship one left behind by a smoke test. Both names are
+        // purged: a folder reused from before the Lyrenne rename can still hold metrolist.log.
+        listOf("lyrenne.log", "metrolist.log").forEach { name ->
+            File(imageDir, name).takeIf { it.exists() }?.let {
+                it.delete()
+                logger.lifecycle("Purged $name")
+            }
         }
 
         // 1b. sqlite-jdbc ships native libraries for Linux, Android, musl, FreeBSD and macOS.
@@ -277,6 +280,25 @@ tasks.register("packagePortableZip") {
                 )
             }
 
+        // 1c. Rename-compat bridge for clients still on 2.9.2 and older.
+        //
+        // Those builds ship an AutoUpdater that REJECTS any update package without a file
+        // literally named Metrolist.exe, and their install script relaunches that same name.
+        // Shipping only Lyrenne.exe would therefore strand every existing user on 2.9.2 with
+        // "Invalid update package", forever, with no in-app way out.
+        //
+        // A jpackage launcher resolves its config as app/<own-basename>.cfg, so a copy of the
+        // exe only works if the matching .cfg is copied too. Both copies are harmless for new
+        // users and let old ones update once onto a build that knows both names.
+        //
+        // DELETE THIS BLOCK once 2.9.2 is far enough back that nobody is updating from it.
+        File(imageDir, "Lyrenne.exe").takeIf { it.exists() }?.let { exe ->
+            exe.copyTo(File(imageDir, "Metrolist.exe"), overwrite = true)
+            File(imageDir, "app/Lyrenne.cfg").takeIf { it.exists() }
+                ?.copyTo(File(imageDir, "app/Metrolist.cfg"), overwrite = true)
+            logger.lifecycle("Added Metrolist.exe compat launcher for pre-Lyrenne auto-updaters")
+        }
+
         // 2. Always start from a fresh archive — `7z a` ADDS to an existing zip, which would
         //    silently retain entries that were just purged from disk.
         if (zipFile.exists()) zipFile.delete()
@@ -285,7 +307,7 @@ tasks.register("packagePortableZip") {
             ?: throw GradleException("7-Zip not found. Never use Compress-Archive — it writes backslash entries that break Java's ZipEntry.isDirectory().")
 
         val exit = ProcessBuilder(
-            sevenZip.absolutePath, "a", "-tzip", zipFile.absolutePath, "Metrolist/*", "-mx5"
+            sevenZip.absolutePath, "a", "-tzip", zipFile.absolutePath, "Lyrenne/*", "-mx5"
         ).directory(appDir).redirectErrorStream(true).start().let { p ->
             p.inputStream.bufferedReader().use { it.readText() }
             p.waitFor()
@@ -293,7 +315,10 @@ tasks.register("packagePortableZip") {
         if (exit != 0) throw GradleException("7z failed with exit code $exit")
 
         // 3. Refuse to hand over an artifact containing secrets or a broken entry format
-        val forbidden = Regex("(?i)(^|/)(data/|credentials|preferences\\.properties|metrolist\\.db|login-profile)")
+        // metrolist.db keeps its pre-rename filename on purpose, see AppPaths.databaseFile.
+        val forbidden = Regex(
+            "(?i)(^|/)(data/|credentials|preferences\\.properties|metrolist\\.db|login-profile|lyrenne\\.log|metrolist\\.log)"
+        )
         val offenders = mutableListOf<String>()
         var backslashEntries = 0
         ZipFile(zipFile).use { zip ->

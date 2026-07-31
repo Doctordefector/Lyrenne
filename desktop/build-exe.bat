@@ -1,5 +1,5 @@
 @echo off
-echo Building Metrolist Desktop EXE...
+echo Building Lyrenne EXE...
 echo.
 
 cd /d "%~dp0.."

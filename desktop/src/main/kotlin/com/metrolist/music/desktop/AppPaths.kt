@@ -26,7 +26,13 @@ object AppPaths {
     /** preferences.properties */
     val preferencesFile: File get() = File(dataDir, "preferences.properties")
 
-    /** metrolist.db (SQLDelight) */
+    /**
+     * metrolist.db (SQLDelight).
+     *
+     * Keeps its pre-rename filename deliberately. Every existing install has its library in a
+     * file with this name, and renaming it would silently orphan all of them. Cosmetics are not
+     * worth someone's play counts.
+     */
     val databaseFile: File get() = File(dataDir, "metrolist.db")
 
     /** credentials.json (auth cookies) */

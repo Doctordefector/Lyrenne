@@ -1,10 +1,10 @@
-# Metrolist Desktop Port - Project Guide
+# Lyrenne Port - Project Guide
 
 ## Overview
-Porting Metrolist (Android YouTube Music client) to desktop using Compose Desktop (JVM).
+Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop (JVM).
 - **Upstream**: https://github.com/MetrolistGroup/Metrolist (shared modules synced to v13.6.0, 2026-07-07; upstream is in maintenance mode)
   - Sync method: `git checkout v13.6.0 -- innertube betterlyrics shazamkit lrclib kugou lastfm` from `upstream` remote, then re-apply the accountIndex patch (see InnerTube modifications below)
-  - NewPipe.kt deliberately kept at pre-v13.4.1 version + NewPipeExtractor v0.26.0: upstream's MetrolistExtractor fork ships Java 25 bytecode (we target JVM 21), and desktop never calls NewPipeUtils (streams via direct-URL clients)
+  - NewPipe.kt deliberately kept at pre-v13.4.1 version + NewPipeExtractor v0.26.0: upstream's LyrenneExtractor fork ships Java 25 bytecode (we target JVM 21), and desktop never calls NewPipeUtils (streams via direct-URL clients)
   - kizzy module: upstream deleted it; our copy remains in repo but is NO LONGER compiled into desktop (was never referenced — desktop Discord RPC is the named-pipe DiscordRPC.kt)
 - **Desktop module**: `desktop/` folder
 - **Shared modules**: `innertube/`, `lrclib/`, `betterlyrics/`, `kugou/`, `kizzy/`, `lastfm/`, `shazamkit/` (sources included directly via `kotlin.srcDir()`, not as project dependencies)
@@ -14,17 +14,17 @@ Porting Metrolist (Android YouTube Music client) to desktop using Compose Deskto
 
 ### Android (reference)
 - Hilt DI, Room DB, Media3 ExoPlayer, Jetpack Compose
-- Entry: `app/src/main/kotlin/com/metrolist/music/MainActivity.kt`
+- Entry: `app/src/main/kotlin/com/lyrenne/music/MainActivity.kt`
 - Playback: `MusicService` (MediaLibraryService) + `PlayerConnection` bridge
 - Database: Room v35 with `DatabaseDao` (150+ queries)
 - ViewModels: 30+ in `viewmodels/`
 
 ### Desktop (our port)
 - Compose Desktop, VLC (vlcj), SQLDelight, browser cookie extraction for auth
-- Entry: `desktop/src/main/kotlin/com/metrolist/music/desktop/Main.kt`
+- Entry: `desktop/src/main/kotlin/com/lyrenne/music/desktop/Main.kt`
 - Singleton managers instead of Hilt: `AuthManager`, `DatabaseHelper`, `PreferencesManager`, `DownloadManager`
 - Player: `DesktopPlayer` (VLC-based via vlcj)
-- DB: SQLDelight schema in `desktop/src/main/sqldelight/.../Metrolist.sq`
+- DB: SQLDelight schema in `desktop/src/main/sqldelight/.../Lyrenne.sq`
 - Listen Together: Protobuf + OkHttp WebSocket (`desktop/src/main/proto/listentogether/`)
 
 ## Desktop Port Status
@@ -50,7 +50,7 @@ Porting Metrolist (Android YouTube Music client) to desktop using Compose Deskto
 - Discord Rich Presence via named pipe IPC (Windows `\\.\pipe\discord-ipc-N`, Unix `/tmp/discord-ipc-N`)
 - Last.fm scrobbling (now-playing + scrobble at 50%/240s threshold)
 - Desktop notifications (AWT SystemTray pop-ups on song change)
-- Auto-updater (GitHub releases: Doctordefector/Metrolist-Desktop)
+- Auto-updater (GitHub releases: Doctordefector/Lyrenne)
 - Listen Together (WebSocket, protobuf messages, room create/join, bidirectional playback sync, suggestions, session persistence with 10-min grace, reconnect with exponential backoff)
 - Account info display (name, handle, avatar from YouTube)
 - Library search/filter across all tabs (songs, albums, artists, playlists, downloads)
@@ -96,7 +96,7 @@ Porting Metrolist (Android YouTube Music client) to desktop using Compose Deskto
 
 ## Key Files
 
-### Desktop Source (`desktop/src/main/kotlin/com/metrolist/music/desktop/`)
+### Desktop Source (`desktop/src/main/kotlin/com/lyrenne/music/desktop/`)
 
 #### Core
 | File | Purpose |
@@ -312,14 +312,14 @@ when the file is missing.
 
 ## Testing: NEVER run the app from the build folder
 
-Use a copy extracted outside the build tree — `S:\Dev\Metrolist PC\Metrolist-App\` is set up
+Use a copy extracted outside the build tree — `S:\Dev\Lyrenne PC\Lyrenne-App\` is set up
 for this. Reason:
 
-1. `AppPaths` writes `data/` (credentials, DB, preferences) next to `Metrolist.exe`, so running
-   `build/compose/binaries/main/app/Metrolist/Metrolist.exe` puts a real login in the build tree
+1. `AppPaths` writes `data/` (credentials, DB, preferences) next to `Lyrenne.exe`, so running
+   `build/compose/binaries/main/app/Lyrenne/Lyrenne.exe` puts a real login in the build tree
 2. `packagePortableZip` **purges that `data/`** every build — that is the credential-leak guard
 3. On the next launch `AppPaths.migrateFromAppData` sees an empty `data/` and restores whatever
-   is in `%APPDATA%/Metrolist` — which can be *years-old* credentials
+   is in `%APPDATA%/Lyrenne` — which can be *years-old* credentials
 
 Net effect: every release build silently signs the tester out and swaps in a stale session.
 This burned most of a night on 2026-07-24, presenting as "playlist sync is broken", "can't
@@ -362,12 +362,12 @@ Total app startup went 13.5 s → 2.4 s.
 - VLC must be installed on the system for playback to work (bundled VLC also supported)
 - Stream URLs fetched using InnerTube clients: ANDROID_VR_NO_AUTH → IOS → WEB_REMIX fallback
 - Not a git repo locally (Windows `nul` file causes issues); sync via robocopy from fresh clone
-- Platform paths: Windows `%APPDATA%/Metrolist`, Mac `~/Library/Application Support/Metrolist`, Linux `~/.config/metrolist`
-- Credentials stored at `<appdata>/Metrolist/credentials.json`
+- Platform paths: Windows `%APPDATA%/Lyrenne`, Mac `~/Library/Application Support/Lyrenne`, Linux `~/.config/lyrenne`
+- Credentials stored at `<appdata>/Lyrenne/credentials.json`
 - Delete credentials.json to force re-login
 - All debug println converted to Timber logging (SLF4J-backed shim)
 - DatabaseHelper.database is private — use DatabaseHelper methods, not direct DB access
-- SQLDelight accessor is `metrolistQueries` (not `metrolistDatabaseQueries`)
+- SQLDelight accessor is `metrolistQueries` (not `metrolistDatabaseQueries`; the generated name follows the SQLDelight `MetrolistDatabase` class, which keeps its pre-rename name)
 
 ## Version Management
 - **Current version**: v2.6.0
@@ -382,19 +382,19 @@ Total app startup went 13.5 s → 2.4 s.
    ```
    ./gradlew :desktop:createDistributable
    ```
-   Output: `desktop/build/compose/binaries/main/app/Metrolist/` (folder with exe + runtime + resources)
+   Output: `desktop/build/compose/binaries/main/app/Lyrenne/` (folder with exe + runtime + resources)
 3. **Create portable ZIP** — use the guarded task, never a manual 7z call:
    ```
    ./gradlew :desktop:packagePortableZip
    ```
    Purges runtime data, zips with 7z, and refuses to produce an archive containing
-   credentials/DB/prefs or backslash entries. Output: `desktop/build/compose/binaries/main/app/Metrolist-X.Y.Z-portable.zip`
+   credentials/DB/prefs or backslash entries. Output: `desktop/build/compose/binaries/main/app/Lyrenne-X.Y.Z-portable.zip`
 4. **Push code** to GitHub (robocopy to temp dir, git init, commit, force push)
 5. **Create GitHub release** with portable ZIP only:
    ```
-   gh release create vX.Y.Z Metrolist-X.Y.Z-portable.zip --title "Metrolist Desktop vX.Y.Z" --notes "..."
+   gh release create vX.Y.Z Lyrenne-X.Y.Z-portable.zip --title "Lyrenne vX.Y.Z" --notes "..."
    ```
-6. **Package managers: nothing to do.** The Scoop bucket at Doctordefector/scoop-metrolist runs
+6. **Package managers: nothing to do.** The Scoop bucket at Doctordefector/scoop-lyrenne runs
    Excavator on a daily cron and bumps its own version, URL and hash. There is deliberately no
    winget listing — winget would delete the user's library on upgrade, because this app stores
    data next to the exe and winget has no `persist` equivalent. See `packaging/README.md` before
@@ -402,7 +402,7 @@ Total app startup went 13.5 s → 2.4 s.
 
 ## Distribution Strategy
 - **PORTABLE ONLY** — no EXE installers, no MSI packages. Just the portable ZIP.
-- Each release has exactly ONE artifact: `Metrolist-X.Y.Z-portable.zip`
+- Each release has exactly ONE artifact: `Lyrenne-X.Y.Z-portable.zip`
 - Users extract and run — no installation needed
 - Downloads, updates, preferences, and database all live next to the app (not in %APPDATA%/Roaming)
 - Do NOT build `packageExe` or `packageMsi` — only `createDistributable`
@@ -415,17 +415,17 @@ All data is fully portable — stored next to the executable via centralized `Ap
 - **Cache**: `<app-dir>/data/cache/`
 - **Downloads**: `<app-dir>/Downloads/` (configurable via Settings folder picker)
 - **Updates staging**: `<app-dir>/updates/` (with fallbacks to user.dir then temp)
-- **Migration**: On first run, `AppPaths` auto-migrates files from old `%APPDATA%/Metrolist` to `data/` if the data dir is empty
+- **Migration**: On first run, `AppPaths` auto-migrates files from old `%APPDATA%/Lyrenne` to `data/` if the data dir is empty
 - **CRITICAL**: NOTHING goes to %APPDATA% or %LOCALAPPDATA% anymore. Everything lives next to the app for full portability.
 
 ## GitHub & Release
-- **PUBLIC repo**: https://github.com/Doctordefector/Metrolist-Desktop — anything pushed or
+- **PUBLIC repo**: https://github.com/Doctordefector/Lyrenne — anything pushed or
   attached to a release is world-readable immediately. (This file previously claimed "private";
   it is not, and that error contributed to a credential leak in v2.6.0.)
 
 ### CRITICAL: never zip the folder you smoke-tested from
 `AppPaths` writes `data/` (credentials.json, metrolist.db, preferences.properties) next to
-`Metrolist.exe`. Running the app from `build/compose/binaries/main/app/Metrolist/` therefore
+`Lyrenne.exe`. Running the app from `build/compose/binaries/main/app/Lyrenne/` therefore
 plants **real login cookies** inside the exact folder that gets zipped. This shipped once in
 v2.6.0 and was public for ~12 minutes.
 
@@ -436,7 +436,7 @@ hand-roll the 7z command.
 - Local copy has `nul` file that breaks git — use temp dir copy for pushing
 - Push workflow: robocopy to temp dir (excluding .gradle/.kotlin/build/.claude/nul), git init, commit, force push
 - `gh` CLI at `C:\Program Files\GitHub CLI\gh.exe` (not in bash PATH, use full path), authenticated as Doctordefector
-- **ALWAYS pass `--repo Doctordefector/Metrolist-Desktop` to every `gh release` command.** This repo has two
+- **ALWAYS pass `--repo Doctordefector/Lyrenne` to every `gh release` command.** This repo has two
   remotes and bare `gh release list` resolves to `upstream` (MetrolistGroup/Metrolist), silently showing
   v13.x Android releases instead of our v2.x desktop ones
 - Robocopy for push: Must use PowerShell `robocopy` (bash `robocopy` has path issues with /E flag)
@@ -446,14 +446,14 @@ hand-roll the 7z command.
 
 ### How it works (end to end)
 1. **Check**: `AutoUpdater.checkForUpdate()` hits GitHub API (`/repos/.../releases/latest`), compares `CURRENT_VERSION` against the latest tag using semver
-2. **Detect portable**: Looks for `Metrolist-*-portable.zip` in release assets — if found, uses portable update path
+2. **Detect portable**: Looks for `Lyrenne-*-portable.zip` in release assets — if found, uses portable update path
 3. **Download**: Streams the ZIP to `<app-dir>/updates/` with progress callbacks, shown in Settings UI
 4. **Extract**: `extractZip()` extracts to a timestamped staging dir (`updates/staging-<timestamp>/`), cleans up old staging dirs first
-5. **Verify**: Checks extracted contents for `Metrolist.exe` — rejects invalid packages
+5. **Verify**: Checks extracted contents for `Lyrenne.exe` — rejects invalid packages
 6. **Install**: User clicks "Install & Restart" → launches a PowerShell script that:
    - Waits for the current process to exit (polls by PID)
    - Uses `robocopy /E /IS /IT` to copy staging → app directory (overwrites everything)
-   - Relaunches `Metrolist.exe`
+   - Relaunches `Lyrenne.exe`
    - Cleans up staging dir and ZIP
 7. **App restarts** on the new version
 
@@ -465,10 +465,10 @@ hand-roll the 7z command.
 - **Backslash normalization**: The extractor normalizes `\` → `/` as a safety net, but don't rely on it — use 7z
 - **Timestamped staging**: Staging dirs use `staging-<millis>` to avoid conflicts from previous failed extractions where `deleteRecursively()` silently failed on locked files
 - **`getUpdateDirectory()`**: Returns `<app-dir>/updates/`. Resolves app dir from JAR `codeSource.location`, falls back to `user.dir`, then system temp. NEVER `%APPDATA%/Roaming`
-- **`findAppDirectory()`**: Walks up from JAR location to find the Metrolist root. For Compose Desktop distributable: `Metrolist/app/Metrolist.jar` → walks up 2 levels → `Metrolist/`
+- **`findAppDirectory()`**: Walks up from JAR location to find the Lyrenne root. For Compose Desktop distributable: `Lyrenne/app/Lyrenne.jar` → walks up 2 levels → `Lyrenne/`
 - **Chicken-and-egg**: If the updater itself has a bug, users must manually download the fixed version. The running binary's updater code is what executes, not the new version's
 
-### PowerShell update script (`metrolist-update.ps1`)
+### PowerShell update script (`lyrenne-update.ps1`)
 Generated dynamically by `buildPortableUpdateScript()`. Key steps:
 ```powershell
 # Wait for app to exit

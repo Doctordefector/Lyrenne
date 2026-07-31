@@ -1,11 +1,11 @@
 # Discoverability playbook
 
-How people are meant to find Metrolist Desktop, what is already set up, and what to redo on each
+How people are meant to find Lyrenne, what is already set up, and what to redo on each
 release. Written 2026-07-25 against v2.9.2.
 
 ## The problem this works around
 
-The repo name carries no search terms. Nobody types "Metrolist". They type *youtube music desktop
+The repo name carries no search terms. Nobody types "Lyrenne". They type *youtube music desktop
 app*, *youtube music for windows*, *youtube music client*. Every item below exists to attach those
 phrases to something Google and GitHub can index.
 
@@ -17,7 +17,7 @@ installer*, *two-way library sync*, *Windows 11*, *free*, *open source*.
 
 ### 1. GitHub Pages site (`docs/`)
 
-Lives at <https://doctordefector.github.io/Metrolist-Desktop/>, source is the `docs/` folder on
+Lives at <https://doctordefector.github.io/Lyrenne/>, source is the `docs/` folder on
 `main`. Single self-contained `index.html`, no build step, no dependencies.
 
 It carries the SEO weight the repo page cannot:
@@ -64,7 +64,7 @@ had.
 ### 2. Repo metadata
 
 - **Description** is the Google result title: results render as
-  `GitHub - Doctordefector/Metrolist-Desktop: <description>`. Keep the search phrases at the front
+  `GitHub - Doctordefector/Lyrenne: <description>`. Keep the search phrases at the front
   and never let it become a slogan.
 - **Homepage** points at the Pages site, not at the releases page, so the link on the repo sidebar
   feeds the site instead of bypassing it.
@@ -88,8 +88,8 @@ Reddit, Discord or X renders as a grey generic card, which costs clicks.
 
 ### 5. Release titles
 
-Each release page is indexed on its own. `Metrolist Desktop v2.9.2` ranks for nothing, so titles
-carry a keyword suffix: `Metrolist Desktop v2.9.2 - YouTube Music for Windows`. Fifty release
+Each release page is indexed on its own. `Lyrenne v2.9.2` ranks for nothing, so titles
+carry a keyword suffix: `Lyrenne v2.9.2 - YouTube Music for Windows`. Fifty release
 pages, fifty long-tail entry points.
 
 ### 6. Package manifests (`packaging/`)
@@ -98,12 +98,12 @@ Package managers are discovery channels, not just installers. `scoop search` and
 Directory generate pages that get indexed, and a lot of Windows users never look at GitHub.
 
 **Scoop** is the one channel in use. The manifest lives in its own bucket repo,
-[Doctordefector/scoop-metrolist](https://github.com/Doctordefector/scoop-metrolist), and an
+[Doctordefector/scoop-lyrenne](https://github.com/Doctordefector/scoop-lyrenne), and an
 Excavator workflow there bumps version, URL and hash daily, so releases need no manual step:
 
 ```
-scoop bucket add metrolist https://github.com/Doctordefector/scoop-metrolist
-scoop install metrolist-desktop
+scoop bucket add lyrenne https://github.com/Doctordefector/scoop-lyrenne
+scoop install lyrenne
 ```
 
 A listing in [ScoopInstaller/Extras](https://github.com/ScoopInstaller/Extras) would show up in a
@@ -120,7 +120,7 @@ and what would have to change in `AppPaths` first.
 
 1. Bump the version in `desktop/build.gradle.kts` and `AutoUpdater.CURRENT_VERSION`.
 2. `./gradlew :desktop:createDistributable :desktop:packagePortableZip`.
-3. `gh release create vX.Y.Z <zip> --repo Doctordefector/Metrolist-Desktop --title "Metrolist Desktop vX.Y.Z - YouTube Music for Windows" --notes-file <notes>`.
+3. `gh release create vX.Y.Z <zip> --repo Doctordefector/Lyrenne --title "Lyrenne vX.Y.Z - YouTube Music for Windows" --notes-file <notes>`.
 4. Package managers: nothing to do. Excavator bumps the Scoop bucket on its own daily run.
 5. Release notes: no em dashes, and lead with what the user sees rather than the internals.
 

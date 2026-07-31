@@ -1034,6 +1034,20 @@ fun SettingsScreen(
         }
 
         item {
+            SettingsItem(
+                icon = Icons.Default.Update,
+                title = "Check for Updates on Launch",
+                subtitle = "Look shortly after starting, and notify if a new version is available",
+                trailing = {
+                    Switch(
+                        checked = preferences.checkUpdatesOnLaunch,
+                        onCheckedChange = { PreferencesManager.setCheckUpdatesOnLaunch(it) }
+                    )
+                }
+            )
+        }
+
+        item {
             val updateState by AutoUpdater.updateState.collectAsState()
 
             when (val state = updateState) {

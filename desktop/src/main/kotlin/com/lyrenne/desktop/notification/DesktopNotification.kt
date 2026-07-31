@@ -97,6 +97,18 @@ object DesktopNotification {
         }
     }
 
+    /**
+     * Show a tray balloon. Silently does nothing when there is no tray icon, which is the case
+     * on a desktop without a system tray, so callers do not have to care.
+     */
+    fun notify(title: String, message: String) {
+        try {
+            trayIcon?.displayMessage(title, message, TrayIcon.MessageType.INFO)
+        } catch (e: Exception) {
+            Timber.w("Failed to show notification: ${e.message}")
+        }
+    }
+
     fun release() {
         observeJob?.cancel()
         trayIcon?.let {

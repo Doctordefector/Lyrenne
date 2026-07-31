@@ -22,6 +22,7 @@ import com.lyrenne.desktop.media.MediaKeyHandler
 import com.lyrenne.desktop.settings.PreferencesManager
 import com.lyrenne.desktop.sync.LibrarySync
 import com.lyrenne.desktop.ui.App
+import com.lyrenne.desktop.update.AutoUpdater
 import com.lyrenne.desktop.ui.theme.LyrenneTheme
 import com.lyrenne.desktop.playback.DesktopPlayer
 import com.lyrenne.desktop.integration.DiscordRPC
@@ -29,6 +30,7 @@ import com.lyrenne.desktop.integration.LastFmManager
 import com.lyrenne.desktop.notification.DesktopNotification
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import org.jetbrains.skia.Image
 import timber.log.Timber
@@ -262,6 +264,39 @@ private fun runApp() {
                 onDispose {
                     java.awt.Toolkit.getDefaultToolkit().removeAWTEventListener(listener)
                     AutoScroll.stop()
+                }
+            }
+
+            /**
+             * Check for a new version shortly after launch, if the user wants that.
+             *
+             * Deliberately delayed rather than run at startup: the window paints at ~1.6s and
+             * VLC, auth and the queue all initialise off the main thread just after, so firing a
+             * network call into that window would trade startup time for something nobody is
+             * waiting on.
+             *
+             * The result is announced through the tray rather than a dialog. An update is not
+             * urgent, and a modal on launch is the kind of thing people learn to dismiss without
+             * reading. Settings shows the same state for anyone who goes looking.
+             */
+            LaunchedEffect(Unit) {
+                if (!PreferencesManager.preferences.value.checkUpdatesOnLaunch) return@LaunchedEffect
+                delay(10_000)
+                AutoUpdater.checkForUpdates()
+                // Wait for a settled state; Idle and Checking are both transient here.
+                val settled = AutoUpdater.updateState.first {
+                    it is AutoUpdater.UpdateState.UpdateAvailable ||
+                        it is AutoUpdater.UpdateState.UpToDate ||
+                        it is AutoUpdater.UpdateState.Error
+                }
+                when (settled) {
+                    is AutoUpdater.UpdateState.UpdateAvailable -> DesktopNotification.notify(
+                        "Lyrenne ${settled.version} is available",
+                        "Open Settings to download and install it."
+                    )
+                    is AutoUpdater.UpdateState.Error ->
+                        Timber.i("Launch update check failed: ${settled.message}")
+                    else -> Timber.i("Launch update check: up to date")
                 }
             }
 

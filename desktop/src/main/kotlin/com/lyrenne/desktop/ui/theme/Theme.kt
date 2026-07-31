@@ -5,19 +5,63 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import com.lyrenne.desktop.settings.ThemeMode
 
+/**
+ * Dark theme, built from the same tokens as the website and the app mark: near-black surfaces,
+ * hairline borders, and the bronze accent, rather than Material's stock purple.
+ *
+ * The accent is #A37C43 exactly, the same value the logo ring and the site use. It appears as a
+ * *fill* only. As a foreground on near-black it measures 4.0:1, under the 4.5:1 AA wants for body
+ * text, so anywhere the accent has to be legible as text or an icon the lighter #D8B57C from the
+ * top of the logo's gradient is used instead, which measures 8.6:1.
+ */
+private val LyrenneGold = Color(0xFFA37C43)
+private val LyrenneGoldLight = Color(0xFFD8B57C)
+
 private val DarkColorScheme = darkColorScheme(
-    primary = Color(0xFFBB86FC),
-    secondary = Color(0xFF03DAC6),
-    tertiary = Color(0xFF3700B3),
-    background = Color(0xFF121212),
-    surface = Color(0xFF1E1E1E),
-    onPrimary = Color.Black,
-    onSecondary = Color.Black,
-    onTertiary = Color.White,
-    onBackground = Color.White,
-    onSurface = Color.White,
-    surfaceVariant = Color(0xFF2D2D2D),
-    onSurfaceVariant = Color(0xFFCACACA),
+    primary = LyrenneGoldLight,                // foreground-capable gold, 8.6:1 on the background
+    onPrimary = Color(0xFF2A1B06),             // 7.7:1
+    primaryContainer = LyrenneGold,            // the brand value, used as a fill
+    onPrimaryContainer = Color(0xFF1F1400),    // 6.5:1
+
+    secondary = Color(0xFFC9B79B),             // desaturated gold for secondary accents
+    onSecondary = Color(0xFF2A2015),
+    secondaryContainer = Color(0xFF3D3225),
+    onSecondaryContainer = Color(0xFFE9DCC8),
+
+    tertiary = Color(0xFFB9A588),
+    onTertiary = Color(0xFF241B0E),
+    tertiaryContainer = Color(0xFF352A1B),
+    onTertiaryContainer = Color(0xFFE6D8C1),
+
+    background = Color(0xFF0A0A0A),            // site background
+    onBackground = Color(0xFFE0E0E0),          // site body text
+    surface = Color(0xFF111111),               // site panels
+    onSurface = Color(0xFFE0E0E0),
+    surfaceVariant = Color(0xFF1C1A17),
+    onSurfaceVariant = Color(0xFFB5ACA0),      // 8.0:1 on surfaceVariant
+
+    outline = Color(0xFF8A7F72),               // visible borders, 5.1:1 on the background
+    outlineVariant = Color(0xFF333333),        // the site's hairline, for dividers only
+
+    surfaceTint = LyrenneGoldLight,
+    surfaceBright = Color(0xFF2A2724),
+    surfaceDim = Color(0xFF0A0A0A),
+    surfaceContainerLowest = Color(0xFF050505),
+    surfaceContainerLow = Color(0xFF111111),
+    surfaceContainer = Color(0xFF161514),
+    surfaceContainerHigh = Color(0xFF1F1D1A),
+    surfaceContainerHighest = Color(0xFF2A2724),
+
+    inverseSurface = Color(0xFFE6E1D9),
+    inverseOnSurface = Color(0xFF1F1B16),
+    inversePrimary = Color(0xFF6B4E1F),
+
+    error = Color(0xFFF2B8B5),
+    onError = Color(0xFF3D0907),
+    errorContainer = Color(0xFF8C1D18),
+    onErrorContainer = Color(0xFFF9DEDC),
+
+    scrim = Color(0xFF000000),
 )
 
 /**

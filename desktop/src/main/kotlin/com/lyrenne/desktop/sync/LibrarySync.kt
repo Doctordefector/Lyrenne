@@ -24,6 +24,9 @@ object LibrarySync {
     private const val MAX_LIBRARY_PAGES = 100
     private const val MAX_LIKED_SONG_PAGES = 200
 
+    /** songs, playlists, albums, artists. All four failing at once points at the session. */
+    private const val TOTAL_SYNC_CATEGORIES = 4
+
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     private val _syncState = MutableStateFlow(SyncState())
@@ -53,14 +56,16 @@ object LibrarySync {
                 _syncState.update { it.copy(progress = "Fetching library from YouTube...") }
 
                 val songsResult = songsDeferred.await()
-                val playlistsResult = playlistsDeferred.await()
-                val albumsResult = albumsDeferred.await()
-                val artistsResult = artistsDeferred.await()
+                val playlistsFetch = playlistsDeferred.await()
+                val albumsFetch = albumsDeferred.await()
+                val artistsFetch = artistsDeferred.await()
+
+                fun items(fetch: LibraryFetch) = (fetch as? LibraryFetch.Items)?.items.orEmpty()
 
                 val songs = songsResult.getOrDefault(emptyList())
-                val playlists = playlistsResult.getOrDefault(emptyList()).filterIsInstance<PlaylistItem>()
-                val albums = albumsResult.getOrDefault(emptyList()).filterIsInstance<AlbumItem>()
-                val artists = artistsResult.getOrDefault(emptyList()).filterIsInstance<ArtistItem>()
+                val playlists = items(playlistsFetch).filterIsInstance<PlaylistItem>()
+                val albums = items(albumsFetch).filterIsInstance<AlbumItem>()
+                val artists = items(artistsFetch).filterIsInstance<ArtistItem>()
 
                 _syncState.update {
                     it.copy(progress = "Saving ${songs.size} songs, ${albums.size} albums, ${artists.size} artists, ${playlists.size} playlists...")
@@ -93,21 +98,21 @@ object LibrarySync {
                     // Phase 3: remove what the remote no longer has, so unliking a song or
                     // deleting a playlist on YouTube is reflected here.
                     //
-                    // Only ever prune from a fetch that SUCCEEDED — pruning off a failed fetch
-                    // would read as "the remote has nothing" and empty the whole library.
+                    // Only ever prune from a fetch that actually returned a listing. A failure
+                    // would read as "the remote has nothing" and empty the whole library, and an
+                    // empty category is not solid enough evidence either — see LibraryFetch.
                     if (songsResult.isSuccess) pruneSongs(songs)
-                    if (albumsResult.isSuccess) pruneAlbums(albums)
-                    if (artistsResult.isSuccess) pruneArtists(artists)
-                    if (playlistsResult.isSuccess) prunePlaylists(playlists)
+                    if (albumsFetch is LibraryFetch.Items) pruneAlbums(albums)
+                    if (artistsFetch is LibraryFetch.Items) pruneArtists(artists)
+                    if (playlistsFetch is LibraryFetch.Items) prunePlaylists(playlists)
                 }
 
-                val results = mapOf(
-                    "songs" to songsResult,
-                    "playlists" to playlistsResult,
-                    "albums" to albumsResult,
-                    "artists" to artistsResult
-                )
-                val failures = results.filterValues { it.isFailure }
+                val failures = buildMap {
+                    songsResult.exceptionOrNull()?.let { put("songs", it) }
+                    (playlistsFetch as? LibraryFetch.Failed)?.let { put("playlists", it.cause) }
+                    (albumsFetch as? LibraryFetch.Failed)?.let { put("albums", it.cause) }
+                    (artistsFetch as? LibraryFetch.Failed)?.let { put("artists", it.cause) }
+                }
 
                 _syncState.value = SyncState(
                     isSyncing = false,
@@ -138,10 +143,9 @@ object LibrarySync {
      * the shared session. YouTube's SID/SAPISID cookies expire and the __Secure-*PSIDTS pair
      * rotates, so a login left alone for weeks starts failing every authenticated call.
      */
-    private fun describeFailure(failures: Map<String, Result<*>>): String {
-        val first = failures.values.first().exceptionOrNull()
-        val detail = first?.message?.take(160).orEmpty()
-        val looksLikeAuth = failures.size == 4 ||
+    private fun describeFailure(failures: Map<String, Throwable>): String {
+        val detail = failures.values.first().message?.take(160).orEmpty()
+        val looksLikeAuth = failures.size == TOTAL_SYNC_CATEGORIES ||
             detail.contains("401") || detail.contains("403") ||
             detail.contains("Unauthorized", true) || detail.contains("login", true)
 
@@ -154,6 +158,30 @@ object LibrarySync {
     }
 
     // ============ Network Fetch (no DB writes) ============
+
+    /**
+     * Outcome of fetching one library category.
+     *
+     * [Empty] is deliberately not the same as `Items(emptyList())`. YouTube answers a category the
+     * user has nothing in with a page carrying neither a grid nor a shelf, which the InnerTube
+     * client reports as an error. Two things follow from that, and they pull in opposite
+     * directions:
+     *
+     * - It must not surface as a sync failure. Someone with no saved albums was being told their
+     *   YouTube session had expired, which was alarming and wrong.
+     * - It must not authorise pruning either. An outage or a response-format change produces the
+     *   same shape, and pruning on it would wipe that whole category from the local library.
+     *   "Found nothing" is not the same as "there is nothing".
+     *
+     * So [Empty] clears the error and skips the prune. The cost is that genuinely removing your
+     * last album on YouTube will not be mirrored locally until you have at least one again, which
+     * is a far cheaper failure than deleting a library.
+     */
+    private sealed interface LibraryFetch {
+        data class Items(val items: List<YTItem>) : LibraryFetch
+        data object Empty : LibraryFetch
+        data class Failed(val cause: Throwable) : LibraryFetch
+    }
 
     /**
      * All liked songs, paginated.
@@ -198,7 +226,7 @@ object LibrarySync {
      * reported "Synced 0 playlists" as a success — and would now also mean pruning wipes the
      * local library on a transient failure.
      */
-    private suspend fun fetchLibraryItems(browseId: String, label: String): Result<List<YTItem>> =
+    private suspend fun fetchLibraryItems(browseId: String, label: String): LibraryFetch =
         runCatching {
             val items = mutableListOf<YTItem>()
             val first = YouTube.library(browseId).getOrThrow()
@@ -217,8 +245,33 @@ object LibrarySync {
             if (continuation != null) {
                 Timber.w("$label: stopped at $MAX_LIBRARY_PAGES pages, more remain")
             }
-            items
-        }.onFailure { Timber.e("Error fetching $label: ${it.message}") }
+            items.toList()
+        }.fold(
+            onSuccess = { LibraryFetch.Items(it) },
+            onFailure = { e ->
+                if (isEmptyCategory(e)) {
+                    Timber.i("$label: nothing saved in this category")
+                    LibraryFetch.Empty
+                } else {
+                    Timber.e("Error fetching $label: ${e.message}")
+                    LibraryFetch.Failed(e)
+                }
+            }
+        )
+
+    /**
+     * Does this failure just mean "the user has none of these"?
+     *
+     * `YouTube.library()` throws when the browse response carries neither a `gridRenderer` nor a
+     * `musicShelfRenderer`, and that is exactly the shape YouTube returns for a category with
+     * nothing in it. Matched on the message rather than fixed at the source because the InnerTube
+     * module is upstream's vendored code: patching it would conflict on every future sync.
+     *
+     * If upstream ever changes that message this stops matching, and the symptom is the old
+     * behaviour returning, a spurious sync error, not data loss.
+     */
+    private fun isEmptyCategory(e: Throwable): Boolean =
+        e is IllegalStateException && e.message?.startsWith("No content found for browseId=") == true
 
     // ============ DB Writes (called inside transaction) ============
 

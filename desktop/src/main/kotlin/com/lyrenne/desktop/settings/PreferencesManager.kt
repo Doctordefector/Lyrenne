@@ -79,6 +79,7 @@ data class AppPreferences(
     // Library
     val libraryViewMode: LibraryViewMode = LibraryViewMode.LIST,
     val autoDownloadOnLike: Boolean = false,
+    val checkUpdatesOnLaunch: Boolean = true,
     val autoSyncOnStartup: Boolean = true,
     // Lyrics display
     val lyricsTextSize: Float = 16f,           // sp, 12-32
@@ -159,6 +160,7 @@ object PreferencesManager {
                         try { LibraryViewMode.valueOf(it) } catch (_: Exception) { null }
                     } ?: LibraryViewMode.LIST,
                     autoDownloadOnLike = props.getProperty("autoDownloadOnLike")?.toBoolean() ?: false,
+                    checkUpdatesOnLaunch = props.getProperty("checkUpdatesOnLaunch")?.toBoolean() ?: true,
                     autoSyncOnStartup = props.getProperty("autoSyncOnStartup")?.toBoolean() ?: true,
                     lyricsTextSize = props.getProperty("lyricsTextSize")?.toFloatOrNull()?.coerceIn(12f, 32f) ?: 16f,
                     lyricsPosition = props.getProperty("lyricsPosition")?.let {
@@ -221,6 +223,7 @@ object PreferencesManager {
             props.setProperty("proxyPassword", prefs.proxyPassword)
             props.setProperty("libraryViewMode", prefs.libraryViewMode.name)
             props.setProperty("autoDownloadOnLike", prefs.autoDownloadOnLike.toString())
+            props.setProperty("checkUpdatesOnLaunch", prefs.checkUpdatesOnLaunch.toString())
             props.setProperty("autoSyncOnStartup", prefs.autoSyncOnStartup.toString())
             props.setProperty("lyricsTextSize", prefs.lyricsTextSize.toString())
             props.setProperty("lyricsPosition", prefs.lyricsPosition.name)
@@ -444,6 +447,11 @@ object PreferencesManager {
 
     fun setAutoDownloadOnLike(enabled: Boolean) {
         _preferences.value = _preferences.value.copy(autoDownloadOnLike = enabled)
+        savePreferences()
+    }
+
+    fun setCheckUpdatesOnLaunch(enabled: Boolean) {
+        _preferences.value = _preferences.value.copy(checkUpdatesOnLaunch = enabled)
         savePreferences()
     }
 

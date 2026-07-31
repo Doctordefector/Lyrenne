@@ -17,15 +17,12 @@ dependencyResolutionManagement {
 // }
 
 rootProject.name = "Metrolist"
-include(":app")
-include(":innertube")
-include(":kugou")
-include(":lrclib")
-include(":kizzy")
-include(":lastfm")
-include(":betterlyrics")
-include(":simpmusic")
-include(":shazamkit")
+
+// Only :desktop is a Gradle project. The shared modules (innertube, lrclib, betterlyrics,
+// kugou, lastfm, shazamkit) are Android libraries that a JVM target cannot consume as project
+// dependencies, so desktop/build.gradle.kts pulls their sources in via kotlin.srcDir() instead.
+// Including them here configured Android projects nothing built. :app, :kizzy and :simpmusic are
+// Android-only and unused by the desktop port.
 include(":desktop")
 
 // Use a local copy of NewPipe Extractor by uncommenting the lines below.

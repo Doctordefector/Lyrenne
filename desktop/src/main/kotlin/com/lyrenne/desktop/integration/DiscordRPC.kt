@@ -65,7 +65,11 @@ object DiscordRPC {
     private var lastPosition = 0L
     private var lastPositionWall = 0L
     private var lastDuration = 0L
+    // Whether the presence currently published to Discord is the playing one or the paused one.
+    // The two differ by their timestamps, so a transition either way needs a re-send.
+    private var lastWasPlaying = false
     private var seekJob: Job? = null
+    private var pauseJob: Job? = null
     private val presenceMutex = Mutex()
 
     // IPC opcodes
@@ -101,10 +105,28 @@ object DiscordRPC {
             // made the previous absolute-threshold approach spam Discord's rate limit.
             player.state.collectLatest { state ->
                 val song = state.currentSong
+                // Pausing is not the same as having nothing loaded, and it used to be treated
+                // that way: !isPlaying fell into the else below and wiped the presence outright,
+                // so pausing looked to everyone else like Lyrenne had been closed. Discord keeps
+                // whatever was last sent, so the paused track stays up until it is replaced or
+                // the track is genuinely cleared.
+                if (song != null && !state.isPlaying) {
+                    if (lastSongId != song.id || lastWasPlaying) {
+                        lastWasPlaying = false
+                        schedulePausedPresence(player)
+                    }
+                    return@collectLatest
+                }
+
                 if (song != null && state.isPlaying) {
+                    // Playback resumed (or never really stopped), so drop any pending pause.
+                    pauseJob?.cancel()
                     val pos = state.position
                     val wall = System.currentTimeMillis()
-                    val songChanged = song.id != lastSongId
+                    // Resuming has to re-send too: the paused presence carries no timestamps, so
+                    // without this the progress bar never comes back until the track changes.
+                    val songChanged = song.id != lastSongId || !lastWasPlaying
+                    lastWasPlaying = true
                     val expectedPos = lastPosition + (wall - lastPositionWall)
                     val seeked = !songChanged && lastSongId != null &&
                         kotlin.math.abs(pos - expectedPos) > 3000
@@ -135,9 +157,11 @@ object DiscordRPC {
                         scheduleSeekPresence(player)
                     }
                 } else {
+                    // Reached only when there is genuinely no track loaded.
                     if (lastSongId != null) {
                         lastSongId = null
                         lastDuration = 0L
+                        lastWasPlaying = false
                         clearPresence()
                     }
                 }
@@ -162,6 +186,28 @@ object DiscordRPC {
         }
     }
 
+    /**
+     * Debounced paused presence.
+     *
+     * VLC reports `stopped` between tracks with the song still loaded, so an undebounced version
+     * would publish a paused entry and then immediately a playing one on every single skip. That
+     * is two pipe writes per track change, and rapid skipping is precisely what tripped Discord's
+     * activity rate limit before. Waiting out the gap collapses a skip back to one write, while a
+     * genuine pause is still reflected within half a second.
+     */
+    private fun schedulePausedPresence(player: DesktopPlayer) {
+        pauseJob?.cancel()
+        pauseJob = scope.launch {
+            delay(500)
+            val state = player.state.value
+            if (state.isPlaying) return@launch
+            val song = state.currentSong ?: return@launch
+            lastSongId = song.id
+            lastDuration = state.duration
+            sendPausedPresence(song)
+        }
+    }
+
     /** Serializes pipe writes — song-change and seek updates come from different coroutines. */
     private suspend fun sendPresence(song: SongInfo, startEpoch: Long, durationMs: Long) {
         presenceMutex.withLock { setPresence(song, startEpoch, durationMs) }
@@ -170,6 +216,8 @@ object DiscordRPC {
     private suspend fun stopPresenceUpdates() {
         seekJob?.cancel()
         seekJob = null
+        pauseJob?.cancel()
+        pauseJob = null
         updateJob?.cancel()
         updateJob = null
         lastSongId = null
@@ -287,7 +335,24 @@ object DiscordRPC {
         }
     }
 
-    private suspend fun setPresence(song: SongInfo, startEpoch: Long, durationMs: Long) {
+    /**
+     * Publish the paused view of [song]: same track, no timestamps.
+     *
+     * Timestamps are what make Discord animate. Leaving them in place while paused would leave a
+     * progress bar advancing through a track that is not moving, which reads worse than showing
+     * nothing. Dropping them freezes the entry, and the small badge says Paused so it is legible
+     * rather than just stalled.
+     */
+    private suspend fun sendPausedPresence(song: SongInfo) {
+        presenceMutex.withLock { setPresence(song, startEpoch = 0L, durationMs = 0L, paused = true) }
+    }
+
+    private suspend fun setPresence(
+        song: SongInfo,
+        startEpoch: Long,
+        durationMs: Long,
+        paused: Boolean = false
+    ) {
             try {
                 if (!connect()) return
 
@@ -300,10 +365,10 @@ object DiscordRPC {
                     ?.let { escapeJson(it) }
                 val ytUrl = escapeJson("https://music.youtube.com/watch?v=${song.id}")
                 // With an end timestamp Discord renders a progress bar instead of a count-up
-                val timestamps = if (durationMs > 0) {
-                    """{"start":$startEpoch,"end":${startEpoch + durationMs / 1000}}"""
-                } else {
-                    """{"start":$startEpoch}"""
+                val timestamps = when {
+                    paused -> null
+                    durationMs > 0 -> """{"start":$startEpoch,"end":${startEpoch + durationMs / 1000}}"""
+                    else -> """{"start":$startEpoch}"""
                 }
 
                 val activity = buildString {
@@ -311,14 +376,14 @@ object DiscordRPC {
                     append(""""type":2,""") // LISTENING
                     append(""""details":"$title",""")
                     append(""""state":"$artist",""")
-                    append(""""timestamps":$timestamps,""")
+                    if (timestamps != null) append(""""timestamps":$timestamps,""")
                     append(""""assets":{""")
                     if (thumbnailUrl != null) {
                         append(""""large_image":"$thumbnailUrl",""")
                     }
                     append(""""large_text":"$album",""")
                     append(""""small_image":"$SMALL_IMAGE_KEY",""")
-                    append(""""small_text":"Lyrenne"""")
+                    append(""""small_text":"${if (paused) "Paused" else "Lyrenne"}"""")
                     append("""},""")
                     append(""""buttons":[{"label":"Listen on YouTube Music","url":"$ytUrl"}]""")
                     append("""}},"nonce":"${System.nanoTime()}"}""")
@@ -362,8 +427,11 @@ object DiscordRPC {
     fun release() {
         settingsJob?.cancel()
         updateJob?.cancel()
+        seekJob?.cancel()
+        pauseJob?.cancel()
         lastSongId = null
         lastDuration = 0L
+        lastWasPlaying = false
         disconnect()
         scope.cancel()
     }

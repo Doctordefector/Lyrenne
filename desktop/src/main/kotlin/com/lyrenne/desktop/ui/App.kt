@@ -25,6 +25,7 @@ import kotlinx.coroutines.launch
 import com.lyrenne.desktop.ui.components.AutoScroll
 import com.lyrenne.desktop.ui.components.LyricsPanel
 import com.lyrenne.desktop.ui.components.MiniPlayer
+import com.lyrenne.desktop.ui.components.UpdateBadge
 
 enum class Screen(val title: String, val icon: ImageVector, val selectedIcon: ImageVector) {
     Home("Home", Icons.Outlined.Home, Icons.Filled.Home),
@@ -421,6 +422,19 @@ fun App(player: DesktopPlayer) {
                                     )
                                 }
                             }
+
+                            // Overlays the screen rather than sitting in the layout, so no screen
+                            // needs to know it exists. Hidden on Settings, which is where it goes.
+                            UpdateBadge(
+                                visible = !(currentScreen == Screen.Settings && detailStack.isEmpty()),
+                                onClick = {
+                                    detailStack.clear()
+                                    currentScreen = Screen.Settings
+                                },
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(16.dp)
+                            )
                         }
 
                         // Lyrics panel (slides in from right)

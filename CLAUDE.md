@@ -175,6 +175,7 @@ Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop 
 | File | Purpose |
 |------|---------|
 | ui/components/MiniPlayer.kt | Player bar with seek, controls, volume, queue/lyrics buttons |
+| ui/components/UpdateBadge.kt | Floating top-right "update waiting" pill, navigates to Settings |
 | ui/components/LyricsPanel.kt | Synced/plain lyrics sidebar with auto-scroll |
 | ui/theme/Theme.kt | Material3 color schemes, system theme detection |
 
@@ -624,7 +625,7 @@ skipping is exactly what tripped the rate limit that rule 6 in `AGENTS.md` exist
 - SQLDelight accessor is `lyrenneQueries`, named after the `Lyrenne.sq` file (rename the file and the accessor renames with it)
 
 ## Version Management
-- **Current version**: v2.10.2
+- **Current version**: v2.10.3
 - **Version must be updated in TWO places** when releasing:
   1. `desktop/build.gradle.kts` → `lyrenneVersion = "X.Y.Z"`
   2. `desktop/.../update/AutoUpdater.kt` → `CURRENT_VERSION = "X.Y.Z"`
@@ -713,6 +714,29 @@ hand-roll the 7z command.
 
 ### Key file
 - `desktop/.../update/AutoUpdater.kt` — entire update lifecycle (check, download, extract, install script generation)
+
+### Telling the user, in the app
+
+The launch check announces through a tray toast, which is not enough on its own: it fires ten
+seconds after startup, dismisses itself, and leaves nothing behind, so anyone who looked away never
+found out. Note that this was never a notifications-setting problem, despite looking like one.
+`DesktopNotification.notify()` does not consult `notificationsEnabled`; only the song-change
+observer does. The toast was firing for everybody and being missed by anybody.
+
+`ui/components/UpdateBadge.kt` is the persistent half: a pill overlaid on the top-right of the
+content Box in `App.kt`, clicking it clears the detail stack and goes to Settings. It collects
+`AutoUpdater.updateState` directly, so no screen has to know it exists, and it renders nothing
+unless an update is genuinely pending.
+
+- It covers `Downloading` as well as `UpdateAvailable`. Starting a download and navigating away
+  otherwise made the indicator vanish, which reads as the update having failed.
+- It hides itself on Settings, since that is where it points.
+- It only ever appears when `checkUpdatesOnLaunch` is on, because nothing else populates that
+  state. Someone who turned that off has opted out of update checks entirely.
+
+**To see it during development, temporarily lower `AutoUpdater.CURRENT_VERSION`** so the check finds
+the live release newer. Revert before committing: that constant is one of the two version
+declarations that must match.
 
 ### Critical gotchas
 - **ZIP must use forward slashes**: Java's `ZipEntry.isDirectory()` only checks for trailing `/`. PowerShell's `Compress-Archive` uses `\` which breaks extraction. ALWAYS use 7z to create release ZIPs.

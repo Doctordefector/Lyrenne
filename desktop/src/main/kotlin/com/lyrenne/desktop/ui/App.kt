@@ -1,7 +1,9 @@
 package com.lyrenne.desktop.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -229,6 +231,28 @@ fun App(player: DesktopPlayer) {
                         Spacer(Modifier.height(8.dp))
                     }
                 ) {
+                    /**
+                     * The rail scrolls, but only once it has to.
+                     *
+                     * There are ten destinations plus a header, about 620 dp of content, and the
+                     * rail is a plain Column that clips rather than scrolls. On a short window the
+                     * `weight(1f)` below collapses to zero and the last entries simply vanish off
+                     * the bottom: Listen Together was unreachable entirely, with Recognize jammed
+                     * against the MiniPlayer.
+                     *
+                     * The inner `heightIn(min = maxHeight)` is what keeps this from being a
+                     * regression on tall windows. It lets the column fill the rail exactly as
+                     * before, so `weight(1f)` still pins the tools group to the bottom, and only
+                     * when the content genuinely exceeds the available height does the outer
+                     * scroll engage. Scrolling unconditionally would have worked too, but a
+                     * `weight` child inside a scrollable column is meaningless, so the bottom
+                     * group would have drifted up on every screen to fix a fault only short ones
+                     * have.
+                     */
+                    BoxWithConstraints(Modifier.weight(1f)) {
+                        val available = maxHeight
+                        Column(Modifier.verticalScroll(rememberScrollState())) {
+                            Column(Modifier.heightIn(min = available)) {
                     Spacer(Modifier.height(8.dp))
 
                     Screen.entries.forEach { screen ->
@@ -304,6 +328,9 @@ fun App(player: DesktopPlayer) {
                     }
 
                     Spacer(Modifier.height(16.dp))
+                            }
+                        }
+                    }
                 }
 
                 // Main content

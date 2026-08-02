@@ -20,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -223,11 +224,28 @@ fun SearchScreen(
                     }
                 }
                 query.isNotEmpty() && !isLoading -> {
-                    Text(
-                        "No results found",
-                        modifier = Modifier.align(Alignment.Center),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    // A bare "No results found" reads as the app being broken, which is exactly
+                    // the impression that made the Videos filter look faulty when it was working
+                    // correctly all along. The app knows something the user does not: it searches
+                    // one catalogue, not all of YouTube. Saying so turns a dead end into an answer.
+                    Column(
+                        modifier = Modifier.align(Alignment.Center).padding(horizontal = 32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            "No results in YouTube Music",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Lyrenne searches YouTube Music, not all of YouTube, so uploads " +
+                                "like marmot cleaning videos or tech reviews won't appear here.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
                 else -> {
                     // Search history (when idle)

@@ -26,7 +26,11 @@ no telemetry. Unzip it and it runs.
 
 1. Grab `Lyrenne-X.Y.Z-portable.zip` from [the latest release](https://github.com/Doctordefector/Lyrenne/releases/latest).
 2. Extract it **anywhere except a cloud-synced folder** (see the warning below).
-3. Run `Lyrenne.exe` and sign in with your browser.
+3. Run `Lyrenne.exe`. A short setup walks you through signing in and picking your settings.
+
+When it opens a browser to sign in, choose **Accept all** on the cookie prompt. That is how Lyrenne
+signs in: it reads those cookies once, then closes the browser profile. If the browser offers to
+save your password afterwards you can decline, that part makes no difference.
 
 Or install it with [Scoop](https://scoop.sh):
 
@@ -53,10 +57,15 @@ own Java runtime. Windows 10 or 11, 64-bit.
 | **Discovery** | Home feed with continuations, Explore (new releases, moods & genres, charts), search with filters and suggestions, radio and auto-queue, quick picks, podcasts |
 | **Lyrics** | Synced and plain, from a five-provider chain (BetterLyrics → LrcLib → KuGou → YouTube lyrics → YouTube transcript), with size, alignment and click-to-seek options |
 | **Social** | Listen Together rooms with live playback sync, Discord Rich Presence, Last.fm scrobbling |
-| **Extras** | Music recognition through Shazam, listening stats and history, downloads with progress, car/USB export to loudness-normalized MP3, backup and restore, proxy support, region and language settings, system tray with a mini player, media-key and keyboard shortcuts, Material 3 theming that follows your system |
+| **Extras** | Guided first-run setup, music recognition through Shazam, listening stats and history, downloads with progress, car/USB export to loudness-normalized MP3, backup and restore, proxy support, region and language settings, system tray with a mini player, media-key and keyboard shortcuts, Material 3 theming that follows your system |
 
 Everything the app writes (database, credentials, preferences, cache, downloads) stays in the
-app's own folder. Nothing is written to `%APPDATA%`, and nothing is sent anywhere but YouTube.
+app's own folder. Nothing is written to `%APPDATA%`, and there is no telemetry.
+
+Traffic goes to YouTube, plus whichever of these you actually turn on: the lyrics providers, Last.fm
+if you connect it, Discord's local pipe for Rich Presence, GitHub for update checks, and the Listen
+Together relay server while you are in a room. Listen Together is the only one that involves a
+third-party server holding anything, and it only sees what you are playing while a room is open.
 
 ## Why it exists
 

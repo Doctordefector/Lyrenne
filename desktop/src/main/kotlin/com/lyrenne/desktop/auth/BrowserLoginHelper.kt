@@ -47,6 +47,27 @@ object BrowserLoginHelper {
     }
 
     /**
+     * Delete the login profile. Safe to call when it does not exist.
+     *
+     * The profile is single-use scratch space: once the cookies are in credentials.json it has
+     * no further purpose, and what it still holds is a second live Google session. Around 87 MB
+     * of Chromium profile including the cookie DB and its key. Leaving it behind meant signing
+     * out deleted credentials.json and left a working session sitting next to it.
+     *
+     * Failure is logged, not raised. A browser process still holding a file lock is not a reason
+     * to fail a sign-in that already succeeded; the next attempt overwrites the profile anyway.
+     */
+    fun clearLoginProfile() {
+        val dir = File(com.lyrenne.desktop.AppPaths.dataDir, "login-profile")
+        if (!dir.exists()) return
+        if (dir.deleteRecursively()) {
+            Timber.i("Cleared login profile")
+        } else {
+            Timber.w("Could not fully clear login profile at ${dir.absolutePath}")
+        }
+    }
+
+    /**
      * 1. Launch browser with a dedicated profile dir
      * 2. Wait for the user to sign in and close the browser
      * 3. Read cookies from the now-unlocked cookie DB
@@ -146,13 +167,25 @@ object BrowserLoginHelper {
     private fun readCookiesFromProfile(profileDir: File, browserName: String): CookieExtractResult {
         val cookieDb = File(profileDir, "Default/Network/Cookies").takeIf { it.exists() }
             ?: File(profileDir, "Default/Cookies").takeIf { it.exists() }
-            ?: return CookieExtractResult.Error("No cookies found. Did you sign in to YouTube Music?")
+            // Two things land here, and declining the cookie prompt is the one nobody guesses:
+            // reject it and the sign-in cookies are never written at all, so the profile looks
+            // the same as one where the user closed the browser without signing in.
+            ?: return CookieExtractResult.Error(
+                "No sign-in cookies found. This usually means the cookie prompt was declined, " +
+                    "or the browser was closed before signing in. Try again and choose " +
+                    "\"Accept all\" when the browser asks about cookies."
+            )
 
         val localState = File(profileDir, "Local State")
         if (!localState.exists()) {
             return CookieExtractResult.Error("Browser profile incomplete (no Local State)")
         }
 
-        return BrowserCookieExtractor.extractChromiumCookies(cookieDb, localState, browserName)
+        val result = BrowserCookieExtractor.extractChromiumCookies(cookieDb, localState, browserName)
+        // Both entry points funnel through here, and only a Success means the cookies are safely
+        // in memory. On anything else the profile has to survive, since the poll path calls this
+        // repeatedly while the user is still signing in.
+        if (result is CookieExtractResult.Success) clearLoginProfile()
+        return result
     }
 }

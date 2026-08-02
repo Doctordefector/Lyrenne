@@ -27,7 +27,7 @@ From the project root directory:
 
 ```
 desktop/
-├── src/main/kotlin/com/lyrenne/music/desktop/
+├── src/main/kotlin/com/lyrenne/desktop/
 │   ├── Main.kt                    # Application entry point
 │   ├── playback/
 │   │   └── DesktopPlayer.kt       # VLC-based audio player

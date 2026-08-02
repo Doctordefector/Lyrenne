@@ -34,7 +34,8 @@ import javax.swing.JFileChooser
 
 @Composable
 fun SettingsScreen(
-    onLoginClick: () -> Unit = {}
+    onLoginClick: () -> Unit = {},
+    onRerunSetup: () -> Unit = {}
 ) {
     val authState by AuthManager.authState.collectAsState()
     val preferences by PreferencesManager.preferences.collectAsState()
@@ -776,7 +777,8 @@ fun SettingsScreen(
                         onValueChange = { password = it },
                         modifier = Modifier.fillMaxWidth().suppressMediaKeys(),
                         label = { Text("Password") },
-                        singleLine = true
+                        singleLine = true,
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
                     )
                     Spacer(Modifier.height(8.dp))
 
@@ -865,6 +867,15 @@ fun SettingsScreen(
                         onCheckedChange = { PreferencesManager.setNotificationsEnabled(it) }
                     )
                 }
+            )
+        }
+
+        item {
+            SettingsItem(
+                icon = Icons.Default.Rocket,
+                title = "Run First-Time Setup Again",
+                subtitle = "Walk back through sign-in, folders and integrations",
+                onClick = onRerunSetup
             )
         }
 
@@ -1391,8 +1402,8 @@ private fun ProxyConfigCard(
     }
 }
 
-/** Curated content country list (ISO 3166-1 alpha-2) */
-private val contentCountries = listOf(
+/** Curated content country list (ISO 3166-1 alpha-2). Shared with OnboardingScreen. */
+internal val contentCountries = listOf(
     "system" to "System default",
     "US" to "United States",
     "GB" to "United Kingdom",
@@ -1426,8 +1437,8 @@ private val contentCountries = listOf(
     "ZA" to "South Africa"
 )
 
-/** Curated content language list (ISO 639-1) */
-private val contentLanguages = listOf(
+/** Curated content language list (ISO 639-1). Shared with OnboardingScreen. */
+internal val contentLanguages = listOf(
     "system" to "System default",
     "en" to "English",
     "de" to "Deutsch",

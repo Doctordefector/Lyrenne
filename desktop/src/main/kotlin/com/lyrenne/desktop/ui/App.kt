@@ -76,6 +76,9 @@ fun App(player: DesktopPlayer) {
     var showQueueScreen by remember { mutableStateOf(false) }
     var showLyricsPanel by remember { mutableStateOf(false) }
     var showCommandPalette by remember { mutableStateOf(false) }
+    // Set when something navigates to Settings to do one specific thing; Settings clears it once
+    // it has scrolled, so returning there later opens at the top as normal.
+    var settingsScrollTarget by remember { mutableStateOf<String?>(null) }
     val authState by AuthManager.authState.collectAsState()
     val scope = rememberCoroutineScope()
 
@@ -418,7 +421,9 @@ fun App(player: DesktopPlayer) {
                                     )
                                     Screen.Settings -> SettingsScreen(
                                         onLoginClick = { currentAppScreen = AppScreen.Login },
-                                        onRerunSetup = { currentAppScreen = AppScreen.Onboarding }
+                                        onRerunSetup = { currentAppScreen = AppScreen.Onboarding },
+                                        scrollToSection = settingsScrollTarget,
+                                        onSectionScrolled = { settingsScrollTarget = null }
                                     )
                                 }
                             }
@@ -430,6 +435,10 @@ fun App(player: DesktopPlayer) {
                                 onClick = {
                                     detailStack.clear()
                                     currentScreen = Screen.Settings
+                                    // Landing at the top of a 16-section list is barely better
+                                    // than not navigating: the update controls are second from
+                                    // the bottom and people were not finding them.
+                                    settingsScrollTarget = SETTINGS_SECTION_UPDATES
                                 },
                                 modifier = Modifier
                                     .align(Alignment.TopEnd)

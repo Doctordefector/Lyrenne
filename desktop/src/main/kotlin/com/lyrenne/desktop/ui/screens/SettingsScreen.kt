@@ -3,6 +3,7 @@ package com.lyrenne.desktop.ui.screens
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
@@ -32,10 +33,15 @@ import java.awt.Desktop
 import java.net.URI
 import javax.swing.JFileChooser
 
+/** Key of the Updates section header, so callers can deep-link straight to it. */
+const val SETTINGS_SECTION_UPDATES = "section_updates"
+
 @Composable
 fun SettingsScreen(
     onLoginClick: () -> Unit = {},
-    onRerunSetup: () -> Unit = {}
+    onRerunSetup: () -> Unit = {},
+    scrollToSection: String? = null,
+    onSectionScrolled: () -> Unit = {}
 ) {
     val authState by AuthManager.authState.collectAsState()
     val preferences by PreferencesManager.preferences.collectAsState()
@@ -105,7 +111,36 @@ fun SettingsScreen(
         )
     }
 
+    val listState = rememberLazyListState()
+
+    /**
+     * Jump to a section when something sent the user here to do one specific thing.
+     *
+     * Deliberately finds the target by key rather than by a hardcoded index. This list is 57
+     * items and someone will eventually insert a section above Updates; an index constant would
+     * break silently at that point and land people on the wrong setting. A LazyColumn only knows
+     * about items it has composed, so the only way to locate an off-screen one is to walk toward
+     * it, which is what this does. The guard bounds that walk in case the key is ever removed.
+     */
+    LaunchedEffect(scrollToSection) {
+        val target = scrollToSection ?: return@LaunchedEffect
+        var guard = 0
+        while (guard++ < 80) {
+            val visible = listState.layoutInfo.visibleItemsInfo
+            val hit = visible.firstOrNull { it.key == target }
+            if (hit != null) {
+                listState.animateScrollToItem(hit.index)
+                break
+            }
+            val last = visible.lastOrNull()?.index ?: break
+            if (last >= listState.layoutInfo.totalItemsCount - 1) break
+            listState.scrollToItem(last + 1)
+        }
+        onSectionScrolled()
+    }
+
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -1039,8 +1074,9 @@ fun SettingsScreen(
             }
         }
 
-        // Updates section
-        item {
+        // Updates section. Keyed so the update badge can deep-link here; see the LaunchedEffect
+        // above. Removing or renaming this key silently breaks that jump.
+        item(key = SETTINGS_SECTION_UPDATES) {
             SettingsSectionHeader("Updates")
         }
 

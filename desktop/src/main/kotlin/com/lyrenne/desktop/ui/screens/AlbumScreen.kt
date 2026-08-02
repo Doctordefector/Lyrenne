@@ -401,8 +401,10 @@ internal fun SongItem.toDesktopSongInfo(): SongInfo {
     )
 }
 
+/** `m:ss`, or `h:mm:ss` past an hour. See the note on MiniPlayer's formatTime. */
 private fun formatDuration(seconds: Int): String {
-    val m = seconds / 60
-    val s = seconds % 60
-    return "%d:%02d".format(m, s)
+    val total = seconds.coerceAtLeast(0)
+    val h = total / 3600
+    return if (h > 0) "%d:%02d:%02d".format(h, (total % 3600) / 60, total % 60)
+    else "%d:%02d".format(total / 60, total % 60)
 }

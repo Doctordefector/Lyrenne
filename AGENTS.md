@@ -64,6 +64,12 @@ Each of these exists because breaking it caused real damage.
     safe, which is the Library lists and nothing else.
 12. **No em dashes.** Not in UI strings, docs, comments or commit messages. The project owner does
     not write with them and will ask for them to be removed.
+13. **Never read `SongInfo.durationMs` or `.duration` directly.** They are the same fact in
+    different units and only one is ever populated, depending on where the song came from. Use
+    `knownDurationMs()`, and prefer the live `PlaybackState.duration` when it is non-zero.
+14. **Clear `isSyncing` in a `finally`, and never suspend there outside `NonCancellable`.** A
+    suspending call in a `finally` throws the moment the job is cancelled, so the reset after it
+    never runs. Leaking the flag silently stops this client sending anything to the room.
 
 ## Things that look broken but are not
 

@@ -396,9 +396,17 @@ fun MiniPlayer(
     }
 }
 
+/**
+ * `m:ss`, or `h:mm:ss` once the track runs past an hour.
+ *
+ * Without the hours branch a 90 minute mix rendered as "90:00" and a long set as "150:00".
+ * Never wrong, just unreadable, and hour-plus uploads are common on YouTube Music.
+ */
 private fun formatTime(ms: Long): String {
-    val totalSeconds = ms / 1000
-    val minutes = totalSeconds / 60
+    val totalSeconds = (ms / 1000).coerceAtLeast(0)
+    val hours = totalSeconds / 3600
+    val minutes = (totalSeconds % 3600) / 60
     val seconds = totalSeconds % 60
-    return "%d:%02d".format(minutes, seconds)
+    return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, seconds)
+    else "%d:%02d".format(minutes, seconds)
 }

@@ -592,6 +592,24 @@ a URL, because Discord does not reliably render external images in activity asse
 
 Neither the name nor the art assets can be changed from code. Both are Developer Portal actions.
 
+### Pausing is not the same as stopping
+
+The collector used to branch on `song != null && isPlaying`, so pausing fell through to the same
+`clearPresence()` as having no track at all. The presence vanished, and to everyone else it looked
+like Lyrenne had been closed.
+
+A pause now publishes the same track **with the timestamps omitted**. That omission is the point:
+Discord animates from timestamps, so leaving them would show a progress bar advancing through a
+track that is not moving. Without them the entry freezes, and `small_text` reads Paused so it is
+legible rather than merely stalled. Resuming re-sends with a fresh anchor, which is what brings the
+progress bar back, so `lastWasPlaying` has to be part of the change check. `clearPresence()` is now
+reached only when there is genuinely no track.
+
+**The paused send is debounced 500 ms and cancelled if playback resumes, and that is not optional.**
+VLC reports `stopped` between tracks with the song still loaded, so an immediate send would publish
+a paused entry and then a playing one on *every skip*: two pipe writes per track change. Rapid
+skipping is exactly what tripped the rate limit that rule 6 in `AGENTS.md` exists for.
+
 ## Development Notes
 - VLC must be installed on the system for playback to work (bundled VLC also supported)
 - Stream URLs fetched using InnerTube clients: ANDROID_VR_NO_AUTH → IOS → WEB_REMIX fallback
@@ -606,7 +624,7 @@ Neither the name nor the art assets can be changed from code. Both are Developer
 - SQLDelight accessor is `lyrenneQueries`, named after the `Lyrenne.sq` file (rename the file and the accessor renames with it)
 
 ## Version Management
-- **Current version**: v2.10.1
+- **Current version**: v2.10.2
 - **Version must be updated in TWO places** when releasing:
   1. `desktop/build.gradle.kts` → `lyrenneVersion = "X.Y.Z"`
   2. `desktop/.../update/AutoUpdater.kt` → `CURRENT_VERSION = "X.Y.Z"`

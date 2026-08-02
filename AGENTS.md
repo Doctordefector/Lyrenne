@@ -46,8 +46,11 @@ Each of these exists because breaking it caused real damage.
 5. **Renaming a user data path orphans every existing install.** 2.9.4 did exactly that on
    purpose, trading upgrade smoothness for a clean break, and shipped manual recovery steps in the
    release notes. Do not do it again casually: if a path must change, ship a migration.
-6. **Discord Rich Presence fires on song change only.** An earlier version re-sent it on position
-   ticks, which raced the named pipe and hit Discord's rate limit. Do not reintroduce that.
+6. **Discord Rich Presence must never re-send on position ticks.** An earlier version did, which
+   raced the named pipe and hit Discord's rate limit. It now sends on song change, a detected
+   seek, a duration correction from VLC, and pause or resume. Every one of those is a discrete
+   event that fires about once per track, and the seek and pause paths are both debounced. Any
+   new trigger has to clear the same bar: discrete, roughly once per track, debounced.
 7. **Do not bump the version** unless asked. It lives in two places that must match:
    `desktop/build.gradle.kts` and `AutoUpdater.CURRENT_VERSION`.
 8. **`data/login-profile` must never outlive a sign-in.** It holds a live Google session. Deleting

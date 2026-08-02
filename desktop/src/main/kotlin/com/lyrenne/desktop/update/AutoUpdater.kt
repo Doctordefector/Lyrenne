@@ -26,7 +26,7 @@ import java.util.zip.ZipInputStream
  * Program Files, it's installed. Otherwise it's portable.
  */
 object AutoUpdater {
-    const val CURRENT_VERSION = "2.9.7"
+    const val CURRENT_VERSION = "2.10.0"
     private const val GITHUB_OWNER = "Doctordefector"
     private const val GITHUB_REPO = "Lyrenne"
 
@@ -274,18 +274,34 @@ object AutoUpdater {
 
     // ==================== Portable update script ====================
 
+    /**
+     * Quote a Windows path for a PowerShell *single*-quoted literal.
+     *
+     * These paths are wherever the user unzipped the app, and `$` is legal in a Windows folder
+     * name. Inside "..." PowerShell would expand `$Music` to nothing, so the update would copy to
+     * the wrong place and only say so in a log nobody reads. And `$(...)`, also a legal folder
+     * name, would be executed outright. Single quotes suppress both; the only escape a
+     * single-quoted string needs is a doubled quote.
+     */
+    private fun psQuote(path: String): String = "'" + path.replace("'", "''") + "'"
+
     private fun buildPortableUpdateScript(
         pid: Long, sourcePath: String, destPath: String,
         exePath: String, logPath: String, stagingRoot: String
     ): String = """
         ${'$'}ErrorActionPreference = "Continue"
+        ${'$'}SourcePath = ${psQuote(sourcePath)}
+        ${'$'}DestPath = ${psQuote(destPath)}
+        ${'$'}ExePath = ${psQuote(exePath)}
+        ${'$'}LogPath = ${psQuote(logPath)}
+        ${'$'}StagingRoot = ${psQuote(stagingRoot)}
         function Log(${'$'}msg) {
             ${'$'}ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-            "${'$'}ts  ${'$'}msg" | Out-File -FilePath "$logPath" -Append -Encoding UTF8
+            "${'$'}ts  ${'$'}msg" | Out-File -FilePath ${'$'}LogPath -Append -Encoding UTF8
         }
         Log "=== Lyrenne Portable Update ==="
-        Log "Source: $sourcePath"
-        Log "Destination: $destPath"
+        Log "Source: ${'$'}SourcePath"
+        Log "Destination: ${'$'}DestPath"
 
         # Wait for app to exit (max 60s)
         ${'$'}waited = 0
@@ -300,8 +316,8 @@ object AutoUpdater {
         # Copy with robocopy
         Log "Copying files..."
         ${'$'}result = Start-Process -FilePath "robocopy.exe" -ArgumentList @(
-            "$sourcePath", "$destPath", "/E", "/IS", "/IT",
-            "/R:5", "/W:2", "/NFL", "/NDL", "/NP", "/LOG+:$logPath"
+            ${'$'}SourcePath, ${'$'}DestPath, "/E", "/IS", "/IT",
+            "/R:5", "/W:2", "/NFL", "/NDL", "/NP", "/LOG+:${'$'}LogPath"
         ) -Wait -NoNewWindow -PassThru
 
         if (${'$'}result.ExitCode -lt 8) {
@@ -312,10 +328,10 @@ object AutoUpdater {
 
         # Restart
         Log "Starting Lyrenne..."
-        Start-Process -FilePath "$exePath"
+        Start-Process -FilePath ${'$'}ExePath
 
         Start-Sleep -Seconds 3
-        Remove-Item -Path "$stagingRoot" -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -Path ${'$'}StagingRoot -Recurse -Force -ErrorAction SilentlyContinue
         Log "=== Update Complete ==="
         Remove-Item -Path ${'$'}MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
     """.trimIndent()
@@ -367,9 +383,39 @@ object AutoUpdater {
         }
     }
 
+    /**
+     * Every hop of the update download has to stay on HTTPS and on GitHub.
+     *
+     * What arrives here is extracted over the app directory and then executed, so the transport
+     * is the whole trust chain, since there is no signature to fall back on. The redirect loop below
+     * follows `Location` by hand, and without this check a single hop answering with an
+     * `http://` target would turn the updater into a cleartext delivery channel for code that
+     * runs as the user. Anything not on github.com is refused for the same reason.
+     */
+    private fun requireTrustedUrl(url: String) {
+        val uri = try {
+            URI(url)
+        } catch (e: Exception) {
+            throw SecurityException("Malformed update URL: $url")
+        }
+        if (!uri.scheme.equals("https", ignoreCase = true)) {
+            throw SecurityException("Refusing non-HTTPS update URL (scheme: ${uri.scheme})")
+        }
+        val host = uri.host?.lowercase()
+            ?: throw SecurityException("Update URL has no host: $url")
+        val trusted = host == "github.com" ||
+            host.endsWith(".github.com") ||
+            host.endsWith(".githubusercontent.com")
+        if (!trusted) {
+            throw SecurityException("Refusing update download from untrusted host: $host")
+        }
+    }
+
     private fun downloadFile(url: String, target: File, totalSize: Long, onProgress: (Float) -> Unit) {
         var currentUrl = url
         var redirects = 0
+
+        requireTrustedUrl(currentUrl)
 
         val connection: HttpURLConnection
         while (true) {
@@ -384,7 +430,10 @@ object AutoUpdater {
                 val location = conn.getHeaderField("Location")
                     ?: throw Exception("Redirect without Location header (HTTP $code)")
                 conn.disconnect()
-                currentUrl = location
+                // Resolve relative Locations against the current URL before checking, so a
+                // relative hop cannot slip past the scheme test by having no scheme at all.
+                currentUrl = URI(currentUrl).resolve(location).toString()
+                requireTrustedUrl(currentUrl)
                 if (++redirects > 10) throw Exception("Too many redirects ($redirects)")
                 continue
             }

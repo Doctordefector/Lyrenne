@@ -12,6 +12,10 @@ import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import androidx.compose.ui.unit.dp
+import coil3.ImageLoader
+import coil3.SingletonImageLoader
+import coil3.disk.DiskCache
+import coil3.memory.MemoryCache
 import com.lyrenne.desktop.ui.components.AutoScroll
 import com.lyrenne.desktop.ui.components.TRAY_PANEL_HEIGHT
 import com.lyrenne.desktop.ui.components.TRAY_PANEL_WIDTH
@@ -30,8 +34,11 @@ import com.lyrenne.desktop.integration.LastFmManager
 import com.lyrenne.desktop.notification.DesktopNotification
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import okio.Path.Companion.toPath
 import org.jetbrains.skia.Image
 import timber.log.Timber
 import java.io.File
@@ -70,6 +77,37 @@ fun applyNetworkPreferences() {
         }
     } catch (e: Exception) {
         Timber.e("Failed to apply network preferences: ${e.message}")
+    }
+}
+
+/**
+ * Give Coil a disk cache.
+ *
+ * Off Android, Coil enables no disk cache unless told to, so every thumbnail (home feed, album
+ * art, artist photos) was re-fetched from Google's CDN on every launch. A real install measured
+ * `data/cache` at 0 bytes for exactly that reason.
+ *
+ * It also gives the `cacheSize` preference something to govern. That setting was stored, saved
+ * and displayed under Settings → Storage while nothing anywhere read it: a 500 MB limit on an
+ * empty folder. Coil takes the same number as its eviction bound, so the two now agree.
+ *
+ * The memory cache is a fixed 64 MB rather than Coil's default percentage of max heap. The heap
+ * is capped in build.gradle.kts, and a fixed bound means changing that cap later cannot silently
+ * resize the image cache with it.
+ */
+private fun configureImageLoader() {
+    SingletonImageLoader.setSafe { context ->
+        ImageLoader.Builder(context)
+            .memoryCache {
+                MemoryCache.Builder().maxSizeBytes(64L * 1024 * 1024).build()
+            }
+            .diskCache {
+                DiskCache.Builder()
+                    .directory(PreferencesManager.getCacheDirectory().absolutePath.toPath())
+                    .maxSizeBytes(PreferencesManager.preferences.value.cacheSize)
+                    .build()
+            }
+            .build()
     }
 }
 
@@ -172,7 +210,19 @@ private fun runApp() {
     // Initialize core services before window (fast, no I/O)
     DatabaseHelper.initialize()
     PreferencesManager.initialize()
+    configureImageLoader()
     applyNetworkPreferences()
+
+    // Sweep a login profile left over from an earlier version.
+    //
+    // The profile is single-use scratch. The cookies were copied into credentials.json when it
+    // was created and it is never read again, but nothing used to delete it, so it sat next to
+    // the app holding a second live Google session that even signing out did not remove. A real
+    // install measured 87 MB, which was 99% of the entire data folder.
+    //
+    // Safe at startup specifically because no login can be in flight yet. Nobody is signed out
+    // by this: credentials.json is what the app authenticates with, and it is untouched.
+    com.lyrenne.desktop.auth.BrowserLoginHelper.clearLoginProfile()
 
     application {
         val windowState = rememberWindowState(width = 1200.dp, height = 800.dp)
@@ -219,10 +269,16 @@ private fun runApp() {
         }
 
         val prefs by PreferencesManager.preferences.collectAsState()
-        val playerState by player.state.collectAsState()
+        // Only the current song matters here, so only that is collected. The full playback state
+        // carries a position that updates five times a second during playback, and subscribing to
+        // it re-ran this whole scope (the one holding the Window) at the same rate to recompute
+        // a title that changes once a track.
+        val currentSong by remember(player) {
+            player.state.map { it.currentSong }.distinctUntilChanged()
+        }.collectAsState(null)
 
-        val windowTitle = remember(playerState.currentSong) {
-            val song = playerState.currentSong
+        val windowTitle = remember(currentSong) {
+            val song = currentSong
             if (song != null) "♪ ${song.title} — ${song.artist} | Lyrenne" else "Lyrenne"
         }
 

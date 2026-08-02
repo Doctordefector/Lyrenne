@@ -19,7 +19,7 @@ kotlin {
 }
 
 // Must match AutoUpdater.CURRENT_VERSION — both are checked on every release
-val lyrenneVersion = "2.9.7"
+val lyrenneVersion = "2.10.0"
 
 // Include shared module sources directly (they are Android library modules but pure Kotlin/JVM code)
 sourceSets {
@@ -99,6 +99,13 @@ dependencies {
 compose.desktop {
     application {
         mainClass = "com.lyrenne.desktop.MainKt"
+
+        // Without an explicit ceiling the JVM takes a quarter of physical RAM as max heap, 8 GB
+        // on a 32 GB machine. GC then has no reason to work, and a measured install sat at 455 MB
+        // RSS for a music player. 512 MB is comfortably above what playback, the library and the
+        // image cache actually need; Coil's caches are bounded separately in Main.kt so they no
+        // longer scale off this number.
+        jvmArgs += listOf("-Xmx512m")
 
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Exe)

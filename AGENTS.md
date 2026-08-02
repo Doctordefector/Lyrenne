@@ -50,6 +50,20 @@ Each of these exists because breaking it caused real damage.
    ticks, which raced the named pipe and hit Discord's rate limit. Do not reintroduce that.
 7. **Do not bump the version** unless asked. It lives in two places that must match:
    `desktop/build.gradle.kts` and `AutoUpdater.CURRENT_VERSION`.
+8. **`data/login-profile` must never outlive a sign-in.** It holds a live Google session. Deleting
+   only `credentials.json` on logout left that session on disk, so signing out was not signing out.
+   Delete it on successful extraction, on logout, and at startup. Only on `Success` though: the
+   handoff path re-reads the profile while the user is still signing in.
+9. **Never let the updater off HTTPS or off GitHub.** `requireTrustedUrl()` gates the download URL
+   and every redirect hop. What it fetches is executed, and nothing is signed.
+10. **Paths interpolated into the generated PowerShell update script go through `psQuote()`.**
+    `$` and `$(...)` are both legal in Windows folder names, so double quotes there mean silent
+    wrong-directory copies at best and execution at worst.
+11. **Do not blanket-add `key =` to lazy lists.** Queue and local playlists can hold the same song
+    twice, and Compose throws on duplicate keys. Only collections with database primary keys are
+    safe, which is the Library lists and nothing else.
+12. **No em dashes.** Not in UI strings, docs, comments or commit messages. The project owner does
+    not write with them and will ask for them to be removed.
 
 ## Things that look broken but are not
 
@@ -59,6 +73,10 @@ Each of these exists because breaking it caused real damage.
   on every launch: 11.6 seconds of startup versus 0.57 with the cache.
 - **ffmpeg is not in the repo.** At ~114 MB it exceeds GitHub's file limit, so `fetchFfmpeg`
   downloads it once on demand.
+- **The first-run wizard not appearing is usually correct.** `onboardingCompleted` defaults to
+  `false` in the data class but `true` when read from an existing `preferences.properties`. That
+  asymmetry is the migration keeping current users out of the wizard. Delete the file to see it.
+- **A static Compose window renders zero frames.** Nothing is stuck; it draws on invalidation only.
 
 ## Before claiming a feature is missing
 

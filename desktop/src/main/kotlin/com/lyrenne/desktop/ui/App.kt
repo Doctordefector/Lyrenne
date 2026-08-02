@@ -37,6 +37,7 @@ enum class Screen(val title: String, val icon: ImageVector, val selectedIcon: Im
 sealed class AppScreen {
     data object Main : AppScreen()
     data object Login : AppScreen()
+    data object Onboarding : AppScreen()
 }
 
 // Navigation destinations for detail screens
@@ -62,7 +63,14 @@ enum class AutoPlaylistType(val title: String) {
 
 @Composable
 fun App(player: DesktopPlayer) {
-    var currentAppScreen by remember { mutableStateOf<AppScreen>(AppScreen.Main) }
+    // Read once, not as state: preferences are already loaded by the time App composes, and
+    // collecting the flow here would yank a half-finished wizard away the moment it sets the flag.
+    var currentAppScreen by remember {
+        mutableStateOf<AppScreen>(
+            if (PreferencesManager.preferences.value.onboardingCompleted) AppScreen.Main
+            else AppScreen.Onboarding
+        )
+    }
     var currentScreen by remember { mutableStateOf(Screen.Home) }
     var showQueueScreen by remember { mutableStateOf(false) }
     var showLyricsPanel by remember { mutableStateOf(false) }
@@ -105,6 +113,15 @@ fun App(player: DesktopPlayer) {
     }
 
     when (currentAppScreen) {
+        AppScreen.Onboarding -> {
+            OnboardingScreen(
+                onFinish = {
+                    currentAppScreen = AppScreen.Main
+                    currentScreen = Screen.Home
+                }
+            )
+        }
+
         AppScreen.Login -> {
             LoginScreen(
                 onBack = { currentAppScreen = AppScreen.Main },
@@ -399,7 +416,8 @@ fun App(player: DesktopPlayer) {
                                         }
                                     )
                                     Screen.Settings -> SettingsScreen(
-                                        onLoginClick = { currentAppScreen = AppScreen.Login }
+                                        onLoginClick = { currentAppScreen = AppScreen.Login },
+                                        onRerunSetup = { currentAppScreen = AppScreen.Onboarding }
                                     )
                                 }
                             }

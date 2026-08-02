@@ -89,6 +89,8 @@ data class AppPreferences(
     val carExportDualMono: Boolean = false,     // fold L+R together for tracks mastered on one side
     // One-off safety backup written before sync first deletes local library state
     val syncPruneBackupDone: Boolean = false,
+    // First-run setup wizard. See the note in loadPreferences() about existing installs.
+    val onboardingCompleted: Boolean = false,
 )
 
 object PreferencesManager {
@@ -169,6 +171,12 @@ object PreferencesManager {
                     lyricsClickToSeek = props.getProperty("lyricsClickToSeek")?.toBoolean() ?: true,
                     carExportDualMono = props.getProperty("carExportDualMono")?.toBoolean() ?: false,
                     syncPruneBackupDone = props.getProperty("syncPruneBackupDone")?.toBoolean() ?: false,
+                    // Defaults to TRUE here, unlike the data class, and that asymmetry is the
+                    // whole migration. Reaching this line means preferences.properties already
+                    // existed, so the app has been run before and its owner does not need a
+                    // first-run wizard. A genuinely fresh install has no file, skips this block
+                    // entirely, and gets the data class default of false.
+                    onboardingCompleted = props.getProperty("onboardingCompleted")?.toBoolean() ?: true,
                 )
             }
         } catch (e: Exception) {
@@ -230,6 +238,7 @@ object PreferencesManager {
             props.setProperty("lyricsClickToSeek", prefs.lyricsClickToSeek.toString())
             props.setProperty("carExportDualMono", prefs.carExportDualMono.toString())
             props.setProperty("syncPruneBackupDone", prefs.syncPruneBackupDone.toString())
+            props.setProperty("onboardingCompleted", prefs.onboardingCompleted.toString())
 
             prefsFile.outputStream().use {
                 props.store(it, "Lyrenne Preferences")
@@ -271,6 +280,11 @@ object PreferencesManager {
 
     fun setCacheSize(sizeBytes: Long) {
         _preferences.value = _preferences.value.copy(cacheSize = sizeBytes)
+        savePreferences()
+    }
+
+    fun setOnboardingCompleted(completed: Boolean) {
+        _preferences.value = _preferences.value.copy(onboardingCompleted = completed)
         savePreferences()
     }
 

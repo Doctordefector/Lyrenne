@@ -427,7 +427,7 @@ private fun SongsTab(
                             modifier = Modifier.padding(vertical = 8.dp)
                         )
                     }
-                    items(displaySongs) { dbSong ->
+                    items(displaySongs, key = { it.id }) { dbSong ->
                         val song = dbSong.toSongInfo(artistNamesMap)
                         SongListItem(
                             song = song,
@@ -672,7 +672,7 @@ private fun AlbumsTab(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(displayAlbums) { album ->
+            items(displayAlbums, key = { it.id }) { album ->
                 LibraryGridCard(
                     title = album.title,
                     subtitle = "${album.songCount} songs" + (album.year?.let { " \u2022 $it" } ?: ""),
@@ -685,7 +685,7 @@ private fun AlbumsTab(
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            items(displayAlbums) { album ->
+            items(displayAlbums, key = { it.id }) { album ->
                 ListItem(
                     headlineContent = { Text(album.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     supportingContent = {
@@ -815,7 +815,7 @@ private fun ArtistsTab(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(displayArtists) { artist ->
+            items(displayArtists, key = { it.id }) { artist ->
                 LibraryGridCard(
                     title = artist.name,
                     subtitle = "",
@@ -829,7 +829,7 @@ private fun ArtistsTab(
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            items(displayArtists) { artist ->
+            items(displayArtists, key = { it.id }) { artist ->
                 ListItem(
                     headlineContent = { Text(artist.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     leadingContent = {
@@ -970,7 +970,7 @@ private fun PlaylistsTab(
             }
         }
 
-        items(filteredPlaylists) { playlist ->
+        items(filteredPlaylists, key = { it.id }) { playlist ->
             // Local playlists have no browseId; remote ones navigate to the YouTube playlist screen
             val isLocal = playlist.browseId == null
             var showMenu by remember(playlist.id) { mutableStateOf(false) }
@@ -1146,7 +1146,7 @@ private fun DownloadsTab(
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                items(filteredDownloaded) { dbSong ->
+                items(filteredDownloaded, key = { it.id }) { dbSong ->
                     val song = dbSong.toSongInfo(artistNamesMap)
                     SongListItem(
                         song = song,

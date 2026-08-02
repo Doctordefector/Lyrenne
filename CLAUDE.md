@@ -14,14 +14,14 @@ Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop 
 
 ### Android (reference)
 - Hilt DI, Room DB, Media3 ExoPlayer, Jetpack Compose
-- Entry: `app/src/main/kotlin/com/lyrenne/music/MainActivity.kt`
+- Entry: `app/src/main/kotlin/com/metrolist/music/MainActivity.kt` (upstream's package — see the rename section)
 - Playback: `MusicService` (MediaLibraryService) + `PlayerConnection` bridge
 - Database: Room v35 with `DatabaseDao` (150+ queries)
 - ViewModels: 30+ in `viewmodels/`
 
 ### Desktop (our port)
 - Compose Desktop, VLC (vlcj), SQLDelight, browser cookie extraction for auth
-- Entry: `desktop/src/main/kotlin/com/lyrenne/music/desktop/Main.kt`
+- Entry: `desktop/src/main/kotlin/com/lyrenne/desktop/Main.kt`
 - Singleton managers instead of Hilt: `AuthManager`, `DatabaseHelper`, `PreferencesManager`, `DownloadManager`
 - Player: `DesktopPlayer` (VLC-based via vlcj)
 - DB: SQLDelight schema in `desktop/src/main/sqldelight/.../Lyrenne.sq`
@@ -96,7 +96,7 @@ Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop 
 
 ## Key Files
 
-### Desktop Source (`desktop/src/main/kotlin/com/lyrenne/music/desktop/`)
+### Desktop Source (`desktop/src/main/kotlin/com/lyrenne/desktop/`)
 
 #### Core
 | File | Purpose |
@@ -154,7 +154,8 @@ Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop 
 | ui/screens/SearchScreen.kt | Search with filters + suggestions |
 | ui/screens/LibraryScreen.kt | Library tabs (Songs/Albums/Artists/Playlists/Downloads) |
 | ui/screens/QueueScreen.kt | Queue overlay with drag-to-reorder |
-| ui/screens/LoginScreen.kt | Login flow (new browser or import cookies) |
+| ui/screens/LoginScreen.kt | Login flow (browser sign-in) |
+| ui/screens/OnboardingScreen.kt | First-run setup wizard (7 steps) — see First-Run Onboarding |
 | ui/screens/SettingsScreen.kt | Settings + account display |
 | ui/screens/AlbumScreen.kt | Album detail with tracks, play all, shuffle |
 | ui/screens/ArtistScreen.kt | Artist detail with sections, description |
@@ -234,6 +235,108 @@ feature without solving SYSTEM DPAPI first.
 - SAPISIDHASH = `SHA1(timestamp + " " + SAPISID + " " + origin)`, sent as `Authorization: SAPISIDHASH ts_hash`
 - The ytcfg page fetch needs a current User-Agent (Chrome 137+); old ones get "browser deprecated"
 - **CRITICAL: Cookies MUST be stored in plaintext.** DO NOT encrypt, hash, obfuscate, or add any "secure storage" layer to cookie/credential storage. Plaintext storage in credentials.json is intentional and required — never change this.
+
+## First-Run Onboarding
+
+`ui/screens/OnboardingScreen.kt`, reached through `AppScreen.Onboarding`. Seven steps: welcome,
+sign-in, look & sound, downloads & tray, content & startup, integrations, done.
+
+**Sign-in is the only step with no way past it.** Playback needs a live session, so `Next` stays
+disabled until `AuthManager.authState.isLoggedIn`. Everything after it only writes preferences that
+already have working defaults, so pressing Next without touching anything is a valid path through,
+and a "Skip the rest" button jumps to the end.
+
+**The cookie instruction is load-bearing, not decoration.** Declining the browser's cookie prompt
+means the sign-in cookies are never written, and the resulting profile is indistinguishable from one
+where the user closed the browser without signing in. Both land on the same
+`BrowserLoginHelper` error, which is why that message names the cause. Keep the numbered
+instructions *above* the button: once the browser launches it takes focus and nobody reads the
+Lyrenne window again until they are done.
+
+**Existing installs must not see the wizard.** `onboardingCompleted` defaults to `false` in
+`AppPreferences` but to **`true`** inside `loadPreferences()`. That asymmetry is the entire
+migration: reaching the read means `preferences.properties` already existed, which is proof the app
+has been run before. A genuinely fresh install has no file, skips the block, and gets `false`.
+Do not "fix" the inconsistency by making them match.
+
+`App.kt` picks the starting screen from a plain `.value` read, not `collectAsState()`. Collecting
+would tear the wizard down mid-flight the moment it sets the flag.
+
+To re-test it: delete `data/preferences.properties` from the copy you run. Settings → System →
+"Run First-Time Setup Again" re-enters it without clearing anything.
+
+## The login profile is not a second login, and must not outlive the sign-in
+
+`BrowserLoginHelper` launches a browser against a throwaway profile at `data/login-profile`, reads
+the cookies out of its cookie DB, and copies them into `credentials.json`. That file is what the
+app authenticates with from then on; the profile is never opened again.
+
+Until 2.10.0 nothing deleted it. It therefore sat next to the app holding a full Chromium profile
+with a live Google session and its DPAPI key, and `logout()` did not touch it, so **signing out
+left a working session on disk**. A measured install: 87 MB, which was 99% of the whole `data/`
+folder.
+
+`BrowserLoginHelper.clearLoginProfile()` now runs in three places, and all three are needed:
+
+| Where | Why |
+|---|---|
+| After a successful extraction | The cookies are in memory by then; the profile is spent |
+| `AuthManager.logout()` | Otherwise signing out is not signing out |
+| `Main.runApp()` startup | Sweeps profiles left by pre-2.10.0 versions. Safe there specifically because no login can be in flight yet |
+
+Only delete on `CookieExtractResult.Success`. The handoff path calls `readCookiesFromProfile`
+repeatedly while the user is still typing their password, and deleting on a non-Success would wipe
+the profile mid-login.
+
+The one cost is that the next sign-in starts from a clean profile, so the user retypes their Google
+password instead of the browser remembering them. That is the trade and it was made deliberately.
+
+## Update download: HTTPS and GitHub only
+
+`AutoUpdater.downloadFile` follows redirects by hand (`instanceFollowRedirects = false`). What it
+fetches gets extracted over the app directory and executed, and there is no signature to fall back
+on, so the transport is the entire trust chain.
+
+`requireTrustedUrl()` gates the initial URL and **every** redirect hop: HTTPS only, host must be
+`github.com`, `*.github.com` or `*.githubusercontent.com`. Relative `Location` values are resolved
+against the current URL first, so a schemeless hop cannot skip the check. Without this, one hop
+answering with `http://` turned the updater into a cleartext delivery channel for code that runs as
+the user.
+
+Still missing, deliberately: no checksum or signature. A published hash would only defend against a
+swapped asset, not a compromised account, since both come from the same origin. Real fix is code
+signing.
+
+## The update script is generated, so paths must be single-quoted
+
+`buildPortableUpdateScript` interpolates real filesystem paths into PowerShell. `$` is legal in a
+Windows folder name, so inside `"..."` a path like `C:\Music$Library\Lyrenne` expanded to garbage
+and the update copied to the wrong place, reporting it only in a log nobody reads. `$(...)` is also
+a legal folder name and would have been executed.
+
+Every path goes through `psQuote()`, which wraps in `'...'` and doubles any embedded `'`.
+Single-quoted PowerShell strings expand nothing. Do not switch these back to double quotes to
+interpolate something; assign a new variable at the top of the script instead.
+
+## Rendering, caches and memory
+
+- **Coil gets an explicit `ImageLoader`** in `Main.configureImageLoader()`. Off Android, Coil
+  enables **no disk cache** unless told to, so every thumbnail was refetched from Google's CDN on
+  every launch and `data/cache` measured 0 bytes on real installs. The disk cache is sized from the
+  `cacheSize` preference, which until then was stored, saved and shown in Settings while nothing
+  read it. The memory cache is a fixed 64 MB rather than a percentage of heap, so changing the heap
+  cap cannot silently resize it.
+- **`-Xmx512m` is set in `build.gradle.kts`.** Without a ceiling the JVM takes a quarter of physical
+  RAM (8 GB on a 32 GB machine), GC never has a reason to run, and a measured install sat at 455 MB.
+- **Lazy list keys are deliberately partial.** The Library lists (songs, albums, artists, playlists,
+  downloads) are keyed on database primary keys. The queue, local playlists, search suggestions and
+  home rows are **not**, and must not be: Compose throws on duplicate keys, and those lists can
+  legitimately hold the same item twice. Library is also the only place with search, sort and
+  filter, so that is where the entire benefit is.
+- **No FPS cap exists.** Nothing configures Skiko. `FrameLimiter` is only wired into the software
+  and Linux OpenGL redrawers; `Direct3DRedrawer`, the Windows default, paces off swap-chain vsync.
+  If someone reports 60 Hz on a high-refresh display, check which monitor the window is on before
+  anything else.
 
 ## Library Writes (two-way sync)
 
@@ -460,7 +563,7 @@ Neither the name nor the art assets can be changed from code. Both are Developer
 - SQLDelight accessor is `lyrenneQueries`, named after the `Lyrenne.sq` file (rename the file and the accessor renames with it)
 
 ## Version Management
-- **Current version**: v2.9.7
+- **Current version**: v2.10.0
 - **Version must be updated in TWO places** when releasing:
   1. `desktop/build.gradle.kts` → `lyrenneVersion = "X.Y.Z"`
   2. `desktop/.../update/AutoUpdater.kt` → `CURRENT_VERSION = "X.Y.Z"`

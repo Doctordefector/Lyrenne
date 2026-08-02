@@ -193,6 +193,9 @@ object AuthManager {
             if (credentialsFile.exists()) {
                 credentialsFile.delete()
             }
+            // Deleting credentials.json alone was not a sign-out: the browser login profile is a
+            // second copy of the same session, and it outlived the thing it duplicated.
+            BrowserLoginHelper.clearLoginProfile()
             YouTube.cookie = null
             YouTube.visitorData = null
             YouTube.dataSyncId = null

@@ -8,11 +8,15 @@ package com.lyrenne.desktop.listentogether
 import com.lyrenne.desktop.playback.DesktopPlayer
 import com.lyrenne.desktop.playback.PlaybackState
 import com.lyrenne.desktop.playback.SongInfo
+import com.lyrenne.desktop.playback.knownDurationMs
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -479,8 +483,11 @@ object ListenTogetherManager {
                         basePos + kotlin.math.max(0L, now - serverTime)
                     } ?: basePos
 
-                    // Clamp position to track duration to prevent seeking past end
-                    val trackDuration = roomState.value?.currentTrack?.duration ?: Long.MAX_VALUE
+                    // Clamp position to track duration to prevent seeking past end.
+                    // A duration of 0 means "not known yet", not "zero length" — without the
+                    // takeIf, coerceIn(0, 0) would pin every guest at the start of the track.
+                    val trackDuration = roomState.value?.currentTrack?.duration
+                        ?.takeIf { it > 0 } ?: Long.MAX_VALUE
                     val clampedPos = adjustedPos.coerceIn(0L, trackDuration)
 
                     if (bufferingTrackId != null) {
@@ -573,7 +580,9 @@ object ListenTogetherManager {
 
                 PlaybackActions.SEEK -> {
                     val pos = action.position ?: 0L
-                    val trackDuration = roomState.value?.currentTrack?.duration ?: Long.MAX_VALUE
+                    // 0 means unknown, not zero-length. See the note on the other clamp.
+                    val trackDuration = roomState.value?.currentTrack?.duration
+                        ?.takeIf { it > 0 } ?: Long.MAX_VALUE
                     val clampedPos = pos.coerceIn(0L, trackDuration)
                     val now = System.currentTimeMillis()
 
@@ -770,11 +779,20 @@ object ListenTogetherManager {
                     applyPendingSyncIfReady()
                     client.sendBufferReady(currentTrack.id)
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Timber.tag(TAG).e(e, "Error applying playback state")
             } finally {
-                delay(200)
-                isSyncing = false
+                // NonCancellable is load-bearing, not defensive. `delay` in a finally throws
+                // immediately once the job is cancelled, which skipped the reset below and left
+                // isSyncing stuck true. The player observer is gated on that flag, so this client
+                // silently stopped sending any playback change to the room until it rejoined.
+                // syncToTrack cancels this job by design, so the cancelled path is the common one.
+                withContext(NonCancellable) {
+                    delay(200)
+                    isSyncing = false
+                }
             }
         }
     }
@@ -791,10 +809,7 @@ object ListenTogetherManager {
                 if (currentTrackGeneration != generation) return@launch
 
                 val song = trackInfoToSongInfo(track)
-                val p = player ?: run {
-                    isSyncing = false
-                    return@launch
-                }
+                val p = player ?: return@launch
 
                 isSyncing = true
                 p.playSong(song)
@@ -817,9 +832,15 @@ object ListenTogetherManager {
                 client.sendBufferReady(track.id)
 
                 delay(100)
-                isSyncing = false
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Timber.tag(TAG).e(e, "Error syncing to track")
+            } finally {
+                // Every exit has to clear this, and the generation check above is a plain early
+                // return rather than an exception, so the old catch-only cleanup missed it. That
+                // left isSyncing true forever and wedged the player observer, which is gated on
+                // it. Two sync messages arriving inside the 1s delay is all it took.
                 isSyncing = false
             }
         }
@@ -828,12 +849,21 @@ object ListenTogetherManager {
     // --- Track info conversion ---
 
     private fun songInfoToTrackInfo(song: SongInfo): TrackInfo {
+        // Live duration first, metadata second, 0 last. The old fallback here was 180000L, which
+        // announced an unknown-length track to the room as exactly three minutes. Guests clamp
+        // incoming positions to the room's track duration, so on a long track with no metadata
+        // that pinned every guest at 3:00 for the rest of it. Reporting 0 says "unknown", and the
+        // clamps below now treat 0 as unbounded rather than clamping everything to zero.
+        val live = player?.state?.value
+            ?.takeIf { it.currentSong?.id == song.id }
+            ?.duration
+            ?.takeIf { it > 0 }
         return TrackInfo(
             id = song.id,
             title = song.title,
             artist = song.artist,
             album = song.album,
-            duration = song.durationMs.takeIf { it > 0 } ?: (song.duration.toLong() * 1000).takeIf { it > 0 } ?: 180000L,
+            duration = live ?: song.knownDurationMs(),
             thumbnail = song.thumbnailUrl
         )
     }
@@ -916,7 +946,16 @@ object ListenTogetherManager {
                 if (!isInRoom || isHost) continue
                 val p = player ?: continue
                 val state = p.state.value
-                val duration = state.currentSong?.durationMs?.toLong() ?: 0L
+                // Prefer the live duration: it comes from VLC and is authoritative. The metadata
+                // fallback exists only for the window before VLC has parsed the stream.
+                //
+                // This used to read `currentSong.durationMs` alone, which is 0 for every song
+                // built by `toPlayerSongInfo` (search, home, radio, explore) because that path
+                // fills `duration` in seconds instead. The threshold was therefore never crossed
+                // and long-track resync — the one mechanism meant to keep exactly these tracks in
+                // sync — silently never ran for most of what people play.
+                val duration = state.duration.takeIf { it > 0 }
+                    ?: state.currentSong?.knownDurationMs() ?: 0L
                 if (duration > LONG_TRACK_THRESHOLD_MS && state.isPlaying) {
                     Timber.tag(TAG).d("Guest long-track resync: requesting sync (duration=${duration / 1000}s)")
                     client.requestSync()

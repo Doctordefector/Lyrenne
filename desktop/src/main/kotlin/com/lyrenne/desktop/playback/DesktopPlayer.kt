@@ -53,6 +53,24 @@ data class SongInfo(
     val duration: Int = -1 // in seconds
 )
 
+/**
+ * Metadata duration in milliseconds, or 0 when it is not known.
+ *
+ * SongInfo carries the same fact twice and which copy is filled depends entirely on where the
+ * song came from. Rows read from the database set `durationMs`; anything built by
+ * `toPlayerSongInfo` from an InnerTube result sets only `duration`, in whole seconds, and leaves
+ * `durationMs` at 0. Reading one field directly therefore works for library playback and silently
+ * returns 0 for search, home, radio and explore, which is most of what actually gets played.
+ *
+ * Always prefer the live `PlaybackState.duration` when it is available: that comes from VLC and is
+ * authoritative. This is the seed to use before VLC has reported anything.
+ */
+fun SongInfo.knownDurationMs(): Long = when {
+    durationMs > 0 -> durationMs
+    duration > 0 -> duration * 1000L
+    else -> 0L
+}
+
 /** Sleep timer state: either a wall-clock deadline or end-of-current-track */
 data class SleepTimerState(
     val endsAtMillis: Long? = null,
@@ -365,6 +383,14 @@ class DesktopPlayer {
         _state.value = _state.value.copy(
             currentSong = song,
             position = 0L,
+            // Seed from metadata, because `duration` is otherwise only ever assigned by VLC's
+            // async lengthChanged callback. Without this it kept the PREVIOUS track's value for
+            // the whole gap between starting playback and VLC parsing the stream, and everything
+            // reading it in that window was wrong: the progress bar was mis-scaled, and Discord
+            // published an end timestamp computed from the wrong track. Discord never recovered,
+            // because presence only re-fires on song change or seek. The longer the track, the
+            // later lengthChanged lands and the wider that window gets.
+            duration = song.knownDurationMs(),
             currentIndex = currentIndex
         )
         resetPlayTracking()

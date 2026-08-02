@@ -228,7 +228,10 @@ private fun TrayAction(
     }
 }
 
+/** `m:ss`, or `h:mm:ss` past an hour. See the note on MiniPlayer's formatTime. */
 private fun formatMs(ms: Long): String {
     val total = (ms / 1000).coerceAtLeast(0)
-    return "%d:%02d".format(total / 60, total % 60)
+    val hours = total / 3600
+    return if (hours > 0) "%d:%02d:%02d".format(hours, (total % 3600) / 60, total % 60)
+    else "%d:%02d".format(total / 60, total % 60)
 }

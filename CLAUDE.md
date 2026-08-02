@@ -366,6 +366,49 @@ endpoints existed the whole time — nothing called them.
 - The one place a bare `DatabaseHelper` mutation is correct is `LibrarySync` pruning — that
   reflects remote state inward and must NOT push back out.
 
+## Duration has two sources and they disagree
+
+`SongInfo` carries the same fact twice: `durationMs` (Long, filled from the database) and
+`duration` (Int, **seconds**, filled by `toPlayerSongInfo` from InnerTube). Which one is populated
+depends entirely on where the song came from. Library playback fills the first; search, home, radio
+and explore fill only the second. **Reading either field directly is a bug**; use
+`SongInfo.knownDurationMs()`, and prefer the live `PlaybackState.duration` whenever it is non-zero,
+because that comes from VLC and is authoritative.
+
+`PlaybackState.duration` is assigned in exactly two places: `playUrl` seeds it from metadata, and
+VLC's async `lengthChanged` corrects it. Before 2.10.1 only the second existed, so every track
+began carrying **the previous track's duration** until VLC parsed the stream. That window is wider
+on long tracks, and three things read it and got it wrong: the progress bar was mis-scaled, Discord
+published an end timestamp from the wrong track and never corrected it, and Listen Together
+announced the wrong length to the room.
+
+This is why Discord now also re-sends on a duration correction, not only on song change and seek.
+That is not a reintroduction of the banned position-tick resend: `lengthChanged` fires about once
+per track and the send goes through the existing 700 ms debounce.
+
+## Listen Together: isSyncing is a latch, and leaking it is silent
+
+`isSyncing` gates the player observer (`if (isSyncing || !isInRoom) return@collectLatest`). Leak it
+and this client stops sending **any** playback change to the room, forever, with no error and no
+log. Only rejoining clears it. Two separate leaks existed before 2.10.1:
+
+1. `syncToTrack` cleared the flag in its `catch` and at the end of its `try`, but the generation
+   check mid-body is a plain `return@launch`, not an exception. Two sync messages arriving inside
+   its 1 second delay was enough.
+2. `applyPlaybackState` cleared it in a `finally`, which looks correct, but the `finally` starts
+   with `delay(200)`. **A suspending call in a `finally` throws immediately once the job is
+   cancelled**, so the reset below it never ran. `syncToTrack` cancels that job by design, so the
+   cancelled path was the common one. It now uses `withContext(NonCancellable)`.
+
+Any future cleanup of this flag must run in a `finally`, and must not suspend outside
+`NonCancellable`. Rethrow `CancellationException` before the generic `catch` so cancellation still
+propagates.
+
+**Known remaining smell, deliberately left:** `applyPendingSyncIfReady` also sets `isSyncing` and
+clears it from a detached `scope.launch`, while being called from inside both functions that
+already own the flag. A boolean cannot express nesting. The correct fix is a depth counter, but it
+changes sync locking and cannot be validated without two real clients in a room.
+
 ## Listen Together System
 
 ### Architecture
@@ -563,7 +606,7 @@ Neither the name nor the art assets can be changed from code. Both are Developer
 - SQLDelight accessor is `lyrenneQueries`, named after the `Lyrenne.sq` file (rename the file and the accessor renames with it)
 
 ## Version Management
-- **Current version**: v2.10.0
+- **Current version**: v2.10.1
 - **Version must be updated in TWO places** when releasing:
   1. `desktop/build.gradle.kts` → `lyrenneVersion = "X.Y.Z"`
   2. `desktop/.../update/AutoUpdater.kt` → `CURRENT_VERSION = "X.Y.Z"`

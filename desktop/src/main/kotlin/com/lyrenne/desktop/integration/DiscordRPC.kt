@@ -64,6 +64,7 @@ object DiscordRPC {
     // seek (position jumps out of step with elapsed time) from normal playback drift.
     private var lastPosition = 0L
     private var lastPositionWall = 0L
+    private var lastDuration = 0L
     private var seekJob: Job? = null
     private val presenceMutex = Mutex()
 
@@ -110,10 +111,19 @@ object DiscordRPC {
                     lastPosition = pos
                     lastPositionWall = wall
 
+                    // VLC reports the real length asynchronously, so the value present at song
+                    // change can still be a metadata estimate or, when metadata was missing,
+                    // zero. Correcting it has to reach Discord, otherwise the progress bar stays
+                    // wrong for the whole track. This is NOT the banned position-tick re-send:
+                    // lengthChanged fires about once per track, and the send is debounced below.
+                    val durationCorrected = !songChanged && lastSongId != null &&
+                        state.duration > 0 && state.duration != lastDuration
+                    lastDuration = state.duration
+
                     if (songChanged) {
                         lastSongId = song.id
                         sendPresence(song, wall / 1000 - pos / 1000, state.duration)
-                    } else if (seeked) {
+                    } else if (seeked || durationCorrected) {
                         // The debounce MUST live outside this collectLatest block. Playback
                         // emits a new position every ~200ms, and collectLatest cancels the
                         // block on every emission — so an inline `delay(700)` was killed by
@@ -127,6 +137,7 @@ object DiscordRPC {
                 } else {
                     if (lastSongId != null) {
                         lastSongId = null
+                        lastDuration = 0L
                         clearPresence()
                     }
                 }
@@ -135,9 +146,10 @@ object DiscordRPC {
     }
 
     /**
-     * Debounced seek update, running in [scope] so routine position ticks can't cancel it.
-     * A further seek restarts the timer; once the user settles, the CURRENT state is read
-     * and sent — so the anchor is right no matter how long the scrub took.
+     * Debounced presence resend, running in [scope] so routine position ticks can't cancel it.
+     * Triggered by a seek or by VLC correcting the track length. A further trigger restarts the
+     * timer; once things settle the CURRENT state is read and sent, so the anchor is right no
+     * matter how long the scrub took or how late the length arrived.
      */
     private fun scheduleSeekPresence(player: DesktopPlayer) {
         seekJob?.cancel()
@@ -161,6 +173,7 @@ object DiscordRPC {
         updateJob?.cancel()
         updateJob = null
         lastSongId = null
+        lastDuration = 0L
         clearPresence()
         disconnect()
     }
@@ -350,6 +363,7 @@ object DiscordRPC {
         settingsJob?.cancel()
         updateJob?.cancel()
         lastSongId = null
+        lastDuration = 0L
         disconnect()
         scope.cancel()
     }

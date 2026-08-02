@@ -550,6 +550,27 @@ Every text pairing in both schemes measures at or above 4.5:1. When changing a c
 rather than eyeballing it. Note also that in a **dark** scheme `primaryContainer` is a *dark* tone
 carrying light text: setting it to the mid-tone brand colour made cards render as flat brown slabs.
 
+## Sync must be triggered by signing in, not only by launching
+
+`syncLibrary()` no-ops when not signed in. The launch sync in `Main.kt` fires roughly a second
+after startup, once, so on a first run it hits that no-op: there are no credentials yet. The user
+then signs in and **nothing synced their library until the next restart**, leaving an app that
+looks broken on the exact run where first impressions are formed.
+
+Onboarding made that the path every new user takes, but the gap predates it: signing in from
+Settings had always behaved the same way.
+
+`Main.kt` now also collects `AuthManager.authState`, and syncs on any transition into signed-in.
+Two details are load-bearing:
+
+- **`drop(1)`** skips the value a `StateFlow` replays on subscribe. That value is whatever
+  `AuthManager.initialize()` just settled on, which the launch sync has already handled, so
+  without it every startup would sync twice.
+- **It is deliberately not gated on `autoSyncOnStartup`.** That setting is about launch behaviour.
+  Someone who just signed in performed an explicit action and expects their library to appear.
+
+`syncLibrary()` guards both `isSyncing` and signed-out, so overlapping triggers are safe.
+
 ## Library sync: empty is not the same as failed
 
 `YouTube.library()` throws `IllegalStateException("No content found for browseId=...")` when a
@@ -625,7 +646,7 @@ skipping is exactly what tripped the rate limit that rule 6 in `AGENTS.md` exist
 - SQLDelight accessor is `lyrenneQueries`, named after the `Lyrenne.sq` file (rename the file and the accessor renames with it)
 
 ## Version Management
-- **Current version**: v2.10.3
+- **Current version**: v2.10.4
 - **Version must be updated in TWO places** when releasing:
   1. `desktop/build.gradle.kts` → `lyrenneVersion = "X.Y.Z"`
   2. `desktop/.../update/AutoUpdater.kt` → `CURRENT_VERSION = "X.Y.Z"`

@@ -35,6 +35,8 @@ import com.lyrenne.desktop.notification.DesktopNotification
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
@@ -245,6 +247,36 @@ private fun runApp() {
             delay(1000) // brief delay so UI settles before network storm
             if (PreferencesManager.preferences.value.autoSyncOnStartup) {
                 LibrarySync.syncLibrary()
+            }
+
+            /**
+             * Sync again whenever someone signs in.
+             *
+             * The launch sync above is a single shot, and on a first run it fires before there are
+             * any credentials, so it bails with "Not logged in". The user then signs in, and
+             * nothing synced their library until the next restart: an empty app that looks broken.
+             * Onboarding made that the path every new user takes, but the gap was always there for
+             * anyone signing in from Settings.
+             *
+             * `drop(1)` skips the value StateFlow replays on subscribe, which is whatever
+             * `AuthManager.initialize()` just settled on and the launch sync has already handled.
+             * Only real transitions get here.
+             *
+             * Deliberately not gated on `autoSyncOnStartup`: that setting is about launch
+             * behaviour, and someone who just signed in has taken an explicit action and expects
+             * their library to appear. `syncLibrary()` already no-ops if one is in flight.
+             */
+            launch {
+                AuthManager.authState
+                    .map { it.isLoggedIn }
+                    .distinctUntilChanged()
+                    .drop(1)
+                    .collect { loggedIn ->
+                        if (loggedIn) {
+                            Timber.i("Signed in — syncing library")
+                            LibrarySync.syncLibrary()
+                        }
+                    }
             }
             // Integrations
             DiscordRPC.initialize(player)

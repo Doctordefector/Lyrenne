@@ -86,6 +86,9 @@ Each of these exists because breaking it caused real damage.
   `false` in the data class but `true` when read from an existing `preferences.properties`. That
   asymmetry is the migration keeping current users out of the wizard. Delete the file to see it.
 - **A static Compose window renders zero frames.** Nothing is stuck; it draws on invalidation only.
+- **Anything that depends on being signed in has to be triggered by signing in**, not only at
+  launch. The startup pass runs before credentials exist on a first run, so a launch-only trigger
+  silently does nothing for every new user. Library sync had exactly this bug.
 
 ## Before claiming a feature is missing
 

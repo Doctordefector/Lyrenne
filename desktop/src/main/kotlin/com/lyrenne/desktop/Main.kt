@@ -11,6 +11,8 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
@@ -111,6 +113,33 @@ private fun configureImageLoader() {
             }
             .build()
     }
+}
+
+/**
+ * Opening size, clamped to what the screen can actually display.
+ *
+ * Compose dp map to Java user-space units, and Windows display scaling shrinks the usable desktop
+ * measured in those units. A 1080p screen offers 1920x1032 dp at 100%, but only 1536x826 at 125%
+ * and 1280x688 at 150%. The old fixed 1200x800 therefore opened a window 112 dp taller than the
+ * screen at 150%, cutting off the bottom of the app, which is where the player controls are. 125%
+ * is Windows' recommended setting on most 1080p laptops, so this was the common case rather than
+ * an edge case.
+ *
+ * `maximumWindowBounds` already excludes the taskbar. The 0.92 keeps a margin so the window still
+ * reads as a window instead of filling the screen edge to edge, and there is deliberately no lower
+ * bound: on a genuinely small display the screen is the constraint, and forcing a minimum would
+ * reintroduce the same off-screen problem it is meant to prevent.
+ */
+private fun defaultWindowSize(): DpSize {
+    val usable = try {
+        java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
+    } catch (e: Exception) {
+        Timber.w("Could not read screen bounds, using fixed default: ${e.message}")
+        null
+    }
+    val w = usable?.width?.takeIf { it > 0 }?.let { minOf(1200, (it * 0.92).toInt()) } ?: 1200
+    val h = usable?.height?.takeIf { it > 0 }?.let { minOf(800, (it * 0.92).toInt()) } ?: 800
+    return DpSize(w.dp, h.dp)
 }
 
 /**
@@ -227,7 +256,12 @@ private fun runApp() {
     com.lyrenne.desktop.auth.BrowserLoginHelper.clearLoginProfile()
 
     application {
-        val windowState = rememberWindowState(width = 1200.dp, height = 800.dp)
+        // Centred as well as clamped: a window sized to fit is still useless if the platform
+        // places it partly off-screen.
+        val windowState = rememberWindowState(
+            size = defaultWindowSize(),
+            position = WindowPosition(Alignment.Center)
+        )
         val player = remember { DesktopPlayer() }
         var windowVisible by remember { mutableStateOf(true) }
         var trayPanelAt by remember { mutableStateOf<Pair<Int, Int>?>(null) }
@@ -412,6 +446,29 @@ private fun runApp() {
                     }
                 } catch (e: Exception) {
                     Timber.w("Failed to set AWT window icons: ${e.message}")
+                }
+            }
+
+            /**
+             * Floor on how small the window can be dragged.
+             *
+             * The MiniPlayer's controls are a plain Row of fixed-size buttons, and a Row does not
+             * wrap: below roughly 630 dp of width the title area is squeezed to nothing and the
+             * transport controls start clipping off the edge. Nothing we now open at comes close,
+             * but a user can drag there by hand.
+             *
+             * Clamped against the opening size so it can never exceed what the screen fits. On a
+             * small display the screen is still the constraint, and a minimum larger than the
+             * desktop would recreate the off-screen window this all exists to prevent.
+             */
+            LaunchedEffect(windowState.size) {
+                try {
+                    window.minimumSize = java.awt.Dimension(
+                        minOf(720, windowState.size.width.value.toInt()),
+                        minOf(520, windowState.size.height.value.toInt())
+                    )
+                } catch (e: Exception) {
+                    Timber.w("Could not set minimum window size: ${e.message}")
                 }
             }
 

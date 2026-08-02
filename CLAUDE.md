@@ -529,6 +529,46 @@ README credit to the Metrolist Group also stays, because GPL-3.0 requires preser
 `app/` is upstream's Android source, kept only as a porting reference and never built. Anything
 inside it legitimately still says Metrolist.
 
+## Window sizing: dp are not pixels, and Windows scaling shrinks the desktop
+
+`rememberWindowState` takes dp, which map to Java user-space units, and Windows display scaling
+shrinks the usable desktop measured in those units. A 1080p screen offers 1920x1032 dp at 100% but
+only 1536x826 at 125% and **1280x688 at 150%**. The old fixed `1200.dp x 800.dp` therefore opened a
+window taller than the screen on any 1080p machine above 100% scaling, cutting off the bottom of
+the app, which is where the MiniPlayer is. 125% is Windows' recommended setting on most 1080p
+laptops, so this was the common case. 1366x768 was broken even at 100%.
+
+`defaultWindowSize()` clamps to 92% of `maximumWindowBounds` (which already excludes the taskbar),
+capped at the old 1200x800 so large screens are unchanged. There is deliberately **no lower bound**:
+on a small display the screen is the constraint, and a minimum larger than the desktop recreates
+the exact off-screen bug. The window is also centred, since a correctly sized window placed
+half-off-screen is no better.
+
+A separate `window.minimumSize` of 720x520 stops a user dragging into the broken zone: MiniPlayer's
+controls are a plain `Row` of ten fixed-size buttons plus a 100 dp volume slider, roughly a 552 dp
+floor, and a `Row` clips rather than wraps. That minimum is itself clamped against the opening size
+for the same reason as above.
+
+## Search returns music videos as SongItem
+
+There is no `VideoItem` anywhere. `SongItem` is the only track-shaped result, so a music video
+arrives parsed as one, with `album == null` and `musicVideoType` set. `SongItem.isVideoSong` is the
+predicate, already provided by innertube, and `SearchPage` populates `musicVideoType` for search
+results specifically, so it is real data rather than a theoretical field.
+
+Before 2.10.5 the subtitle interpolated straight into a string with `?: ""`, which rendered a
+dangling `"Artist • "` for anything missing its trailing half. Videos have no album, so that was
+every video, and a video looked identical to the audio track of the same song. The Videos filter
+therefore appeared to do nothing. It was always sending the correct parameter, byte-for-byte
+identical to `FILTER_VIDEO`.
+
+**The Videos filter cannot surface general YouTube content.** `YouTube.search()` queries
+`WEB_REMIX`, which is `music.youtube.com`, where "video" means *music video*. Non-music uploads are
+not in that catalogue at any filter setting. Worth knowing if someone reports it again: playback
+itself is not music-specific (`getStreamUrl` uses `ANDROID_VR_NO_AUTH` and takes any audio adaptive
+format), and NewPipeExtractor is already a compiled dependency, so only *discovery* is missing.
+Deemed a mobile-shaped want and deliberately not built.
+
 ## Theming
 
 Two hand-tuned schemes in `ui/theme/Theme.kt`, neither generated from a seed colour.
@@ -646,7 +686,7 @@ skipping is exactly what tripped the rate limit that rule 6 in `AGENTS.md` exist
 - SQLDelight accessor is `lyrenneQueries`, named after the `Lyrenne.sq` file (rename the file and the accessor renames with it)
 
 ## Version Management
-- **Current version**: v2.10.4
+- **Current version**: v2.10.5
 - **Version must be updated in TWO places** when releasing:
   1. `desktop/build.gradle.kts` → `lyrenneVersion = "X.Y.Z"`
   2. `desktop/.../update/AutoUpdater.kt` → `CURRENT_VERSION = "X.Y.Z"`
@@ -757,7 +797,15 @@ unless an update is genuinely pending.
 
 **To see it during development, temporarily lower `AutoUpdater.CURRENT_VERSION`** so the check finds
 the live release newer. Revert before committing: that constant is one of the two version
-declarations that must match.
+declarations that must match, and shipping a build that thinks it is older than it is puts every
+user in a permanent update loop. Verify with `git show HEAD:<file>`, not just the working tree.
+
+Clicking the badge deep-links to the Updates section rather than dropping the user at the top of a
+16-section list, which is barely better than not navigating. The jump finds its target **by key**
+(`SETTINGS_SECTION_UPDATES` on that `item`), never by index: Settings is 57 items and someone will
+eventually insert a section above Updates, at which point an index constant would silently land
+people on the wrong setting. A `LazyColumn` only knows about composed items, so the effect walks
+down until the key appears, with a bounded guard in case the key is ever removed.
 
 ### Critical gotchas
 - **ZIP must use forward slashes**: Java's `ZipEntry.isDirectory()` only checks for trailing `/`. PowerShell's `Compress-Archive` uses `\` which breaks extraction. ALWAYS use 7z to create release ZIPs.

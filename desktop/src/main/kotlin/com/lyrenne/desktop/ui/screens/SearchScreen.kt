@@ -319,13 +319,33 @@ private fun SearchResultItem(
             )
         },
         supportingContent = {
+            // Every branch used to interpolate a nullable straight into the string with `?: ""`,
+            // which left a dangling "Artist • " whenever the trailing half was missing. Music
+            // videos carry no album, so that was every single video result.
+            fun parts(vararg segments: String?) =
+                segments.filterNot { it.isNullOrBlank() }.joinToString(" • ")
+
             val subtitle = when (item) {
-                is SongItem -> "${item.artists.joinToString { it.name }} • ${item.album?.name ?: ""}"
-                is AlbumItem -> "${item.artists?.joinToString { it.name } ?: "Unknown"} • ${item.year ?: ""}"
+                // Search returns music videos as SongItem, because SongItem is the only
+                // track-shaped result type there is. Without saying so, a video was
+                // indistinguishable from the audio track of the same song, which made the
+                // Videos filter look like it did nothing at all.
+                is SongItem -> parts(
+                    if (item.isVideoSong) "Video" else null,
+                    item.artists.joinToString { it.name },
+                    item.album?.name
+                )
+                is AlbumItem -> parts(
+                    item.artists?.joinToString { it.name } ?: "Unknown",
+                    item.year?.toString()
+                )
                 is ArtistItem -> "Artist"
                 is PlaylistItem -> item.author?.name ?: "Playlist"
-                is PodcastItem -> "${item.author?.name ?: "Podcast"} • ${item.episodeCountText ?: ""}"
-                is EpisodeItem -> "${item.author?.name ?: item.podcast?.name ?: "Episode"} • ${item.publishDateText ?: ""}"
+                is PodcastItem -> parts(item.author?.name ?: "Podcast", item.episodeCountText)
+                is EpisodeItem -> parts(
+                    item.author?.name ?: item.podcast?.name ?: "Episode",
+                    item.publishDateText
+                )
                 else -> ""
             }
             Text(

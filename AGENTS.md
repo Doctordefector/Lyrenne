@@ -89,6 +89,10 @@ Each of these exists because breaking it caused real damage.
 - **Anything that depends on being signed in has to be triggered by signing in**, not only at
   launch. The startup pass runs before credentials exist on a first run, so a launch-only trigger
   silently does nothing for every new user. Library sync had exactly this bug.
+- **The Videos search filter not showing Linus Tech Tips is not a bug.** Search queries
+  `music.youtube.com`, where "video" means music video. General uploads are not in that catalogue.
+- **Window dp are not pixels.** Windows scaling shrinks the usable desktop measured in dp, so any
+  fixed window size must be clamped against `maximumWindowBounds` or it opens off-screen on 1080p.
 
 ## Before claiming a feature is missing
 

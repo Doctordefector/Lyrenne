@@ -93,6 +93,10 @@ Each of these exists because breaking it caused real damage.
   `music.youtube.com`, where "video" means music video. General uploads are not in that catalogue.
 - **Window dp are not pixels.** Windows scaling shrinks the usable desktop measured in dp, so any
   fixed window size must be clamped against `maximumWindowBounds` or it opens off-screen on 1080p.
+- **The navigation rail holds ten destinations and clips silently when they do not fit.** It is a
+  Column, not a list. Adding another entry costs vertical room that short windows do not have, and
+  the failure mode is an item nobody can reach rather than an error. Listen Together was invisible
+  on 1080p for exactly this reason.
 
 ## Before claiming a feature is missing
 

@@ -32,7 +32,7 @@ junit = "4.13.2"
 timber = "5.0.1"
 materialKolor = "4.1.1"
 kuromojiIpadic = "0.9.0"
-newpipeextractor = "v0.26.0"
+extractor = "f0a00f5"
 tinypinyin = "2.0.3"
 protobuf = "4.34.0"
 
@@ -107,7 +107,7 @@ junit = { module = "junit:junit", version.ref = "junit" }
 
 timber = { module = "com.jakewharton.timber:timber", version.ref = "timber" }
 
-newpipeextractor = { module = "com.github.TeamNewPipe:NewPipeExtractor", version.ref = "newpipeextractor" }
+extractor = { module = "com.github.MetrolistGroup:MetrolistExtractor", version.ref = "extractor" }
 
 kuromoji-ipadic = { module = "com.atilika.kuromoji:kuromoji-ipadic", version.ref = "kuromojiIpadic" }
 tinypinyin = { module = "com.github.promeG:tinypinyin", version.ref = "tinypinyin" }

@@ -2,9 +2,9 @@
 
 ## Overview
 Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop (JVM).
-- **Upstream**: https://github.com/MetrolistGroup/Metrolist (shared modules synced to v13.6.0, 2026-07-07; upstream is in maintenance mode)
-  - Sync method: `git checkout v13.6.0 -- innertube betterlyrics shazamkit lrclib kugou lastfm` from `upstream` remote, then re-apply the accountIndex patch (see InnerTube modifications below)
-  - NewPipe.kt deliberately kept at pre-v13.4.1 version + NewPipeExtractor v0.26.0: upstream's LyrenneExtractor fork ships Java 25 bytecode (we target JVM 21), and desktop never calls NewPipeUtils (streams via direct-URL clients)
+- **Upstream**: https://github.com/MetrolistGroup/Metrolist (innertube synced to upstream/main @ 9285e7a96, after v13.6.3, on 2026-08-21; other shared modules unchanged since v13.6.0; upstream is in maintenance mode)
+  - Sync method: `git checkout upstream/main -- innertube`, delete files upstream removed, then re-apply the thumbnail empty-defaults patch (see InnerTube modifications below). The old accountIndex patch is gone: upstream replaced it with `authUser` (AuthManager sets `YouTube.authUser`)
+  - Stream URLs are deobfuscated through NewPipeUtils (signatureCipher + n throttle param) in DesktopPlayer and DownloadManager, using the MetrolistExtractor fork at commit f0a00f5. That commit builds on openjdk17, which JVM 21 accepts. Do NOT bump to the fork's 3cd3341: it builds on openjdk25 and Gradle refuses it for our JVM 21 toolchain
   - kizzy module: upstream deleted it; our copy remains in repo but is NO LONGER compiled into desktop (was never referenced — desktop Discord RPC is the named-pipe DiscordRPC.kt)
 - **Desktop module**: `desktop/` folder
 - **Shared modules**: `innertube/`, `lrclib/`, `betterlyrics/`, `kugou/`, `kizzy/`, `lastfm/`, `shazamkit/` (sources included directly via `kotlin.srcDir()`, not as project dependencies)
@@ -192,9 +192,7 @@ Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop 
 ### InnerTube modifications (shared with Android)
 | File | Change |
 |------|--------|
-| InnerTube.kt | Added `accountIndex` field, `X-Goog-AuthUser` header in all auth requests |
-| YouTube.kt | Exposed `accountIndex` property |
-| Thumbnails.kt, ThumbnailRenderer.kt | Thumbnail fields carry empty defaults so a tile with no artwork (e.g. an empty playlist in the library grid) decodes instead of aborting the whole browse response with a MissingFieldException (issue #2) |
+| Thumbnails.kt, ThumbnailRenderer.kt | Thumbnail fields carry empty defaults so a tile with no artwork (e.g. an empty playlist in the library grid) decodes instead of aborting the whole browse response with a MissingFieldException (issue #2). Re-apply after every upstream sync |
 
 ### Build
 - `desktop/build.gradle.kts` — Compose Desktop config, JVM 21, SQLDelight, protobuf
@@ -203,7 +201,7 @@ Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop 
 - **Shared module sources**: innertube, lrclib, kizzy, lastfm, shazamkit included via `kotlin.srcDir()` (not project dependencies — Android libraries can't be consumed by JVM)
 - **Timber shim**: SLF4J-backed drop-in for Android's Timber
 - **Protobuf**: Plugin `com.google.protobuf` v0.9.4, proto files at `desktop/src/main/proto/`, needs `DuplicatesStrategy.EXCLUDE` on processResources
-- **Dependencies**: vlcj 4.8.3, Coil 3.3.0, Ktor 3.4.1, SQLDelight 2.0.2, OkHttp 4.12.0, Protobuf-java 3.25.5, brotli, NewPipeExtractor, org.json, SLF4J simple
+- **Dependencies**: vlcj 4.8.3, Coil 3.3.0, Ktor 3.4.1, SQLDelight 2.0.2, OkHttp 4.12.0, Protobuf-java 3.25.5, brotli, MetrolistExtractor f0a00f5, org.json, SLF4J simple
 - **Distribution**: Portable ZIP only (no EXE/MSI installers)
 - **CRITICAL: ZIP creation**: NEVER use PowerShell `Compress-Archive` — it uses backslashes in entry names which breaks Java's `ZipEntry.isDirectory()`. Use `7z a -tzip` instead
 

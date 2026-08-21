@@ -1,7 +1,9 @@
 package com.lyrenne.desktop.download
 
+import com.metrolist.innertube.NewPipeUtils
 import com.metrolist.innertube.YouTube
-import com.metrolist.innertube.models.YouTubeClient
+import com.metrolist.innertube.strategy.ContentAwareFallbackStrategy
+import com.metrolist.innertube.strategy.ContentHints
 import com.lyrenne.desktop.db.DatabaseHelper
 import com.lyrenne.desktop.playback.SongInfo
 import com.lyrenne.desktop.settings.PreferencesManager
@@ -250,33 +252,42 @@ object DownloadManager {
 
     /**
      * Resolve stream URL and content length for a video.
-     * Tries clients in order matching Android Metrolist: WEB_REMIX first, then fallbacks.
-     * Returns the URL with &range= appended (bypasses YouTube throttling) and content length.
+     * Walks upstream's client chain and deobfuscates the format URL.
+     * Returns the URL with &range= appended and the content length.
      */
     internal data class StreamInfo(val url: String, val contentLength: Long)
 
-    internal suspend fun getStreamInfo(videoId: String): StreamInfo? {
-        // Client order: WEB_REMIX first (like Android), then fallbacks
-        val clients = listOf(
-            YouTubeClient.WEB_REMIX,
-            YouTubeClient.ANDROID_VR_NO_AUTH,
-            YouTubeClient.IOS
-        )
+    // ponytail: upstream's client chooser, same as DesktopPlayer
+    private val fallbackStrategy = ContentAwareFallbackStrategy()
 
-        for (client in clients) {
+    internal suspend fun getStreamInfo(videoId: String): StreamInfo? {
+        for (client in fallbackStrategy.resolveClients(ContentHints())) {
+            if (client.requirePoToken) continue
+            if (client.loginRequired && YouTube.cookie == null) continue
             try {
-                val playerResponse = YouTube.player(videoId, client = client).getOrNull()
+                val signatureTimestamp = if (client.useSignatureTimestamp) {
+                    withContext(Dispatchers.IO) { NewPipeUtils.getSignatureTimestamp(videoId).getOrNull() }
+                } else null
+                val playerResponse = YouTube.player(
+                    videoId,
+                    client = client,
+                    signatureTimestamp = signatureTimestamp
+                ).getOrNull()
                 val format = playerResponse?.streamingData?.adaptiveFormats
                     ?.filter { it.isAudio }
                     ?.maxByOrNull { it.bitrate }
 
-                if (format?.url != null) {
-                    val contentLength = format.contentLength ?: 0L
-                    // Append range parameter like Android does — bypasses YouTube CDN throttling
+                val baseUrl = format?.let {
+                    withContext(Dispatchers.IO) { NewPipeUtils.getStreamUrl(it, videoId).getOrNull() }
+                }
+                if (!baseUrl.isNullOrEmpty()) {
+                    val contentLength = format?.contentLength ?: 0L
+                    // Append range parameter like Android does to bypass YouTube CDN throttling
                     val url = if (contentLength > 0) {
-                        "${format.url}&range=0-$contentLength"
+                        val separator = if ("?" in baseUrl) "&" else "?"
+                        "$baseUrl${separator}range=0-$contentLength"
                     } else {
-                        format.url
+                        baseUrl
                     }
                     Timber.d("Stream resolved via ${client.clientName}: contentLength=$contentLength")
                     return StreamInfo(url, contentLength)

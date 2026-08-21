@@ -194,6 +194,7 @@ Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop 
 |------|--------|
 | InnerTube.kt | Added `accountIndex` field, `X-Goog-AuthUser` header in all auth requests |
 | YouTube.kt | Exposed `accountIndex` property |
+| Thumbnails.kt, ThumbnailRenderer.kt | Thumbnail fields carry empty defaults so a tile with no artwork (e.g. an empty playlist in the library grid) decodes instead of aborting the whole browse response with a MissingFieldException (issue #2) |
 
 ### Build
 - `desktop/build.gradle.kts` — Compose Desktop config, JVM 21, SQLDelight, protobuf

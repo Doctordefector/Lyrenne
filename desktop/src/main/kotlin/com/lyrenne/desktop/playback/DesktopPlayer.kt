@@ -145,7 +145,13 @@ class DesktopPlayer {
             setLevel(LogLevel.WARNING)
             addLogListener { level, module, _, _, _, _, _, message ->
                 if (level == LogLevel.ERROR) {
-                    lastVlcError = "[$module] $message"
+                    // vlcj raises this sentinel when its own vsnprintf pass fails; it carries
+                    // nothing and would displace the real reason. First real error per attempt
+                    // wins for the banner: it is the root cause (e.g. the HTTP 403), every later
+                    // line ("Your input can't be opened") is a consequence of it.
+                    if (message != "Failed to format native log message" && lastVlcError == null) {
+                        lastVlcError = "[$module] $message"
+                    }
                     Timber.e("VLC [$module] $message")
                 } else {
                     Timber.w("VLC [$module] $message")

@@ -14,7 +14,9 @@ data class ThumbnailRenderer(
 ) {
     @Serializable
     data class MusicThumbnailRenderer(
-        val thumbnail: Thumbnails,
+        // Defaults so a tile whose renderer carries no usable thumbnail still decodes; the
+        // item then surfaces with a null thumbnail URL instead of aborting the whole response.
+        val thumbnail: Thumbnails = Thumbnails(emptyList()),
         val thumbnailCrop: String?,
         val thumbnailScale: String?,
     ) {
@@ -23,7 +25,7 @@ data class ThumbnailRenderer(
 
     @Serializable
     data class MusicAnimatedThumbnailRenderer(
-        val animatedThumbnail: Thumbnails,
-        val backupRenderer: MusicThumbnailRenderer,
+        val animatedThumbnail: Thumbnails = Thumbnails(emptyList()),
+        val backupRenderer: MusicThumbnailRenderer? = null,
     )
 }

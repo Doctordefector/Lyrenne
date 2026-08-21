@@ -23,6 +23,8 @@ import com.lyrenne.desktop.media.MediaKeyHandler
 import com.lyrenne.desktop.playback.DesktopPlayer
 import com.lyrenne.desktop.settings.PreferencesManager
 import com.lyrenne.desktop.ui.screens.*
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import com.lyrenne.desktop.ui.components.AutoScroll
 import com.lyrenne.desktop.ui.components.LyricsPanel
@@ -82,6 +84,9 @@ fun App(player: DesktopPlayer) {
     // it has scrolled, so returning there later opens at the top as normal.
     var settingsScrollTarget by remember { mutableStateOf<String?>(null) }
     val authState by AuthManager.authState.collectAsState()
+    // Only the error field, not the whole state: position ticks every 200 ms and would
+    // recompose the entire app shell if collected wholesale.
+    val playbackError by remember { player.state.map { it.error } }.collectAsState(null)
     val scope = rememberCoroutineScope()
 
     // Navigation stack for detail screens
@@ -471,6 +476,20 @@ fun App(player: DesktopPlayer) {
                                     .align(Alignment.TopEnd)
                                     .padding(16.dp)
                             )
+
+                            // Playback failures used to be silent in the UI: the VLC error event
+                            // only flipped isPlaying, so a dead track just never played. The
+                            // banner shows what VLC actually reported (see DesktopPlayer's native
+                            // log capture), which is also what a bug report needs.
+                            if (playbackError != null) {
+                                PlaybackErrorBanner(
+                                    error = playbackError,
+                                    onDismiss = player::clearError,
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .padding(16.dp)
+                                )
+                            }
                         }
 
                         // Lyrics panel (slides in from right)
@@ -557,6 +576,32 @@ private fun AccountButton(
                 contentDescription = "Sign In",
                 modifier = Modifier.size(32.dp)
             )
+        }
+    }
+}
+
+/**
+ * Transient banner for playback failures. Auto-dismisses; a new error message restarts the
+ * timer because LaunchedEffect is keyed on the text.
+ */
+@Composable
+private fun PlaybackErrorBanner(
+    error: String?,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (error != null) {
+        LaunchedEffect(error) {
+            delay(8000)
+            onDismiss()
+        }
+        Surface(
+            color = MaterialTheme.colorScheme.errorContainer,
+            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+            shape = MaterialTheme.shapes.medium,
+            modifier = modifier
+        ) {
+            Text(error, modifier = Modifier.padding(12.dp))
         }
     }
 }

@@ -11,7 +11,10 @@ import timber.log.Timber
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import uk.co.caprica.vlcj.factory.MediaPlayerFactory
 import uk.co.caprica.vlcj.factory.discovery.NativeDiscovery
+import uk.co.caprica.vlcj.log.LogLevel
+import uk.co.caprica.vlcj.log.NativeLog
 import uk.co.caprica.vlcj.player.base.MediaPlayer
 import uk.co.caprica.vlcj.player.base.MediaPlayerEventAdapter
 import uk.co.caprica.vlcj.player.component.AudioPlayerComponent
@@ -124,6 +127,33 @@ class DesktopPlayer {
 
     private var vlcInitialized = false
 
+    // Last libvlc error line, captured from the native log. The media player `error` event
+    // carries no reason at all, which made "playback fails" reports undiagnosable from logs.
+    @Volatile
+    private var lastVlcError: String? = null
+
+    /**
+     * Factory that pipes libvlc's own log into Timber. VLC warnings and errors name the actual
+     * failure (TLS rejection, missing codec, blocked socket) that the plain `error` media event
+     * hides, so a failed track leaves its cause in the log instead of a fixed string.
+     */
+    private inner class LoggingMediaPlayerFactory : MediaPlayerFactory() {
+        // Strong ref for the factory's lifetime: the native log callback points into this
+        // object, so collecting it would leave libvlc calling freed memory.
+        @Suppress("unused")
+        private val nativeLog = NativeLog(libvlcInstance).apply {
+            setLevel(LogLevel.WARNING)
+            addLogListener { level, module, _, _, _, _, _, message ->
+                if (level == LogLevel.ERROR) {
+                    lastVlcError = "[$module] $message"
+                    Timber.e("VLC [$module] $message")
+                } else {
+                    Timber.w("VLC [$module] $message")
+                }
+            }
+        }
+    }
+
     /** Call from a coroutine to initialize VLC off the main thread */
     fun ensureVlcInitialized() {
         if (!vlcInitialized) {
@@ -156,7 +186,7 @@ class DesktopPlayer {
             }
 
             if (found) {
-                audioPlayer = AudioPlayerComponent()
+                audioPlayer = AudioPlayerComponent(LoggingMediaPlayerFactory())
                 setupEventListener()
                 Timber.i("VLC initialized successfully")
             } else {
@@ -222,8 +252,12 @@ class DesktopPlayer {
             }
 
             override fun error(mediaPlayer: MediaPlayer) {
-                Timber.e("Playback error occurred")
-                _state.value = _state.value.copy(isPlaying = false)
+                val detail = lastVlcError
+                Timber.e("Playback error occurred${detail?.let { ": $it" } ?: ""}")
+                _state.value = _state.value.copy(
+                    isPlaying = false,
+                    error = detail?.let { "Playback failed: $it" } ?: "Playback failed"
+                )
             }
         })
     }
@@ -374,6 +408,10 @@ class DesktopPlayer {
         val crossfadeMs = PreferencesManager.preferences.value.crossfadeSec * 1000L
         val shouldFadeIn = crossfadeMs > 0 && _state.value.currentSong != null
 
+        // A stale error from the previous track would otherwise be reported for this one.
+        lastVlcError = null
+        _state.value = _state.value.copy(error = null)
+
         val options = buildMediaOptions()
         if (options.isNotEmpty()) {
             audioPlayer?.mediaPlayer()?.media()?.play(url, *options.toTypedArray())
@@ -469,6 +507,11 @@ class DesktopPlayer {
 
     fun pause() {
         audioPlayer?.mediaPlayer()?.controls()?.pause()
+    }
+
+    /** Dismiss a surfaced playback error (banner auto-hide and close actions). */
+    fun clearError() {
+        _state.value = _state.value.copy(error = null)
     }
 
     fun play() {
@@ -701,6 +744,7 @@ class DesktopPlayer {
     }
 
     fun playLocalFile(filePath: String, song: SongInfo) {
+        lastVlcError = null
         queue.clear()
         queue.add(song)
         currentIndex = 0

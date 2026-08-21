@@ -48,7 +48,10 @@ class InnerTube {
     )
     var visitorData: String? = null
     var dataSyncId: String? = null
-    var accountIndex: Int = 0
+    var authUser: String = "0"
+        set(value) {
+            field = value.filter(Char::isDigit).ifBlank { "0" }
+        }
     var cookie: String? = null
         set(value) {
             field = value
@@ -147,23 +150,29 @@ class InnerTube {
         }
     }
 
-    private fun HttpRequestBuilder.ytClient(client: YouTubeClient, setLogin: Boolean = false) {
+    private fun HttpRequestBuilder.ytClient(
+        client: YouTubeClient,
+        setLogin: Boolean = false,
+        origin: String = YouTubeClient.ORIGIN_YOUTUBE_MUSIC,
+        referer: String = YouTubeClient.REFERER_YOUTUBE_MUSIC,
+    ) {
         contentType(ContentType.Application.Json)
         headers {
             append("X-Goog-Api-Format-Version", "1")
             append("X-YouTube-Client-Name", client.clientId /* Not a typo. The Client-Name header does contain the client id. */)
             append("X-YouTube-Client-Version", client.clientVersion)
-            append("X-Origin", YouTubeClient.ORIGIN_YOUTUBE_MUSIC)
-            append("Referer", YouTubeClient.REFERER_YOUTUBE_MUSIC)
+            append("Origin", origin)
+            append("X-Origin", origin)
+            append("Referer", referer)
             visitorData?.let { append("X-Goog-Visitor-Id", it) }
             if (setLogin && client.loginSupported) {
                 cookie?.let { cookie ->
                     append("cookie", cookie)
+                    append("X-Goog-AuthUser", authUser)
                     if ("SAPISID" !in cookieMap) return@let
                     val currentTime = System.currentTimeMillis() / 1000
-                    val sapisidHash = sha1("$currentTime ${cookieMap["SAPISID"]} ${YouTubeClient.ORIGIN_YOUTUBE_MUSIC}")
+                    val sapisidHash = sha1("$currentTime ${cookieMap["SAPISID"]} $origin")
                     append("Authorization", "SAPISIDHASH ${currentTime}_${sapisidHash}")
-                    append("X-Goog-AuthUser", accountIndex.toString())
                 }
             }
         }
@@ -398,6 +407,20 @@ class InnerTube {
         httpClient.post("account/account_menu") {
             ytClient(client, setLogin = true)
             setBody(AccountMenuBody(client.toContext(locale, visitorData, dataSyncId)))
+        }
+    }
+
+    suspend fun accountsList() = withRetry {
+        val accountClient = YouTubeClient.WEB_ACCOUNT_SWITCHER
+        val origin = "https://www.youtube.com"
+        httpClient.post("$origin/youtubei/v1/account/accounts_list") {
+            ytClient(
+                client = accountClient,
+                setLogin = true,
+                origin = origin,
+                referer = "$origin/",
+            )
+            setBody(AccountsListBody(accountClient.toContext(locale, visitorData, null)))
         }
     }
 
@@ -718,7 +741,7 @@ class InnerTube {
         filename: String,
         contentLength: Long
     ) = withRetry {
-        val authUser = accountIndex.toString()
+        val authUser = "0"
         httpClient.post("https://upload.youtube.com/upload/usermusic/http?authuser=$authUser") {
             headers {
                 append("X-Goog-Upload-Command", "start")
@@ -751,7 +774,7 @@ class InnerTube {
             headers {
                 append("X-Goog-Upload-Command", "upload, finalize")
                 append("X-Goog-Upload-Offset", "0")
-                append("X-Goog-AuthUser", accountIndex.toString())
+                append("X-Goog-AuthUser", "0")
                 append("Origin", YouTubeClient.ORIGIN_YOUTUBE_MUSIC)
                 cookie?.let { cookie ->
                     append("cookie", cookie)
@@ -782,7 +805,6 @@ class InnerTube {
             headers {
                 append("Referer", YouTubeClient.REFERER_YOUTUBE_MUSIC)
                 append("Origin", YouTubeClient.ORIGIN_YOUTUBE_MUSIC)
-                append("X-Goog-AuthUser", accountIndex.toString())
                 cookie?.let { cookie ->
                     append("cookie", cookie)
                     if ("SAPISID" !in cookieMap) return@let

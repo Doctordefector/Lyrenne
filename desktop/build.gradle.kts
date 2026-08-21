@@ -19,7 +19,7 @@ kotlin {
 }
 
 // Must match AutoUpdater.CURRENT_VERSION — both are checked on every release
-val lyrenneVersion = "2.10.8"
+val lyrenneVersion = "2.10.9"
 
 // Include shared module sources directly (they are Android library modules but pure Kotlin/JVM code)
 sourceSets {
@@ -48,6 +48,7 @@ tasks.named<ProcessResources>("processResources") {
 }
 
 dependencies {
+    testImplementation(libs.junit)
     // Compose Desktop
     implementation(compose.desktop.currentOs)
     implementation(compose.material3)
@@ -67,7 +68,7 @@ dependencies {
 
     // Shared module dependencies
     implementation(libs.brotli)
-    implementation(libs.newpipeextractor)
+    implementation(libs.extractor) { exclude(group = "com.google.protobuf") }
     implementation(libs.ktor.client.cio) // Used by lrclib
 
     // Image loading for desktop

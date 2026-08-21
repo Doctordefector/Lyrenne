@@ -1,7 +1,10 @@
 package com.lyrenne.desktop.playback
 
+import com.metrolist.innertube.NewPipeUtils
 import com.metrolist.innertube.YouTube
 import com.metrolist.innertube.models.SongItem
+import com.metrolist.innertube.strategy.ContentAwareFallbackStrategy
+import com.metrolist.innertube.strategy.ContentHints
 import com.metrolist.innertube.models.WatchEndpoint
 import com.metrolist.innertube.models.YouTubeClient
 import com.lyrenne.desktop.db.DatabaseHelper
@@ -359,19 +362,24 @@ class DesktopPlayer {
         )
     }
 
+    // ponytail: upstream's client chooser; kept in innertube so syncs update it for free
+    private val fallbackStrategy = ContentAwareFallbackStrategy()
+
     private suspend fun getStreamUrl(videoId: String): String? {
         return try {
-            // Try different clients in order of preference
-            val clients = listOf(
-                YouTubeClient.ANDROID_VR_NO_AUTH,
-                YouTubeClient.IOS,
-                YouTubeClient.WEB_REMIX
-            )
-
-            for (client in clients) {
+            for (client in fallbackStrategy.resolveClients(ContentHints())) {
+                // JVM has no BotGuard for PoTokens, and no login for login-only clients
+                if (client.requirePoToken) continue
+                if (client.loginRequired && YouTube.cookie == null) continue
                 try {
-                    val result = YouTube.player(videoId, client = client)
-                    val playerResponse = result.getOrNull()
+                    val signatureTimestamp = if (client.useSignatureTimestamp) {
+                        withContext(Dispatchers.IO) { NewPipeUtils.getSignatureTimestamp(videoId).getOrNull() }
+                    } else null
+                    val playerResponse = YouTube.player(
+                        videoId,
+                        client = client,
+                        signatureTimestamp = signatureTimestamp
+                    ).getOrNull()
 
                     if (playerResponse?.playabilityStatus?.status == "OK") {
                         // Get audio stream matching quality preference
@@ -384,9 +392,16 @@ class DesktopPlayer {
                             ?.minByOrNull { kotlin.math.abs(it.bitrate - targetBitrate) }
                             ?: audioFormats?.maxByOrNull { it.bitrate }
 
-                        if (audioFormat?.url != null) {
-                            _state.value = _state.value.copy(error = null)
-                            return audioFormat.url
+                        if (audioFormat != null) {
+                            // Deobfuscates signatureCipher and the n throttle param (web clients)
+                            val streamUrl = withContext(Dispatchers.IO) {
+                                NewPipeUtils.getStreamUrl(audioFormat, videoId).getOrNull()
+                            }
+                            if (!streamUrl.isNullOrEmpty()) {
+                                Timber.d("Stream resolved for $videoId via ${client.clientName}")
+                                _state.value = _state.value.copy(error = null)
+                                return streamUrl
+                            }
                         }
                     }
                 } catch (e: Exception) {

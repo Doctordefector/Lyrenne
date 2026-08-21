@@ -101,7 +101,7 @@ object AuthManager {
     private fun applyCredentials(credentials: AuthCredentials) {
         YouTube.cookie = credentials.cookie
         YouTube.visitorData = credentials.visitorData.takeIf { it.isNotBlank() }
-        YouTube.accountIndex = credentials.accountIndex
+        YouTube.authUser = credentials.accountIndex.toString()
         // Process dataSyncId: strip "||" suffix
         YouTube.dataSyncId = credentials.dataSyncId.takeIf { it.isNotBlank() }?.let { raw ->
             raw.takeIf { !it.contains("||") }
@@ -129,7 +129,7 @@ object AuthManager {
             val pageVisitorData = ytcfg["VISITOR_DATA"]
 
             // Apply session index for multi-account support
-            YouTube.accountIndex = sessionIndex
+            YouTube.authUser = sessionIndex.toString()
 
             // Use provided visitorData, or page visitorData, or fetch from API
             val actualVisitorData = visitorData.takeIf { it.isNotBlank() }
@@ -199,7 +199,7 @@ object AuthManager {
             YouTube.cookie = null
             YouTube.visitorData = null
             YouTube.dataSyncId = null
-            YouTube.accountIndex = 0
+            YouTube.authUser = "0"
             YouTube.useLoginForBrowse = false
 
             _authState.value = AuthState(isLoggedIn = false)

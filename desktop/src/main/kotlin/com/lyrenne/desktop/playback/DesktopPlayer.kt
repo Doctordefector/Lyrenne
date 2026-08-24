@@ -30,11 +30,45 @@ enum class RepeatMode {
     OFF, ONE, ALL
 }
 
-/** Range the volume fader spans, bottom of travel up to unity gain. */
-private const val FADER_RANGE_DB = 30.0
-
 /** Below this the fader snaps to silence, so the bottom of the track is a true mute. */
-private const val FADER_MUTE_BELOW = 0.02f
+internal const val FADER_MUTE_BELOW = 0.02f
+
+/**
+ * How hard the fader leans loud. The one knob worth turning in [vlcVolume].
+ *
+ * 1.66 is perceptually neutral: slider fraction and loudness fraction are the same number.
+ * 1.0 is linear amplitude, which reads loud because it lifts the bottom of the travel a long
+ * way. 1.43 sits between them and puts the midpoint of the travel 10% louder than it reads.
+ *
+ * The lean is not a flat percentage, because a power curve cannot be: it is 10% at half
+ * travel, tapering to nothing at the top, and widening below. Lower the number to lean
+ * louder still.
+ */
+internal const val FADER_LOUDNESS = 1.43
+
+/**
+ * Map the 0-1 slider to VLC's 0-100 volume.
+ *
+ * VLC CUBES this number before the mixer sees it. That is measured, not assumed: at slider
+ * 0.633 the app sent 47 and Windows reported a session amplitude of 0.103823, which is
+ * 0.47^3 to six decimals. Every taper this file has carried was written against a comment
+ * claiming the scale was linear amplitude, so each one cubed a curve that was already a
+ * curve. The 30 dB fader put half travel at -45 dB, i.e. silence, and a plain v^1.66 taper
+ * still landed at v^5.
+ *
+ * So the amplitude we actually want is v^[FADER_LOUDNESS], and undoing VLC's cube leaves
+ * v^(FADER_LOUDNESS / 3) as what we owe it.
+ *
+ *   v:      0.00  0.25  0.50  0.75  1.00
+ *   VLC:       0    52    72    87   100
+ *   dB:     -inf   -17    -9    -4     0
+ *   loud:      0  0.31  0.55  0.78     1
+ */
+internal fun vlcVolume(volume: Float): Int {
+    val v = volume.coerceIn(0f, 1f)
+    if (v <= FADER_MUTE_BELOW) return 0
+    return (v.toDouble().pow(FADER_LOUDNESS / 3) * 100).roundToInt().coerceIn(1, 100)
+}
 
 data class PlaybackState(
     val isPlaying: Boolean = false,
@@ -738,30 +772,6 @@ class DesktopPlayer {
 
     fun setVolume(volume: Float) {
         audioPlayer?.mediaPlayer()?.audio()?.setVolume(vlcVolume(volume))
-    }
-
-    /**
-     * Map the 0-1 slider to VLC's 0-100 volume on a proper audio (dB) taper.
-     *
-     * VLC's 0-100 is a LINEAR AMPLITUDE scale. The previous `v * v` taper spent it badly:
-     * the bottom third of the slider covered -21 dB down to silence, which is all far too
-     * quiet to tell apart, so the whole lower travel felt dead while the top was touchy.
-     * Measured dB-per-10%-of-travel was 1.8 at the top and 12.0 at the bottom — a 10.2 dB
-     * spread, i.e. the last notch alone moved as much as the first six combined.
-     *
-     * An exponential taper gives a constant dB change per unit of travel, which is how a
-     * real fader behaves. At a 30 dB range the spread drops to 0.7 dB (~3 dB per notch,
-     * evenly, top to bottom) while keeping 89 distinct VLC steps.
-     *
-     *   v:   0.00  0.25  0.50  0.75  1.00
-     *   VLC:    0     9    18    50   100
-     *   dB:  -inf   -21   -15    -6     0
-     */
-    private fun vlcVolume(volume: Float): Int {
-        val v = volume.coerceIn(0f, 1f)
-        if (v <= FADER_MUTE_BELOW) return 0
-        val gain = 10.0.pow(-FADER_RANGE_DB / 20.0 * (1 - v))
-        return (gain * 100).roundToInt().coerceIn(1, 100)
     }
 
     fun playLocalFile(filePath: String, song: SongInfo) {

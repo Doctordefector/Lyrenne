@@ -186,6 +186,10 @@ fun TrayPanel(
                         },
                         modifier = Modifier.weight(1f).height(16.dp)
                     )
+                    // The leading icon and its spacer inset the volume bar by 22dp, putting its
+                    // midpoint 11dp right of the axis the seek bar and transport buttons sit on,
+                    // which reads as the buttons being off-centre. Mirror the inset on the right.
+                    Spacer(Modifier.width(22.dp))
                 }
             }
 

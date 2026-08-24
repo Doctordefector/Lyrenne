@@ -1246,8 +1246,7 @@ fun SettingsScreen(
                     onDismissRequest = { showEasterEgg = false },
                     text = {
                         Text(
-                            "Valerie said \"shoot for the moon and if you miss you end in " +
-                                "the void of space\"",
+                            "Reunited Again <3",
                             style = MaterialTheme.typography.titleMedium,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth()

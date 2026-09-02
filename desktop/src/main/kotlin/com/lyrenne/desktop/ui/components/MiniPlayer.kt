@@ -28,6 +28,7 @@ import com.lyrenne.desktop.media.MediaKeyHandler
 import com.lyrenne.desktop.playback.DesktopPlayer
 import com.lyrenne.desktop.playback.RepeatMode
 import com.lyrenne.desktop.settings.PreferencesManager
+import com.lyrenne.desktop.sync.YouTubeWrites
 import kotlinx.coroutines.launch
 
 @Composable
@@ -52,6 +53,31 @@ fun MiniPlayer(
     }
 
     val song = state.currentSong!!
+
+    // Liked state comes from the database rather than the queue, so it stays right when the
+    // same song is liked from a library list, or unliked by a sync from YouTube.
+    val dbSong by remember(song.id) { DatabaseHelper.getSongById(song.id) }
+        .collectAsState(initial = null)
+    val isLiked = dbSong?.liked == 1L
+
+    fun toggleLike() {
+        val nowLiked = !isLiked
+        // The playing song is not necessarily in the library yet, so there would be no row to update.
+        DatabaseHelper.insertSong(
+            id = song.id,
+            title = song.title,
+            duration = song.duration,
+            thumbnailUrl = song.thumbnailUrl,
+            albumName = song.album
+        )
+        DatabaseHelper.updateSongLiked(song.id, nowLiked)
+        YouTubeWrites.likeSong(song.id, nowLiked)
+        if (nowLiked && dbSong?.isDownloaded != 1L &&
+            PreferencesManager.preferences.value.autoDownloadOnLike
+        ) {
+            DownloadManager.queueDownload(song)
+        }
+    }
 
     Surface(
         modifier = modifier.height(76.dp),
@@ -160,6 +186,24 @@ fun MiniPlayer(
                         )
                     }
                 }
+
+                // Like: the one library action people look for on the player itself.
+                IconButton(
+                    onClick = { toggleLike() },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = if (isLiked) "Remove from liked songs" else "Add to liked songs",
+                        tint = if (isLiked)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                Spacer(Modifier.width(8.dp))
 
                 // Time display
                 Text(

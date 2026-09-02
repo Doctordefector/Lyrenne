@@ -70,6 +70,16 @@ internal fun vlcVolume(volume: Float): Int {
     return (v.toDouble().pow(FADER_LOUDNESS / 3) * 100).roundToInt().coerceIn(1, 100)
 }
 
+/**
+ * How much of the fader a crossfading track still gets: all of it until the window opens,
+ * then straight down to silence at the end of the track. Applied to the VLC number rather
+ * than the slider fraction, so it matches the ramp [DesktopPlayer.fadeIn] uses coming back up.
+ */
+internal fun crossfadeGain(remainingMs: Long, crossfadeMs: Long): Float {
+    if (crossfadeMs <= 0L) return 1f
+    return (remainingMs.toFloat() / crossfadeMs).coerceIn(0f, 1f)
+}
+
 data class PlaybackState(
     val isPlaying: Boolean = false,
     val currentSong: SongInfo? = null,
@@ -148,8 +158,8 @@ class DesktopPlayer {
     private val _sleepTimer = MutableStateFlow<SleepTimerState?>(null)
     val sleepTimer: StateFlow<SleepTimerState?> = _sleepTimer.asStateFlow()
 
-    // Crossfade: set when the early-transition watcher already advanced the track
-    private var crossfadeTriggered = false
+    // Crossfade: set while the tail of the current track is being faded out
+    private var crossfadeFading = false
     private var fadeJob: Job? = null
 
     // Radio: id of the song the current radio queue was seeded from (null = not radio)
@@ -312,7 +322,7 @@ class DesktopPlayer {
                 audioPlayer?.mediaPlayer()?.let { player ->
                     val position = player.status().time()
                     _state.value = _state.value.copy(position = position)
-                    maybeCrossfadeEarly(position)
+                    applyCrossfadeTail(position)
                 }
                 delay(200)
             }
@@ -320,22 +330,43 @@ class DesktopPlayer {
     }
 
     /**
-     * Crossfade: VLC has a single decoder, so a true overlapping crossfade isn't possible.
-     * Instead, when the track is within crossfadeSec of its end we advance early and
-     * fade the next track in from silence — perceptually close to a real crossfade.
+     * Crossfade: VLC has a single decoder, so two tracks cannot overlap. The tail of a track
+     * fades to silence over the crossfade window instead, and the next one fades up from
+     * silence in [playUrl], so the transition is a fade out into a fade in.
+     *
+     * This used to jump to the next track the moment the window opened and fade in only the
+     * incoming one, so the setting did the opposite of its name: the outgoing song was cut
+     * off mid-bar, losing its last crossfadeSec seconds outright (issue #5).
+     *
+     * Driven by the position tick rather than a timer, so a pause holds the fade where it
+     * is, and seeking back out of the window restores full volume on the next tick.
      */
-    private fun maybeCrossfadeEarly(position: Long) {
+    private fun applyCrossfadeTail(position: Long) {
         val crossfadeMs = PreferencesManager.preferences.value.crossfadeSec * 1000L
-        if (crossfadeMs <= 0 || crossfadeTriggered) return
-        if (repeatMode == RepeatMode.ONE) return
         val duration = _state.value.duration
-        if (duration <= 0 || position <= 0) return
         val hasNext = currentIndex < queue.size - 1 || (repeatMode == RepeatMode.ALL && queue.size > 1)
-        if (!hasNext) return
-        if (duration - position in 1..crossfadeMs) {
-            crossfadeTriggered = true
-            scope.launch { playNext() }
+        val inTail = crossfadeMs > 0 && duration > 0 && position > 0 && hasNext &&
+            repeatMode != RepeatMode.ONE && duration - position <= crossfadeMs
+        if (!inTail) {
+            if (crossfadeFading) restoreVolume()
+            return
         }
+        if (!crossfadeFading) {
+            crossfadeFading = true
+            // A short track can still be fading in when its own tail starts; two ramps
+            // writing the same volume would fight each other.
+            fadeJob?.cancel()
+        }
+        val gain = crossfadeGain(duration - position, crossfadeMs)
+        val target = vlcVolume(PreferencesManager.preferences.value.volume)
+        audioPlayer?.mediaPlayer()?.audio()?.setVolume((target * gain).roundToInt())
+    }
+
+    /** Hand the volume back to the user's setting after a crossfade tail was interrupted. */
+    private fun restoreVolume() {
+        crossfadeFading = false
+        audioPlayer?.mediaPlayer()?.audio()
+            ?.setVolume(vlcVolume(PreferencesManager.preferences.value.volume))
     }
 
     /** Ramp VLC volume from 0 to the user's volume over [durationMs]. */
@@ -487,7 +518,7 @@ class DesktopPlayer {
             currentIndex = currentIndex
         )
         resetPlayTracking()
-        crossfadeTriggered = false
+        crossfadeFading = false
 
         // Re-apply EQ after starting new media (VLC resets filters on new media)
         applyEqualizer()
@@ -578,6 +609,8 @@ class DesktopPlayer {
         if (_sleepTimer.value?.endOfTrack == true) {
             _sleepTimer.value = null
             _state.value = _state.value.copy(isPlaying = false)
+            // Nothing follows to fade in, so the crossfade tail's silence would be permanent.
+            if (crossfadeFading) restoreVolume()
             return
         }
         when (repeatMode) {

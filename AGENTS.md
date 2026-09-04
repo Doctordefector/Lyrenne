@@ -83,6 +83,10 @@ Each of these exists because breaking it caused real damage.
 17. **Do not queue downloads, or filter them by `isDownloaded`, on the UI thread.** Both are
     database work per song. Hand the whole batch to `queueDownloads`, which does it off-thread in
     one transaction; 700 songs the old way froze the app for seconds.
+18. **`SleepGuard` pings the idle timer, it does not hold a lock, and that is deliberate.** A
+    standing `ES_CONTINUOUS` state is per-thread, so it dies with the pooled coroutine thread that
+    set it, and it leaks on a crash: the machine then never sleeps again until reboot, silently.
+    The one-shot `ES_SYSTEM_REQUIRED` on a timer has neither failure mode.
 
 ## Things that look broken but are not
 

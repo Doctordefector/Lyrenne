@@ -392,6 +392,10 @@ object DownloadManager {
         if (!isProcessing.compareAndSet(false, true)) return
 
         processingJob = scope.launch {
+            // Held for exactly as long as the queue is draining. A 700 track download outlives
+            // any normal idle timeout, and a laptop that suspends partway through wakes to a
+            // dead socket.
+            val keepAwake = launch { SleepGuard.keepAwake() }
             try {
                 while (_downloadQueue.value.isNotEmpty()) {
                     val pendingSongs = _downloadQueue.value.filter { song ->
@@ -416,6 +420,7 @@ object DownloadManager {
                     downloadJobs.values.toList().forEach { it.join() }
                 }
             } finally {
+                keepAwake.cancel()
                 isProcessing.set(false)
             }
         }

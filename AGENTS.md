@@ -73,6 +73,16 @@ Each of these exists because breaking it caused real damage.
 14. **Clear `isSyncing` in a `finally`, and never suspend there outside `NonCancellable`.** A
     suspending call in a `finally` throws the moment the job is cancelled, so the reset after it
     never runs. Leaking the flag silently stops this client sending anything to the room.
+15. **A download partial is named `<songId>-<contentLength>.part` and that name is load-bearing.**
+    Resuming appends to it. Drop the length and a partial from one encoding gets appended to a
+    different one, producing a valid-looking m4a made of two unrelated halves that nothing detects
+    until playback. `DownloadResumeTest` pins it.
+16. **Never write to `activeDownloads` for an in-flight song except through `updateIfTracked`.**
+    Cancelling removes the entry while the job it cancelled is still unwinding, and a plain map
+    put in that window resurrects the card. Cancel all emptied the list and instantly refilled it.
+17. **Do not queue downloads, or filter them by `isDownloaded`, on the UI thread.** Both are
+    database work per song. Hand the whole batch to `queueDownloads`, which does it off-thread in
+    one transaction; 700 songs the old way froze the app for seconds.
 
 ## Things that look broken but are not
 
@@ -93,6 +103,9 @@ Each of these exists because breaking it caused real damage.
   `music.youtube.com`, where "video" means music video. General uploads are not in that catalogue.
 - **Window dp are not pixels.** Windows scaling shrinks the usable desktop measured in dp, so any
   fixed window size must be clamped against `maximumWindowBounds` or it opens off-screen on 1080p.
+- **A blurry desktop icon next to a sharp taskbar icon is a missing `.ico` entry, not bad art.**
+  Windows picks the nearest size and scales it, and the desktop's Large icons view asks for 96px.
+  With entries at only 16/32/48/256 it upscaled the 48. Add the size being asked for.
 - **The navigation rail holds ten destinations and clips silently when they do not fit.** It is a
   Column, not a list. Adding another entry costs vertical room that short windows do not have, and
   the failure mode is an item nobody can reach rather than an error. Listen Together was invisible

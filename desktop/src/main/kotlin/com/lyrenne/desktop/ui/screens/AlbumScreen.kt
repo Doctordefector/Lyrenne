@@ -192,9 +192,13 @@ fun AlbumScreen(
 
                                     OutlinedButton(
                                         onClick = {
-                                            val songInfos = songs.map { it.toDesktopSongInfo() }
-                                                .filter { !DownloadManager.isDownloaded(it.id) }
-                                            DownloadManager.queueDownloads(songInfos)
+                                            // The already-downloaded filter used to run here, one
+                                            // database read per song on the UI thread. queueDownloads
+                                            // does it off-thread now.
+                                            DownloadManager.queueDownloads(
+                                                songs.map { it.toDesktopSongInfo() },
+                                                subfolder = page.album.title
+                                            )
                                         }
                                     ) {
                                         Icon(Icons.Default.Download, null, Modifier.size(18.dp))

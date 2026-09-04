@@ -154,6 +154,16 @@ fun LocalPlaylistScreen(
                     Text("Shuffle")
                 }
                 OutlinedButton(onClick = {
+                    DownloadManager.queueDownloads(
+                        songs.map { it.toPlaylistSongInfo(artistNamesMap) },
+                        subfolder = playlist?.name
+                    )
+                }) {
+                    Icon(Icons.Default.Download, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Download All")
+                }
+                OutlinedButton(onClick = {
                     val targetDir = chooseExportFolder(playlist?.name ?: "Playlist")
                     if (targetDir != null) {
                         CarExport.exportSongs(songs.map { it.toPlaylistSongInfo(artistNamesMap) }, targetDir)

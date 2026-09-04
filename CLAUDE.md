@@ -806,7 +806,7 @@ a restart without depending on rows elsewhere surviving, and artist lives in `So
 `DatabaseHelper` that looks at columns rather than tables.
 
 ## Version Management
-- **Current version**: v2.10.11
+- **Current version**: v2.11.0
 - **Version must be updated in TWO places** when releasing:
   1. `desktop/build.gradle.kts` → `lyrenneVersion = "X.Y.Z"`
   2. `desktop/.../update/AutoUpdater.kt` → `CURRENT_VERSION = "X.Y.Z"`

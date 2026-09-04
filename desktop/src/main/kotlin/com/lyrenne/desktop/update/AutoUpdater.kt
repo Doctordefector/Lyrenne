@@ -26,7 +26,7 @@ import java.util.zip.ZipInputStream
  * Program Files, it's installed. Otherwise it's portable.
  */
 object AutoUpdater {
-    const val CURRENT_VERSION = "2.10.11"
+    const val CURRENT_VERSION = "2.11.0"
     private const val GITHUB_OWNER = "Doctordefector"
     private const val GITHUB_REPO = "Lyrenne"
 

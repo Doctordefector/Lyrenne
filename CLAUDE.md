@@ -117,6 +117,7 @@ Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop 
 | db/DatabaseHelper.kt | SQLDelight wrapper, queue persistence, song/album/artist/playlist CRUD |
 | playback/DesktopPlayer.kt | VLC playback engine, queue management, shuffle/repeat, stream URL resolution |
 | download/DownloadManager.kt | Download queue, HTTP streaming with progress, m4a storage, resume, retry, per-playlist folders |
+| download/SleepGuard.kt | Holds off system sleep while the download queue drains (kernel32 SetThreadExecutionState) |
 | download/CarExport.kt | ffmpeg-backed export/normalize to MP3 for USB/CD (loudnorm + stereo, optional dual mono) |
 | sync/LibrarySync.kt | YouTube library sync (liked songs, albums, artists, playlists) with pagination |
 | settings/PreferencesManager.kt | Properties file persistence for all user preferences |
@@ -757,6 +758,37 @@ ones that queue a song in the first place.
 Jobs are registered with `CoroutineStart.LAZY` and started after the map assignment. A download
 that finished inside its own `launch` otherwise removed itself before the assignment put it back,
 leaving a completed job under that song id forever and making that song unqueueable.
+
+### Holding off sleep, without leaving a lock behind
+
+A 700 track download outlives any normal idle timeout, so `SleepGuard.keepAwake()` runs alongside
+the processing loop and is cancelled in its `finally`.
+
+It **pings** rather than holding a lock. The obvious implementation asserts
+`ES_CONTINUOUS or ES_SYSTEM_REQUIRED` and releases with `ES_CONTINUOUS`, and both halves of that
+are wrong here:
+
+- The execution state is **per-thread and dies with the thread**. Asserting it from a coroutine
+  asserts it on whichever pooled `Dispatchers.IO` thread ran that resumption, and those are
+  reclaimed when idle, so the lock evaporates mid-download with nothing to show for it.
+- **A standing lock leaks on a crash.** Die between assert and release and the machine never sleeps
+  again until reboot, with nothing in the UI to explain why. That is a worse bug than the one being
+  fixed and a much harder one to notice.
+
+`ES_SYSTEM_REQUIRED` *without* `ES_CONTINUOUS` is the documented one-shot form: it pushes the idle
+timer back once and asserts nothing persistent. On a 30 s timer that has no thread affinity, needs
+no release, and cannot outlive the process. Do not "optimise" it into a standing lock.
+
+`ES_DISPLAY_REQUIRED` is deliberately not set. Nobody downloading in the background wants the
+screen lit all night.
+
+Bound with a four-line JNA interface rather than `jna-platform`'s `Kernel32`, whose declared return
+type for this call has moved between `int` and `DWORD` across versions. `SleepGuardSmokeTest` calls
+the real kernel32, because a wrong binding does not throw: it resolves, marshals, quietly does
+nothing, and surfaces weeks later as a laptop that suspended mid-download.
+
+Covers the download queue only. Car export and the auto-updater run their own transfers and do not
+hold sleep off.
 
 ### Per-playlist folders
 

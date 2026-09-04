@@ -204,9 +204,10 @@ fun PlaylistScreen(
                                                     }.onFailure { cont = null }
                                                 }
                                                 continuation = null
-                                                val songInfos = allSongs.map { it.toDesktopSongInfo() }
-                                                    .filter { !DownloadManager.isDownloaded(it.id) }
-                                                DownloadManager.queueDownloads(songInfos)
+                                                DownloadManager.queueDownloads(
+                                                    allSongs.map { it.toDesktopSongInfo() },
+                                                    subfolder = page.playlist.title
+                                                )
                                             }
                                         }
                                     ) {

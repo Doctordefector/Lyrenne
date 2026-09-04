@@ -1053,6 +1053,7 @@ private fun DownloadsTab(
 ) {
     val scope = rememberCoroutineScope()
     val playerState by player.state.collectAsState()
+    var showDeleteAllDialog by remember { mutableStateOf(false) }
 
     val filteredDownloaded = remember(downloadedSongs, searchQuery, artistNamesMap) {
         if (searchQuery.isBlank()) downloadedSongs
@@ -1065,19 +1066,93 @@ private fun DownloadsTab(
         }
     }
 
-    Column {
-        // Active downloads
-        if (activeDownloads.isNotEmpty()) {
-            Text(
-                "Downloading",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(vertical = 8.dp)
-            )
+    val active = remember(activeDownloads) { activeDownloads.values.toList() }
+    val hasFailed = remember(active) { active.any { it.status == DownloadStatus.ERROR } }
+    val hasFinished = remember(active) {
+        active.any {
+            it.status == DownloadStatus.ERROR ||
+                it.status == DownloadStatus.COMPLETED ||
+                it.status == DownloadStatus.CANCELLED
+        }
+    }
+    val hasRunning = remember(active) {
+        active.any {
+            it.status == DownloadStatus.PENDING ||
+                it.status == DownloadStatus.DOWNLOADING ||
+                it.status == DownloadStatus.RETRYING
+        }
+    }
 
-            activeDownloads.values.forEach { download ->
-                Card(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+    if (showDeleteAllDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteAllDialog = false },
+            title = { Text("Delete all downloads?") },
+            text = {
+                Text(
+                    "This permanently deletes " + downloadedSongs.size + " downloaded " +
+                        (if (downloadedSongs.size == 1) "file" else "files") +
+                        " from disk. Your library and playlists are not affected."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    DownloadManager.deleteAllDownloads()
+                    showDeleteAllDialog = false
+                }) {
+                    Text("Delete all", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteAllDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (filteredDownloaded.isEmpty() && active.isEmpty()) {
+        EmptyLibraryMessage(
+            icon = Icons.Default.DownloadDone,
+            message = if (searchQuery.isNotBlank()) "No matching downloads" else "No downloaded songs",
+            subMessage = if (searchQuery.isNotBlank()) "Try a different search term" else "Download songs for offline playback"
+        )
+        return
+    }
+
+    // One LazyColumn for both sections. The active list used to be a plain Column of Cards,
+    // which composes every entry whether or not it is on screen: queueing a 700-track playlist
+    // built 700 Cards up front and froze the tab.
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (active.isNotEmpty()) {
+            item(key = "active-header") {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Text(
+                        "Downloading (" + active.size + ")",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (hasFailed) {
+                        TextButton(onClick = { DownloadManager.retryAllFailed() }) {
+                            Text("Retry failed")
+                        }
+                    }
+                    if (hasFinished) {
+                        TextButton(onClick = { DownloadManager.clearFinished() }) {
+                            Text("Clear finished")
+                        }
+                    }
+                    if (hasRunning) {
+                        TextButton(onClick = { DownloadManager.cancelAllDownloads() }) {
+                            Text("Cancel all", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
+            }
+
+            // Keyed on the song id, a database primary key and unique across the map.
+            items(active, key = { it.songId }) { download ->
+                Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -1104,8 +1179,15 @@ private fun DownloadsTab(
                                         modifier = Modifier.fillMaxWidth()
                                     )
                                     Text(
-                                        "${download.progress}%",
+                                        download.progress.toString() + "%",
                                         style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                                DownloadStatus.RETRYING -> {
+                                    Text(
+                                        "Retrying, attempt " + download.attempt + " of 3...",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                                 DownloadStatus.ERROR -> {
@@ -1115,7 +1197,26 @@ private fun DownloadsTab(
                                         color = MaterialTheme.colorScheme.error
                                     )
                                 }
-                                else -> {}
+                                DownloadStatus.CANCELLED -> {
+                                    Text(
+                                        "Cancelled",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                DownloadStatus.COMPLETED -> {
+                                    Text(
+                                        "Done",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+
+                        if (download.status == DownloadStatus.ERROR) {
+                            IconButton(onClick = { DownloadManager.retryDownload(download.songId) }) {
+                                Icon(Icons.Default.Refresh, "Retry")
                             }
                         }
 
@@ -1126,47 +1227,46 @@ private fun DownloadsTab(
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
+            item(key = "active-spacer") { Spacer(Modifier.height(16.dp)) }
         }
 
-        // Downloaded songs
-        if (filteredDownloaded.isEmpty() && activeDownloads.isEmpty()) {
-            EmptyLibraryMessage(
-                icon = Icons.Default.DownloadDone,
-                message = if (searchQuery.isNotBlank()) "No matching downloads" else "No downloaded songs",
-                subMessage = if (searchQuery.isNotBlank()) "Try a different search term" else "Download songs for offline playback"
-            )
-        } else if (filteredDownloaded.isNotEmpty()) {
-            Text(
-                "Downloaded (${filteredDownloaded.size})",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(vertical = 8.dp)
-            )
-
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                items(filteredDownloaded, key = { it.id }) { dbSong ->
-                    val song = dbSong.toSongInfo(artistNamesMap)
-                    SongListItem(
-                        song = song,
-                        isPlaying = playerState.currentSong?.id == song.id,
-                        isDownloaded = true,
-                        playlists = playlists,
-                        onClick = {
-                            scope.launch {
-                                val localPath = dbSong.localPath
-                                if (localPath != null) {
-                                    player.playLocalFile(localPath, song)
-                                } else {
-                                    player.playSong(song)
-                                }
-                            }
-                        },
-                        onPlayNext = { player.addToQueueNext(song) },
-                        onAddToQueue = { player.addToQueue(song) }
+        if (filteredDownloaded.isNotEmpty()) {
+            item(key = "downloaded-header") {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Downloaded (" + filteredDownloaded.size + ")",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f)
                     )
+                    TextButton(onClick = { showDeleteAllDialog = true }) {
+                        Text("Delete all", color = MaterialTheme.colorScheme.error)
+                    }
                 }
+            }
+
+            items(filteredDownloaded, key = { it.id }) { dbSong ->
+                val song = dbSong.toSongInfo(artistNamesMap)
+                SongListItem(
+                    song = song,
+                    isPlaying = playerState.currentSong?.id == song.id,
+                    isDownloaded = true,
+                    playlists = playlists,
+                    onClick = {
+                        scope.launch {
+                            val localPath = dbSong.localPath
+                            if (localPath != null) {
+                                player.playLocalFile(localPath, song)
+                            } else {
+                                player.playSong(song)
+                            }
+                        }
+                    },
+                    onPlayNext = { player.addToQueueNext(song) },
+                    onAddToQueue = { player.addToQueue(song) }
+                )
             }
         }
     }

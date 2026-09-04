@@ -36,7 +36,7 @@ Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop 
 - YouTube Music library sync (songs, albums, artists, playlists)
 - Search with filters (songs, videos, albums, artists, playlists) + suggestions
 - Audio playback via VLC (streaming + local files)
-- Download management with progress tracking
+- Download management with progress tracking, resume after interruption, auto-retry, and per-playlist folders
 - Queue management (add, remove, shuffle, repeat, play next)
 - Media key shortcuts (space, Ctrl+P, Ctrl+Right/Left, Ctrl+S, Ctrl+R, hardware media keys)
 - Text field focus detection — keyboard shortcuts suppressed while typing
@@ -116,7 +116,7 @@ Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop 
 |------|---------|
 | db/DatabaseHelper.kt | SQLDelight wrapper, queue persistence, song/album/artist/playlist CRUD |
 | playback/DesktopPlayer.kt | VLC playback engine, queue management, shuffle/repeat, stream URL resolution |
-| download/DownloadManager.kt | Download queue, HTTP streaming with progress, m4a storage |
+| download/DownloadManager.kt | Download queue, HTTP streaming with progress, m4a storage, resume, retry, per-playlist folders |
 | download/CarExport.kt | ffmpeg-backed export/normalize to MP3 for USB/CD (loudnorm + stereo, optional dual mono) |
 | sync/LibrarySync.kt | YouTube library sync (liked songs, albums, artists, playlists) with pagination |
 | settings/PreferencesManager.kt | Properties file persistence for all user preferences |
@@ -631,17 +631,34 @@ changes that string the symptom is the old spurious error returning, not data lo
 
 ## Icons: two artworks, picked by size
 
-- `icon.png` — the full mark with its gold ring. Large sizes, the site, the 256px `.ico` entry.
-- `icon-small.png` — the same lyre without the ring. The tray, the window icon at 48px and below,
-  and the 16/32/48 `.ico` entries.
+- `icon.png` (512px source), the full mark with its gold ring. Every `.ico` entry at 64px and up.
+- `icon-small.png` (256px source), the same lyre without the ring. The tray, the window icon at
+  48px and below, and the 16/20/24/32/40/48 `.ico` entries.
 
 The ring is most of the pixels at 16px, so the full mark reads as a gold box rather than a lyre.
 The small variant keeps the dark tile: dropping that too would leave a white glyph on transparency,
 which vanishes on a light-theme taskbar.
 
+### The .ico must carry the middle sizes, or the desktop shortcut looks upscaled
+
+`icon.ico` holds **16, 20, 24, 32, 40, 48, 64, 96, 128 and 256**, all 32bpp uncompressed BMP.
+
+Through 2.10.11 it held only 16, 32, 48 and 256, and the desktop shortcut was visibly blurry while
+the taskbar was sharp. That is not two different icons, it is two different requested sizes.
+Windows picks the nearest entry by absolute difference and scales it, and the desktop's default
+"Large icons" view asks for 96px: `|96-48| = 48` beats `|96-256| = 160`, so it upscaled the 48px
+entry 2x. The taskbar asks for 32px, hit an exact entry, and looked fine. Anything that reports a
+blurry icon at one size and a clean one at another is this, and the fix is an entry at the size
+being asked for, never a bigger 256.
+
+Regenerate with `desktop/src/main/resources` as the working directory if the artwork changes.
+Keep every entry uncompressed BMP: the 256px entry has always been BMP rather than PNG-in-ICO and
+there is no reason to find out which loaders in the chain disagree about that.
+
 `patchPortableIcon` is **dead code**. It looks for Resource Hacker at a path that does not exist, so
 it warns and skips every build. Its comment claiming Compose only applies `iconFile` to MSI is
-outdated — jpackage embeds the `.ico` into the app-image exe fine.
+outdated: jpackage embeds the `.ico` into the app-image exe fine, verified by enumerating the
+exe's RT_GROUP_ICON after a build (all 10 entries present).
 
 ## Discord Rich Presence
 
@@ -684,8 +701,80 @@ skipping is exactly what tripped the rate limit that rule 6 in `AGENTS.md` exist
 - DatabaseHelper.database is private — use DatabaseHelper methods, not direct DB access
 - SQLDelight accessor is `lyrenneQueries`, named after the `Lyrenne.sq` file (rename the file and the accessor renames with it)
 
+## Downloads: the queue is state on disk, not a list in memory
+
+Three separate problems shared one cause, which is that the queue only ever existed in RAM and
+every operation on it ran wherever it was called from.
+
+**Queueing was done on the UI thread, per song.** `queueDownload` did two autocommit SQLite
+writes and two whole-collection copies for each song, and callers ran an `isDownloaded` database
+read per song on top of that, also on the UI thread. "Download All" on a 700-track playlist was
+therefore 1400 separate transactions plus 700 reads plus O(n squared) copying before Compose could
+paint another frame. `queueDownloads` now takes the whole batch, runs it off-thread inside one
+`DatabaseHelper.transaction`, and does the already-downloaded filter itself. Do not reintroduce
+that filter at a call site.
+
+**The Downloads tab composed the active list eagerly.** It was a plain `Column` of `Card`s, so 700
+queued songs built 700 Cards whether or not they were on screen, and every progress emission
+recomposed all of them. It is one `LazyColumn` now, holding both sections. Progress emissions are
+also throttled to one per song per 250 ms; at three parallel downloads emitting on each 1% change
+that was several hundred copies of a large map per second.
+
+**Nothing read the queue back.** The `DownloadQueue` table has existed since the beginning and
+`getPendingDownloads()` was never called, so closing the lid or quitting mid-download lost the
+work silently. `DownloadManager.restoreQueue()` runs from `Main.runApp()` and picks it back up.
+
+### What makes resuming safe
+
+Partial files are named `<songId>-<contentLength>.part`, and that name is the entire safety
+mechanism. Resuming appends to whatever partial survived; if that partial came from a different
+encoding of the same video the result is a valid-looking m4a made of two unrelated halves, and
+nothing notices until playback weeks later. Putting the byte count in the name means a partial can
+only ever be matched to the stream it came from, and a re-resolve that returns a different format
+simply finds no file and starts clean. `DownloadResumeTest` pins this. Do not "simplify" the name.
+
+- The partial is deliberately **not** deleted when a download throws. It is the resume point.
+  Stale ones are swept by `pruneStalePartials` on the next attempt and by `cancelDownload`.
+- The resume offset is the `range=` URL parameter, the same one that bypasses CDN throttling, so
+  a resume is `range=<offset>-<total>` rather than an HTTP `Range` header.
+- `fos.fd.sync()` before the fd closes. Without it up to 512 KB sits in the write buffer that the
+  next resume's offset believes is already on disk.
+- Rows still marked `downloading` at startup were interrupted, not failed, so `resetStuckDownloads`
+  puts them back to pending. `restoreQueue` waits 5 s so it is not competing with the window paint,
+  the auth check and the launch library sync.
+
+### Retries, cancelling, and why every state write is conditional
+
+Three attempts at 2 s, 5 s and 15 s, then the song parks as ERROR with a Retry button. Each attempt
+re-resolves the stream URL, because an expired URL and a dropped connection look identical here.
+
+**Every write for an in-flight song goes through `updateIfTracked`.** Cancelling removes the entry
+from `activeDownloads`, but the job it cancelled keeps running until the coroutine unwinds, and any
+plain `downloads + (id to ...)` in that window puts the card back. "Cancel all" emptied the list and
+then refilled it with CANCELLED cards nothing could clear. The only unconditional inserts are the
+ones that queue a song in the first place.
+
+Jobs are registered with `CoroutineStart.LAZY` and started after the map assignment. A download
+that finished inside its own `launch` otherwise removed itself before the assignment put it back,
+leaving a completed job under that song id forever and making that song unqueueable.
+
+### Per-playlist folders
+
+"Download All" on an album, a YouTube playlist or a local playlist writes into
+`Downloads/<sanitized name>/`. Single-song downloads (context menus, MiniPlayer, auto-download on
+like) stay flat in `Downloads/`. There is no setting, and existing flat downloads are not migrated.
+The subfolder is stored on the queue row so a restored or retried download still lands in the right
+place. `pruneEmptySubfolder` removes a folder once its last file goes, and refuses to touch
+anything that is not a direct child of the downloads root.
+
+`DownloadQueue` carries the full `SongInfo` (title, artist, thumbnail, album, duration) rather than
+joining `Song` on restore, matching what `PlayQueue` already does: the queue has to come back after
+a restart without depending on rows elsewhere surviving, and artist lives in `SongArtistMap`, not
+`Song`. The columns are added to existing databases by `addMissingColumns`, the first migration in
+`DatabaseHelper` that looks at columns rather than tables.
+
 ## Version Management
-- **Current version**: v2.10.7
+- **Current version**: v2.10.11
 - **Version must be updated in TWO places** when releasing:
   1. `desktop/build.gradle.kts` → `lyrenneVersion = "X.Y.Z"`
   2. `desktop/.../update/AutoUpdater.kt` → `CURRENT_VERSION = "X.Y.Z"`

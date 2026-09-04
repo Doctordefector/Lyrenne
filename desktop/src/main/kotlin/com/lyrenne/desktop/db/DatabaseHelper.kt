@@ -97,6 +97,39 @@ object DatabaseHelper {
                 )
             """.trimIndent(), 0)
         }
+
+        // DownloadQueue gained the song metadata it needs to restore itself after a restart,
+        // plus the destination subfolder. Every migration here is a table check, so this is the
+        // first one that has to look at columns instead.
+        addMissingColumns(
+            driver, "DownloadQueue",
+            "title" to "TEXT NOT NULL DEFAULT ''",
+            "artist" to "TEXT NOT NULL DEFAULT ''",
+            "thumbnailUrl" to "TEXT",
+            "album" to "TEXT",
+            "durationSec" to "INTEGER NOT NULL DEFAULT -1",
+            "subfolder" to "TEXT"
+        )
+    }
+
+    /** ALTER TABLE ADD COLUMN for any of [columns] the table does not already have. */
+    private fun addMissingColumns(
+        driver: JdbcSqliteDriver,
+        table: String,
+        vararg columns: Pair<String, String>
+    ) {
+        val existing = mutableSetOf<String>()
+        driver.getConnection().let { connection ->
+            connection.prepareStatement("PRAGMA table_info($table)").use { stmt ->
+                val rs = stmt.executeQuery()
+                while (rs.next()) existing.add(rs.getString("name"))
+            }
+        }
+        if (existing.isEmpty()) return  // table does not exist yet; Schema.create will make it
+        for ((name, type) in columns) {
+            if (name in existing) continue
+            driver.execute(null, "ALTER TABLE $table ADD COLUMN $name $type", 0)
+        }
     }
 
     private fun getDatabaseFile(): File = com.lyrenne.desktop.AppPaths.databaseFile
@@ -130,6 +163,12 @@ object DatabaseHelper {
         queries.getDownloadedSongs { id, title, duration, thumbnailUrl, albumId, albumName, explicit, year, liked, likedDate, totalPlayTime, inLibrary, dateDownload, isLocal, isDownloaded, localPath, _rowOrder ->
             Song(id, title, duration, thumbnailUrl, albumId, albumName, explicit, year, liked, likedDate, totalPlayTime, inLibrary, dateDownload, isLocal, isDownloaded, localPath)
         }.asFlow().mapToList(Dispatchers.IO)
+
+    /** One-shot read of the downloaded songs, for bulk delete. The Flow above drives the UI. */
+    fun getDownloadedSongsOnce(): List<Song> =
+        queries.getDownloadedSongs { id, title, duration, thumbnailUrl, albumId, albumName, explicit, year, liked, likedDate, totalPlayTime, inLibrary, dateDownload, isLocal, isDownloaded, localPath, _rowOrder ->
+            Song(id, title, duration, thumbnailUrl, albumId, albumName, explicit, year, liked, likedDate, totalPlayTime, inLibrary, dateDownload, isLocal, isDownloaded, localPath)
+        }.executeAsList()
 
     fun getSongById(id: String) =
         queries.getSongById(id).asFlow().mapToOneOrNull(Dispatchers.IO)
@@ -439,14 +478,52 @@ object DatabaseHelper {
     fun getDownloadingItems() =
         queries.getDownloadingItems().asFlow().mapToList(Dispatchers.IO)
 
-    fun addToDownloadQueue(songId: String) {
+    /**
+     * All rows worth picking back up on the next launch (pending, interrupted, or failed).
+     * A one-shot read rather than a Flow: the restore runs once at startup.
+     */
+    fun getUnfinishedDownloads(): List<DownloadQueue> =
+        queries.getUnfinishedDownloads().executeAsList()
+
+    fun addToDownloadQueue(
+        songId: String,
+        title: String,
+        artist: String,
+        thumbnailUrl: String?,
+        album: String?,
+        durationSec: Int,
+        subfolder: String?
+    ) {
         queries.insertDownloadQueue(
             songId = songId,
             status = "pending",
             progress = 0L,
             addedAt = LocalDateTime.now().toString(),
-            error = null
+            error = null,
+            title = title,
+            artist = artist,
+            thumbnailUrl = thumbnailUrl,
+            album = album,
+            durationSec = durationSec.toLong(),
+            subfolder = subfolder
         )
+    }
+
+    /** Anything left mid-transfer by a kill or a closed lid is unfinished work, not an error. */
+    fun resetStuckDownloads() {
+        queries.resetStuckDownloads()
+    }
+
+    fun retryFailedDownloads() {
+        queries.retryFailedDownloads()
+    }
+
+    fun clearFinishedDownloads() {
+        queries.clearFinishedDownloads()
+    }
+
+    fun clearDownloadQueue() {
+        queries.clearDownloadQueue()
     }
 
     fun updateDownloadProgress(songId: String, progress: Int, status: String) {

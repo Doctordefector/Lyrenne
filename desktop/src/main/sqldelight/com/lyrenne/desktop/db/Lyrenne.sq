@@ -93,6 +93,10 @@ CREATE INDEX playlist_song_playlist_idx ON PlaylistSongMap(playlistId);
 CREATE INDEX playlist_song_song_idx ON PlaylistSongMap(songId);
 
 -- Download queue table
+--
+-- Carries the full SongInfo rather than joining Song on restore. PlayQueue already does this
+-- for the same reason: the queue has to come back after a restart without depending on rows
+-- somewhere else surviving, and artist lives in SongArtistMap, not Song.
 CREATE TABLE DownloadQueue (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     songId TEXT NOT NULL UNIQUE,
@@ -100,6 +104,12 @@ CREATE TABLE DownloadQueue (
     progress INTEGER NOT NULL DEFAULT 0,
     addedAt TEXT NOT NULL,
     error TEXT,
+    title TEXT NOT NULL DEFAULT '',
+    artist TEXT NOT NULL DEFAULT '',
+    thumbnailUrl TEXT,
+    album TEXT,
+    durationSec INTEGER NOT NULL DEFAULT -1,
+    subfolder TEXT,
     FOREIGN KEY (songId) REFERENCES Song(id) ON DELETE CASCADE
 );
 
@@ -354,9 +364,15 @@ SELECT * FROM DownloadQueue WHERE status = 'pending' ORDER BY addedAt;
 getDownloadingItems:
 SELECT * FROM DownloadQueue WHERE status = 'downloading';
 
+-- Everything the app should pick back up on the next launch, in the order it was queued.
+-- 'error' is included: a run that died on a network drop leaves rows in exactly that state
+-- and they are the ones most worth retrying.
+getUnfinishedDownloads:
+SELECT * FROM DownloadQueue WHERE status IN ('pending', 'downloading', 'error') ORDER BY addedAt;
+
 insertDownloadQueue:
-INSERT OR REPLACE INTO DownloadQueue(songId, status, progress, addedAt, error)
-VALUES (?, ?, ?, ?, ?);
+INSERT OR REPLACE INTO DownloadQueue(songId, status, progress, addedAt, error, title, artist, thumbnailUrl, album, durationSec, subfolder)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 updateDownloadProgress:
 UPDATE DownloadQueue SET progress = ?, status = ? WHERE songId = ?;
@@ -364,11 +380,24 @@ UPDATE DownloadQueue SET progress = ?, status = ? WHERE songId = ?;
 updateDownloadError:
 UPDATE DownloadQueue SET error = ?, status = 'error' WHERE songId = ?;
 
+-- A row left mid-transfer by a kill or a closed lid is not an error, it is unfinished work.
+resetStuckDownloads:
+UPDATE DownloadQueue SET status = 'pending' WHERE status = 'downloading';
+
+retryFailedDownloads:
+UPDATE DownloadQueue SET status = 'pending', error = NULL WHERE status = 'error';
+
 deleteFromDownloadQueue:
 DELETE FROM DownloadQueue WHERE songId = ?;
 
 clearCompletedDownloads:
 DELETE FROM DownloadQueue WHERE status = 'completed';
+
+clearFinishedDownloads:
+DELETE FROM DownloadQueue WHERE status IN ('completed', 'error');
+
+clearDownloadQueue:
+DELETE FROM DownloadQueue;
 
 -- Search history queries
 getSearchHistory:

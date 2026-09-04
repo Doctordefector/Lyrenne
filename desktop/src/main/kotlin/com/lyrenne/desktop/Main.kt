@@ -255,6 +255,11 @@ private fun runApp() {
     // by this: credentials.json is what the app authenticates with, and it is untouched.
     com.lyrenne.desktop.auth.BrowserLoginHelper.clearLoginProfile()
 
+    // Pick up downloads that did not finish before the last close. Rows still marked
+    // 'downloading' were interrupted mid-transfer, not failed, and their partial files are
+    // still on disk, so this resumes rather than starting the transfers over.
+    com.lyrenne.desktop.download.DownloadManager.restoreQueue()
+
     application {
         // Centred as well as clamped: a window sized to fit is still useless if the platform
         // places it partly off-screen.

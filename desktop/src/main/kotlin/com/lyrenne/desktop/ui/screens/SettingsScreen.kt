@@ -1246,7 +1246,7 @@ fun SettingsScreen(
                     onDismissRequest = { showEasterEgg = false },
                     text = {
                         Text(
-                            "Reunited Again <3",
+                            "Blub Blub 🐟",
                             style = MaterialTheme.typography.titleMedium,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth()

@@ -47,7 +47,40 @@ object BrowserLoginHelper {
     }
 
     /**
-     * Delete the login profile. Safe to call when it does not exist.
+     * Strip the login profile down to the part that makes the *next* sign-in bearable.
+     *
+     * Deleting the whole profile meant every sign-in met a browser that had never seen the
+     * account: full email, full password, second factor, every time, no matter how carefully
+     * the user had told the browser to remember them. Keeping the profile whole was not the
+     * alternative, since the cookie store in it is a second live Google session sitting on disk.
+     *
+     * So the cookie store goes and `Login Data` stays. That file is the saved password, sealed
+     * by DPAPI to this Windows account, along with the `Local State` key that opens it; on its
+     * own it cannot authenticate anything, it only spares the typing. Everything else, cache and
+     * history and Web Data and Token Service included, is deleted, which also takes the profile
+     * from about 87 MB down to a few hundred KB.
+     */
+    fun pruneLoginProfile() {
+        val dir = File(com.lyrenne.desktop.AppPaths.dataDir, "login-profile")
+        if (!dir.exists()) return
+        dir.listFiles()?.forEach { f ->
+            if (!f.name.equals("Local State", ignoreCase = true) &&
+                !f.name.equals("Default", ignoreCase = true)
+            ) {
+                f.deleteRecursively()
+            }
+        }
+        File(dir, "Default").listFiles()?.forEach { f ->
+            if (!f.name.startsWith("Login Data")) f.deleteRecursively()
+        }
+        Timber.i("Pruned login profile down to saved passwords")
+    }
+
+    /**
+     * Delete the login profile outright, saved passwords and all. This is the sign-out path;
+     * everywhere else wants [pruneLoginProfile].
+     *
+     * Safe to call when it does not exist.
      *
      * The profile is single-use scratch space: once the cookies are in credentials.json it has
      * no further purpose, and what it still holds is a second live Google session. Around 87 MB
@@ -185,7 +218,7 @@ object BrowserLoginHelper {
         // Both entry points funnel through here, and only a Success means the cookies are safely
         // in memory. On anything else the profile has to survive, since the poll path calls this
         // repeatedly while the user is still signing in.
-        if (result is CookieExtractResult.Success) clearLoginProfile()
+        if (result is CookieExtractResult.Success) pruneLoginProfile()
         return result
     }
 }

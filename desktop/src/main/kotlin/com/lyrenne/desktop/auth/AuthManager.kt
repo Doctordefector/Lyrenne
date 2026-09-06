@@ -9,6 +9,7 @@ import io.ktor.client.statement.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -36,6 +37,14 @@ data class AuthCredentials(
     val accountInfo: AccountInfo? = null
 )
 
+/** Everything one fetch of the YouTube Music page tells us about the session. */
+private data class YtCfg(
+    val values: Map<String, String>,
+    val setCookies: List<String>,
+    /** null means the page never answered, which is not the same as being signed out. */
+    val loggedIn: Boolean?
+)
+
 data class AuthState(
     val isLoggedIn: Boolean = false,
     val isLoading: Boolean = false,
@@ -55,32 +64,108 @@ object AuthManager {
 
     private val credentialsFile: File get() = com.lyrenne.desktop.AppPaths.credentialsFile
 
+    /** Google rotates the session cookies faster than this; the point is only not to drift. */
+    private const val REFRESH_INTERVAL_MS = 6L * 60 * 60 * 1000
+
     fun initialize() {
         loadCredentials()
-        if (_authState.value.isLoggedIn) validateSession()
-    }
-
-    /**
-     * Confirm the stored cookies are actually still good.
-     *
-     * An expired YouTube session does not fail loudly — the API answers HTTP 200 with an
-     * anonymous response, so browses return zero items and writes 401. Having credentials.json
-     * on disk therefore said nothing about being signed in, and the app presented a dead
-     * session as a live one: an empty library and silently discarded edits, with no hint that
-     * signing in again was all that was needed.
-     */
-    private fun validateSession() {
+        if (!_authState.value.isLoggedIn) return
         scope.launch {
-            val valid = runCatching { YouTube.accountInfo().getOrThrow() }.isSuccess
-            if (!valid) {
-                Timber.w("Stored YouTube session is no longer valid — marking signed out")
-                _authState.value = AuthState(
-                    isLoggedIn = false,
-                    error = "Your YouTube session expired. Sign in again to sync your library."
-                )
+            refreshSession()
+            while (true) {
+                delay(REFRESH_INTERVAL_MS)
+                if (_authState.value.isLoggedIn) refreshSession()
             }
         }
     }
+
+    /**
+     * Confirm the stored cookies are still good, and pull forward the ones Google rotated.
+     *
+     * An expired YouTube session does not fail loudly: the API answers HTTP 200 with an
+     * anonymous response, so browses return zero items and writes 401. Having credentials.json
+     * on disk therefore says nothing about being signed in, and the app would present a dead
+     * session as a live one, with an empty library and silently discarded edits.
+     *
+     * Two things went wrong in the first version of this check. It called `YouTube.accountInfo()`
+     * inside a `runCatching`, so any failure at all (no network yet after a restart, a timeout,
+     * a 5xx) read as "expired" and signed a perfectly good session out. That is what made an
+     * update look like it dropped the login: the app relaunches, the very first request loses a
+     * race with the network coming back, and the user is asked to sign in again. And nothing
+     * ever wrote rotated cookies back, so the stored snapshot aged in place until Google stopped
+     * honouring it, which is the session quietly dying after a few weeks.
+     *
+     * The ytcfg page answers both questions at once: LOGGED_IN is authoritative about the
+     * session, and the response carries the refreshed cookies. Anything short of an actual
+     * answer leaves the stored login alone.
+     */
+    private suspend fun refreshSession() {
+        val credentials = readCredentials() ?: return
+
+        var cfg: YtCfg? = null
+        repeat(3) { attempt ->
+            if (cfg == null) {
+                if (attempt > 0) delay(5_000)
+                cfg = fetchYtCfg(credentials.cookie).takeIf { it.loggedIn != null }
+            }
+        }
+        val answer = cfg
+        if (answer == null) {
+            Timber.w("Could not reach YouTube to check the session, keeping the stored login")
+            return
+        }
+        if (answer.loggedIn == false) {
+            Timber.w("Stored YouTube session is no longer valid, marking signed out")
+            _authState.value = AuthState(
+                isLoggedIn = false,
+                error = "Your YouTube session expired. Sign in again to sync your library."
+            )
+            return
+        }
+
+        val refreshed = credentials.copy(
+            cookie = mergeCookies(credentials.cookie, answer.setCookies),
+            visitorData = answer.values["VISITOR_DATA"] ?: credentials.visitorData,
+            dataSyncId = answer.values["DATASYNC_ID"] ?: credentials.dataSyncId,
+            accountIndex = answer.values["SESSION_INDEX"]?.toIntOrNull() ?: credentials.accountIndex
+        )
+        if (refreshed == credentials) return
+        runCatching {
+            credentialsFile.writeText(json.encodeToString(refreshed))
+            applyCredentials(refreshed)
+            Timber.i("Refreshed the stored YouTube session")
+        }.onFailure { Timber.e("Could not save the refreshed session: ${it.message}") }
+    }
+
+    /**
+     * Fold a response's Set-Cookie headers into the stored cookie string, the way a browser would.
+     *
+     * Only cookies already held are updated. A name arriving mid-session is not something this
+     * app knows how to need, and refusing them keeps a logged-out response, which arrives as a
+     * pile of blanked cookies, from doing damage even if the LOGGED_IN guard above were ever
+     * wrong. Blank values are skipped for the same reason: that is a deletion.
+     */
+    internal fun mergeCookies(current: String, setCookies: List<String>): String {
+        val jar = LinkedHashMap<String, String>()
+        for (part in current.split(";")) {
+            val eq = part.indexOf('=')
+            if (eq > 0) jar[part.substring(0, eq).trim()] = part.substring(eq + 1).trim()
+        }
+        for (header in setCookies) {
+            val pair = header.substringBefore(';')
+            val eq = pair.indexOf('=')
+            if (eq <= 0) continue
+            val name = pair.substring(0, eq).trim()
+            val value = pair.substring(eq + 1).trim()
+            if (name !in jar || value.isEmpty() || value == "\"\"") continue
+            jar[name] = value
+        }
+        return jar.entries.joinToString("; ") { "${it.key}=${it.value}" }
+    }
+
+    private fun readCredentials(): AuthCredentials? = runCatching {
+        json.decodeFromString<AuthCredentials>(credentialsFile.readText())
+    }.getOrNull()
 
     private fun loadCredentials() {
         try {
@@ -123,7 +208,7 @@ object AuthManager {
             YouTube.useLoginForBrowse = true
 
             // Fetch ytcfg from YouTube Music page to get DATASYNC_ID, SESSION_INDEX, and visitorData
-            val ytcfg = fetchYtCfg(cookie)
+            val ytcfg = fetchYtCfg(cookie).values
             val actualDataSyncId = ytcfg["DATASYNC_ID"] ?: dataSyncId
             val sessionIndex = ytcfg["SESSION_INDEX"]?.toIntOrNull() ?: 0
             val pageVisitorData = ytcfg["VISITOR_DATA"]
@@ -217,22 +302,25 @@ object AuthManager {
      * Extracts DATASYNC_ID, SESSION_INDEX, VISITOR_DATA, LOGGED_IN.
      * Requires proper SAPISIDHASH for authenticated access.
      */
-    private suspend fun fetchYtCfg(cookie: String): Map<String, String> {
+    private suspend fun fetchYtCfg(cookie: String): YtCfg {
         val result = mutableMapOf<String, String>()
+        var setCookies = emptyList<String>()
         val client = HttpClient()
         try {
             // Build SAPISIDHASH from cookies
             val cookieMap = parseCookieString(cookie)
-            val sapisid = cookieMap["SAPISID"] ?: return result
+            val sapisid = cookieMap["SAPISID"] ?: return YtCfg(result, setCookies, null)
             val origin = "https://music.youtube.com"
             val currentTime = System.currentTimeMillis() / 1000
             val sapisidHash = sha1("$currentTime $sapisid $origin")
 
-            val html = client.get(origin) {
+            val response = client.get(origin) {
                 header("cookie", cookie)
                 header("Authorization", "SAPISIDHASH ${currentTime}_${sapisidHash}")
                 header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36")
-            }.bodyAsText()
+            }
+            setCookies = response.headers.getAll("Set-Cookie").orEmpty()
+            val html = response.bodyAsText()
 
             // Extract key-value pairs from ytcfg.set calls
             val setPattern = """ytcfg\.set\(\{(.*?)\}\)""".toRegex(RegexOption.DOT_MATCHES_ALL)
@@ -266,6 +354,6 @@ object AuthManager {
         } finally {
             client.close()
         }
-        return result
+        return YtCfg(result, setCookies, result["LOGGED_IN"]?.toBooleanStrictOrNull())
     }
 }

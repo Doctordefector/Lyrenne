@@ -244,16 +244,16 @@ private fun runApp() {
     configureImageLoader()
     applyNetworkPreferences()
 
-    // Sweep a login profile left over from an earlier version.
+    // Sweep the login profile: cookie store and caches out, saved passwords in.
     //
-    // The profile is single-use scratch. The cookies were copied into credentials.json when it
-    // was created and it is never read again, but nothing used to delete it, so it sat next to
-    // the app holding a second live Google session that even signing out did not remove. A real
-    // install measured 87 MB, which was 99% of the entire data folder.
+    // The cookies in it were copied into credentials.json when it was created and are never
+    // read again, but nothing used to delete them, so a second live Google session sat next to
+    // the app that even signing out did not remove. A real install measured 87 MB, which was
+    // 99% of the entire data folder.
     //
     // Safe at startup specifically because no login can be in flight yet. Nobody is signed out
     // by this: credentials.json is what the app authenticates with, and it is untouched.
-    com.lyrenne.desktop.auth.BrowserLoginHelper.clearLoginProfile()
+    com.lyrenne.desktop.auth.BrowserLoginHelper.pruneLoginProfile()
 
     // Pick up downloads that did not finish before the last close. Rows still marked
     // 'downloading' were interrupted mid-transfer, not failed, and their partial files are

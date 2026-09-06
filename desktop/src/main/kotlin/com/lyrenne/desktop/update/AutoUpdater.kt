@@ -26,7 +26,7 @@ import java.util.zip.ZipInputStream
  * Program Files, it's installed. Otherwise it's portable.
  */
 object AutoUpdater {
-    const val CURRENT_VERSION = "2.11.0"
+    const val CURRENT_VERSION = "2.11.1"
     private const val GITHUB_OWNER = "Doctordefector"
     private const val GITHUB_REPO = "Lyrenne"
 
@@ -285,6 +285,10 @@ object AutoUpdater {
      */
     private fun psQuote(path: String): String = "'" + path.replace("'", "''") + "'"
 
+    // Quoting the assignment is only half of it: the value still has to survive being handed to
+    // a native exe. Start-Process -ArgumentList concatenates without quoting, so robocopy is
+    // invoked directly below, where PowerShell quotes each argument itself.
+
     private fun buildPortableUpdateScript(
         pid: Long, sourcePath: String, destPath: String,
         exePath: String, logPath: String, stagingRoot: String
@@ -315,15 +319,14 @@ object AutoUpdater {
 
         # Copy with robocopy
         Log "Copying files..."
-        ${'$'}result = Start-Process -FilePath "robocopy.exe" -ArgumentList @(
-            ${'$'}SourcePath, ${'$'}DestPath, "/E", "/IS", "/IT",
-            "/R:5", "/W:2", "/NFL", "/NDL", "/NP", "/LOG+:${'$'}LogPath"
-        ) -Wait -NoNewWindow -PassThru
+        & robocopy.exe ${'$'}SourcePath ${'$'}DestPath /E /IS /IT /R:5 /W:2 /NFL /NDL /NP |
+            Out-File -FilePath ${'$'}LogPath -Append -Encoding UTF8
+        ${'$'}exitCode = ${'$'}LASTEXITCODE
 
-        if (${'$'}result.ExitCode -lt 8) {
-            Log "Copy succeeded (exit code: ${'$'}(${'$'}result.ExitCode))"
+        if (${'$'}exitCode -lt 8) {
+            Log "Copy succeeded (exit code: ${'$'}exitCode)"
         } else {
-            Log "ERROR: Copy failed (exit code: ${'$'}(${'$'}result.ExitCode))"
+            Log "ERROR: Copy failed (exit code: ${'$'}exitCode)"
         }
 
         # Restart

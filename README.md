@@ -57,7 +57,7 @@ own Java runtime. Windows 10 or 11, 64-bit.
 | **Discovery** | Home feed with continuations, Explore (new releases, moods & genres, charts), search with filters and suggestions, radio and auto-queue, quick picks, podcasts |
 | **Lyrics** | Synced and plain, from a five-provider chain (BetterLyrics → LrcLib → KuGou → YouTube lyrics → YouTube transcript), with size, alignment and click-to-seek options |
 | **Social** | Listen Together rooms with live playback sync, Discord Rich Presence, Last.fm scrobbling |
-| **Extras** | Guided first-run setup, music recognition through Shazam, listening stats and history, downloads with progress, car/USB export to loudness-normalized MP3, backup and restore, proxy support, region and language settings, system tray with a mini player, media-key and keyboard shortcuts, Material 3 theming that follows your system |
+| **Extras** | Guided first-run setup, music recognition through Shazam, listening stats and history, downloads with progress, car/USB export to loudness-normalized MP3, backup and restore, proxy support, region and language settings, system tray with a mini player, Windows Now Playing and media controls, media-key and keyboard shortcuts, Material 3 theming that follows your system |
 
 Everything the app writes (database, credentials, preferences, cache, downloads) stays in the
 app's own folder. Nothing is written to `%APPDATA%`, and there is no telemetry.
@@ -129,7 +129,8 @@ with, endorsed by, or associated with the Metrolist Group.
 Also built on [vlcj](https://github.com/caprica/vlcj),
 [Compose Multiplatform](https://github.com/JetBrains/compose-multiplatform),
 [SQLDelight](https://github.com/cashapp/sqldelight) and
-[NewPipe Extractor](https://github.com/TeamNewPipe/NewPipeExtractor).
+[NewPipe Extractor](https://github.com/TeamNewPipe/NewPipeExtractor), with Windows media-session
+support from [mediasession-kt](https://github.com/sayaka-sh/mediasession-kt).
 
 ## License
 

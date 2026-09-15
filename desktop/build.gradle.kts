@@ -80,6 +80,12 @@ dependencies {
     implementation("net.java.dev.jna:jna:5.17.0")
     implementation("net.java.dev.jna:jna-platform:5.17.0")
 
+    // Windows System Media Transport Controls (Now Playing, media buttons, timeline)
+    implementation("dev.toastbits:mediasession:0.1.1") {
+        // Lyrenne is Windows-only. Do not ship mediasession-kt's Linux D-Bus runtime.
+        exclude(group = "com.github.hypfvieh")
+    }
+
     // JSON
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
 

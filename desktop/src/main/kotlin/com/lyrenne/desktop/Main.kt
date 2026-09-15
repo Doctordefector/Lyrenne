@@ -457,10 +457,9 @@ private fun runApp() {
             /**
              * Floor on how small the window can be dragged.
              *
-             * The MiniPlayer's controls are a plain Row of fixed-size buttons, and a Row does not
-             * wrap: below roughly 630 dp of width the title area is squeezed to nothing and the
-             * transport controls start clipping off the edge. Nothing we now open at comes close,
-             * but a user can drag there by hand.
+             * The MiniPlayer adapts at two breakpoints, moving less common actions into an
+             * overflow while keeping transport, queue, mute and a compact volume slider visible.
+             * The floor still protects the remaining title and artwork space at narrow widths.
              *
              * Clamped against the opening size so it can never exceed what the screen fits. On a
              * small display the screen is still the constraint, and a minimum larger than the

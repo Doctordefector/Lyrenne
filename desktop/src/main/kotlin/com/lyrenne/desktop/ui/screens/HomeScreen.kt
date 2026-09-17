@@ -1,6 +1,12 @@
 package com.lyrenne.desktop.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -11,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -25,6 +32,7 @@ import com.lyrenne.desktop.playback.SongInfo
 import com.lyrenne.desktop.playback.toPlayerSongInfo
 import com.lyrenne.desktop.settings.PreferencesManager
 import com.lyrenne.desktop.ui.components.ScrollableRow
+import com.lyrenne.desktop.ui.theme.LyrenneTokens
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -133,7 +141,7 @@ fun HomeScreen(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+    Box(modifier = Modifier.fillMaxSize().padding(LyrenneTokens.contentPadding)) {
         when {
             isLoading -> {
                 CircularProgressIndicator(
@@ -189,8 +197,8 @@ fun HomeScreen(
                 ) {
                     item {
                         Text(
-                            "Welcome to Lyrenne",
-                            style = MaterialTheme.typography.headlineMedium
+                            "Home",
+                            style = MaterialTheme.typography.headlineSmall
                         )
                     }
 
@@ -248,8 +256,8 @@ private fun HomeSection(
     Column {
         Text(
             text = title,
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(bottom = 12.dp)
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(bottom = 10.dp)
         )
 
         ScrollableRow(
@@ -286,51 +294,67 @@ private fun HomeSectionItem(
     item: YTItem,
     onClick: () -> Unit
 ) {
-    Card(
+    val interactionSource = remember { MutableInteractionSource() }
+    val isHovered by interactionSource.collectIsHoveredAsState()
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    val tileShape = RoundedCornerShape(LyrenneTokens.panelRadius)
+
+    Column(
         modifier = Modifier
-            .width(180.dp)
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(8.dp)
+            .width(172.dp)
+            .clip(tileShape)
+            .background(
+                if (isHovered || isFocused) MaterialTheme.colorScheme.surfaceContainerLow
+                else Color.Transparent
+            )
+            .border(
+                width = if (isFocused) 1.dp else 0.dp,
+                color = if (isFocused) MaterialTheme.colorScheme.primary else Color.Transparent,
+                shape = tileShape
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
+                onClick = onClick
+            )
+            .padding(6.dp)
     ) {
-        Column {
-            AsyncImage(
-                model = item.thumbnail,
-                contentDescription = item.title,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(180.dp)
-                    .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)),
-                contentScale = ContentScale.Crop
+        AsyncImage(
+            model = item.thumbnail,
+            // The surrounding clickable tile merges its title text into one accessible label.
+            contentDescription = null,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(160.dp)
+                .clip(RoundedCornerShape(LyrenneTokens.artworkRadius)),
+            contentScale = ContentScale.Crop
+        )
+
+        Column(modifier = Modifier.padding(horizontal = 2.dp, vertical = 8.dp)) {
+            Text(
+                text = item.title,
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
 
-            Column(
-                modifier = Modifier.padding(12.dp)
-            ) {
+            val subtitle = when (item) {
+                is SongItem -> item.artists.joinToString { it.name }
+                is AlbumItem -> item.artists?.joinToString { it.name } ?: ""
+                is ArtistItem -> "Artist"
+                is PlaylistItem -> item.author?.name ?: ""
+                is PodcastItem -> item.author?.name ?: "Podcast"
+                else -> ""
+            }
+
+            if (subtitle.isNotEmpty()) {
                 Text(
-                    text = item.title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-
-                val subtitle = when (item) {
-                    is SongItem -> item.artists.joinToString { it.name }
-                    is AlbumItem -> item.artists?.joinToString { it.name } ?: ""
-                    is ArtistItem -> "Artist"
-                    is PlaylistItem -> item.author?.name ?: ""
-                    is PodcastItem -> item.author?.name ?: "Podcast"
-                    else -> ""
-                }
-
-                if (subtitle.isNotEmpty()) {
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
             }
         }
     }

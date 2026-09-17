@@ -1,6 +1,7 @@
 package com.lyrenne.desktop.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -30,6 +31,7 @@ import com.lyrenne.desktop.ui.components.AutoScroll
 import com.lyrenne.desktop.ui.components.LyricsPanel
 import com.lyrenne.desktop.ui.components.MiniPlayer
 import com.lyrenne.desktop.ui.components.UpdateBadge
+import com.lyrenne.desktop.ui.theme.LyrenneTokens
 
 enum class Screen(val title: String, val icon: ImageVector, val selectedIcon: ImageVector) {
     Home("Home", Icons.Outlined.Home, Icons.Filled.Home),
@@ -144,7 +146,15 @@ fun App(player: DesktopPlayer) {
         }
 
         AppScreen.Main -> {
+            val navigationColors = NavigationRailItemDefaults.colors(
+                selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             Row(modifier = Modifier.fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
                 // TUNNEL phase (parent-first): Escape + Ctrl shortcuts only.
                 // These use modifier keys so they don't conflict with text input.
                 .onPreviewKeyEvent { event ->
@@ -216,8 +226,10 @@ fun App(player: DesktopPlayer) {
             ) {
                 // Side navigation rail
                 NavigationRail(
-                    modifier = Modifier.fillMaxHeight(),
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width(LyrenneTokens.navigationRailWidth),
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
                     header = {
                         Spacer(Modifier.height(8.dp))
                         AccountButton(
@@ -270,6 +282,7 @@ fun App(player: DesktopPlayer) {
                             },
                             label = { Text(screen.title) },
                             selected = currentScreen == screen && detailStack.isEmpty(),
+                            colors = navigationColors,
                             onClick = {
                                 currentScreen = screen
                                 detailStack.clear()
@@ -284,6 +297,7 @@ fun App(player: DesktopPlayer) {
                         icon = { Icon(Icons.Default.Equalizer, "Equalizer") },
                         label = { Text("EQ") },
                         selected = detailStack.lastOrNull() is DetailScreen.Equalizer,
+                        colors = navigationColors,
                         onClick = {
                             detailStack.clear()
                             detailStack.add(DetailScreen.Equalizer)
@@ -295,6 +309,7 @@ fun App(player: DesktopPlayer) {
                         icon = { Icon(Icons.Default.BarChart, "Stats") },
                         label = { Text("Stats") },
                         selected = detailStack.lastOrNull() is DetailScreen.Stats,
+                        colors = navigationColors,
                         onClick = {
                             detailStack.clear()
                             detailStack.add(DetailScreen.Stats)
@@ -306,6 +321,7 @@ fun App(player: DesktopPlayer) {
                         icon = { Icon(Icons.Default.Mic, "Recognize") },
                         label = { Text("Recognize") },
                         selected = detailStack.lastOrNull() is DetailScreen.Recognition,
+                        colors = navigationColors,
                         onClick = {
                             detailStack.clear()
                             detailStack.add(DetailScreen.Recognition)
@@ -317,6 +333,7 @@ fun App(player: DesktopPlayer) {
                         icon = { Icon(Icons.Default.Group, "Listen Together") },
                         label = { Text("Together") },
                         selected = detailStack.lastOrNull() is DetailScreen.ListenTogether,
+                        colors = navigationColors,
                         onClick = {
                             detailStack.clear()
                             detailStack.add(DetailScreen.ListenTogether)
@@ -328,6 +345,7 @@ fun App(player: DesktopPlayer) {
                             icon = { Icon(Icons.AutoMirrored.Filled.Login, "Sign In") },
                             label = { Text("Sign In") },
                             selected = false,
+                            colors = navigationColors,
                             onClick = { currentAppScreen = AppScreen.Login }
                         )
                     }
@@ -337,6 +355,8 @@ fun App(player: DesktopPlayer) {
                         }
                     }
                 }
+
+                VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 // Main content
                 Column(modifier = Modifier.fillMaxSize()) {
@@ -474,7 +494,7 @@ fun App(player: DesktopPlayer) {
                                 },
                                 modifier = Modifier
                                     .align(Alignment.TopEnd)
-                                    .padding(16.dp)
+                                    .padding(LyrenneTokens.contentPadding)
                             )
 
                             // Playback failures used to be silent in the UI: the VLC error event
@@ -487,7 +507,7 @@ fun App(player: DesktopPlayer) {
                                     onDismiss = player::clearError,
                                     modifier = Modifier
                                         .align(Alignment.BottomCenter)
-                                        .padding(16.dp)
+                                        .padding(LyrenneTokens.contentPadding)
                                 )
                             }
                         }

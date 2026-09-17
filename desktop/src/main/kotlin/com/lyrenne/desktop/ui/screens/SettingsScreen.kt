@@ -22,6 +22,7 @@ import coil3.compose.AsyncImage
 import com.lyrenne.desktop.auth.AuthManager
 import com.lyrenne.desktop.download.CarExport
 import com.lyrenne.desktop.settings.AudioQuality
+import com.lyrenne.desktop.integration.WindowsStartMenuShortcut
 import com.lyrenne.desktop.settings.PreferencesManager
 import com.lyrenne.desktop.settings.ThemeMode
 import com.lyrenne.desktop.integration.LastFmManager
@@ -698,6 +699,32 @@ fun SettingsScreen(
                     password = preferences.proxyPassword
                 )
             }
+        }
+
+        // Windows section
+        item {
+            SettingsSectionHeader("Windows")
+        }
+
+        item {
+            SettingsItem(
+                icon = Icons.Default.PlayCircle,
+                title = "Name Lyrenne in Windows media controls",
+                subtitle = if (preferences.windowsMediaAppName)
+                    "Windows shows the Now Playing card as Lyrenne"
+                else
+                    "Windows shows the Now Playing card as \"Unknown app\". Turning this on adds a " +
+                        "Start Menu shortcut, the only file Lyrenne writes outside its own folder.",
+                trailing = {
+                    Switch(
+                        checked = preferences.windowsMediaAppName,
+                        onCheckedChange = {
+                            PreferencesManager.setWindowsMediaAppName(it)
+                            WindowsStartMenuShortcut.apply(it)
+                        }
+                    )
+                }
+            )
         }
 
         // Discord section

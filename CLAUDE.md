@@ -693,9 +693,11 @@ skipping is exactly what tripped the rate limit that rule 6 in `AGENTS.md` exist
 - VLC must be installed on the system for playback to work (bundled VLC also supported)
 - Stream URLs fetched using InnerTube clients: ANDROID_VR_NO_AUTH → IOS → WEB_REMIX fallback
 - This working copy IS a git clone with a working `origin`. Commit and push directly; older notes describing a robocopy-to-temp-dir push workflow are obsolete
-- **Nothing is written outside the app folder.** All state lives in `<app-dir>/data/`:
-  `lyrenne.db`, `credentials.json`, `preferences.properties`, `cache/`, plus the Listen Together
-  session. 2.9.4 removed the last `%APPDATA%` paths and the migration that read them
+- **Nothing is written outside the app folder, with one opt-in exception.** All state lives in
+  `<app-dir>/data/`: `lyrenne.db`, `credentials.json`, `preferences.properties`, `cache/`, plus the
+  Listen Together session. 2.9.4 removed the last `%APPDATA%` paths and the migration that read
+  them. The exception is `windowsMediaAppName` (off by default), which writes a single Start Menu
+  shortcut and deletes it again when switched off. See Windows media identity
 - Credentials stored at `<app-dir>/data/credentials.json`
 - Delete credentials.json to force re-login
 - All debug println converted to Timber logging (SLF4J-backed shim)
@@ -805,8 +807,43 @@ a restart without depending on rows elsewhere surviving, and artist lives in `So
 `Song`. The columns are added to existing databases by `addMissingColumns`, the first migration in
 `DatabaseHelper` that looks at columns rather than tables.
 
+## Windows media identity
+
+Windows names a Now Playing source by resolving the media session's **app user model id**, and its
+resolver knows two kinds of thing: packaged apps, and Start Menu shortcuts carrying a matching
+`System.AppUserModel.ID`. A portable build is neither, so 2.12.0 shipped Windows media controls that
+worked perfectly and were labelled **"Unknown app"**.
+
+Two pieces, and both are needed:
+
+- `integration/WindowsAppIdentity.kt` calls `SetCurrentProcessExplicitAppUserModelID` from `main()`,
+  before any window and before the media session. Without it the process carries a path-derived id.
+- `integration/WindowsStartMenuShortcut.kt` writes `%APPDATA%\...\Start Menu\Programs\Lyrenne.lnk`
+  carrying the same id. Gated behind the `windowsMediaAppName` preference because it is the only
+  file Lyrenne puts outside its own folder. Rewritten on every startup so a moved portable folder
+  repoints it; deleted when the setting goes off.
+
+Verify with `Get-StartApps | ? { $_.AppID -like "*lyrenne*" }`. A row reading
+`Lyrenne / com.lyrenne.desktop.Lyrenne` is the exact lookup the flyout performs, and is a far better
+check than squinting at the flyout.
+
+**Two traps, both of which fail silently and cost an evening each:**
+
+1. `InitPropVariantFromString` **is not an export.** It is an inline function in the Windows SDK
+   headers; `propsys.dll` ships only `InitPropVariantFrom*Vector`. Loading it by name throws at
+   runtime. The PROPVARIANT is built by hand instead: `VT_LPWSTR` (31) at offset 0, and a
+   `CoTaskMemAlloc`'d UTF-16 string pointer at offset 8.
+2. **`Guid.GUID.toByteArray()` returns string order, not memory order.** A GUID in memory stores its
+   first three fields little endian, so writing that array straight into a PROPERTYKEY produces a
+   valid but meaningless key. `IPropertyStore::SetValue` accepts it and returns `S_OK`, the shortcut
+   saves, and the only symptom is a name that never resolves. The fields are laid out by hand.
+
+`WScript.Shell` cannot do any of this: the app id is a property in the link's property store, not one
+of the fields that object exposes. Hence the hand-rolled `IShellLinkW` / `IPropertyStore` vtable
+calls, since jna-platform binds neither.
+
 ## Version Management
-- **Current version**: v2.11.0
+- **Current version**: v2.12.0
 - **Version must be updated in TWO places** when releasing:
   1. `desktop/build.gradle.kts` → `lyrenneVersion = "X.Y.Z"`
   2. `desktop/.../update/AutoUpdater.kt` → `CURRENT_VERSION = "X.Y.Z"`
@@ -852,7 +889,8 @@ All data is fully portable — stored next to the executable via centralized `Ap
 - **Downloads**: `<app-dir>/Downloads/` (configurable via Settings folder picker)
 - **Updates staging**: `<app-dir>/updates/` (with fallbacks to user.dir then temp)
 - **Migration**: On first run, `AppPaths` auto-migrates files from old `%APPDATA%/Lyrenne` to `data/` if the data dir is empty
-- **CRITICAL**: NOTHING goes to %APPDATA% or %LOCALAPPDATA% anymore. Everything lives next to the app for full portability.
+- **CRITICAL**: nothing goes to %APPDATA% or %LOCALAPPDATA% except the opt-in Start Menu shortcut
+  described under Windows media identity. Everything else lives next to the app for full portability.
 
 ## GitHub & Release
 - **PUBLIC repo**: https://github.com/Doctordefector/Lyrenne — anything pushed or

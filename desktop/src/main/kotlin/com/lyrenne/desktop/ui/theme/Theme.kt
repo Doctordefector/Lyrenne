@@ -2,7 +2,13 @@ package com.lyrenne.desktop.ui.theme
 
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.lyrenne.desktop.settings.ThemeMode
 
 /**
@@ -16,6 +22,14 @@ import com.lyrenne.desktop.settings.ThemeMode
  */
 private val LyrenneGold = Color(0xFFA37C43)
 private val LyrenneGoldLight = Color(0xFFDFBE8A)
+
+object LyrenneTokens {
+    val navigationRailWidth = 80.dp
+    val playerHeight = 80.dp
+    val artworkRadius = 4.dp
+    val panelRadius = 8.dp
+    val contentPadding = 20.dp
+}
 
 private val DarkColorScheme = darkColorScheme(
     primary = LyrenneGoldLight,                // foreground-capable gold, 9.6:1 on the background
@@ -36,26 +50,26 @@ private val DarkColorScheme = darkColorScheme(
     tertiaryContainer = Color(0xFF443725),
     onTertiaryContainer = Color(0xFFEDE0CB),
 
-    background = Color(0xFF171614),
-    onBackground = Color(0xFFE8E6E2),
-    surface = Color(0xFF211F1C),
-    onSurface = Color(0xFFE8E6E2),
-    surfaceVariant = Color(0xFF2E2B26),
-    onSurfaceVariant = Color(0xFFBEB5A8),      // 6.3:1 on surfaceVariant
+    background = Color(0xFF101112),
+    onBackground = Color(0xFFE8E9EA),
+    surface = Color(0xFF161819),
+    onSurface = Color(0xFFE8E9EA),
+    surfaceVariant = Color(0xFF24272A),
+    onSurfaceVariant = Color(0xFFBEC2C5),
 
     // Borders lift with the surfaces. A hairline tuned for near-black disappears once the page
     // comes up, which would have traded one legibility problem for another.
-    outline = Color(0xFF9C9082),               // 4.6:1 on the background
-    outlineVariant = Color(0xFF47433C),        // dividers
+    outline = Color(0xFF8E9499),
+    outlineVariant = Color(0xFF363A3E),
 
     surfaceTint = LyrenneGoldLight,
-    surfaceBright = Color(0xFF3A3630),
-    surfaceDim = Color(0xFF171614),
-    surfaceContainerLowest = Color(0xFF110F0E),
-    surfaceContainerLow = Color(0xFF1D1B18),
-    surfaceContainer = Color(0xFF27241F),
-    surfaceContainerHigh = Color(0xFF332F29),
-    surfaceContainerHighest = Color(0xFF3E3A33),
+    surfaceBright = Color(0xFF34383B),
+    surfaceDim = Color(0xFF101112),
+    surfaceContainerLowest = Color(0xFF0B0C0D),
+    surfaceContainerLow = Color(0xFF141617),
+    surfaceContainer = Color(0xFF1B1E20),
+    surfaceContainerHigh = Color(0xFF23272A),
+    surfaceContainerHighest = Color(0xFF2C3135),
 
     inverseSurface = Color(0xFFE8E6E2),
     inverseOnSurface = Color(0xFF1F1B16),
@@ -67,6 +81,81 @@ private val DarkColorScheme = darkColorScheme(
     onErrorContainer = Color(0xFFF9DEDC),
 
     scrim = Color(0xFF000000),
+)
+
+private val LyrenneTypography = Typography(
+    headlineLarge = TextStyle(
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 30.sp,
+        lineHeight = 36.sp,
+        letterSpacing = (-0.4).sp
+    ),
+    headlineMedium = TextStyle(
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 26.sp,
+        lineHeight = 32.sp,
+        letterSpacing = (-0.3).sp
+    ),
+    headlineSmall = TextStyle(
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 22.sp,
+        lineHeight = 28.sp,
+        letterSpacing = (-0.2).sp
+    ),
+    titleLarge = TextStyle(
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 19.sp,
+        lineHeight = 25.sp
+    ),
+    titleMedium = TextStyle(
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 16.sp,
+        lineHeight = 22.sp
+    ),
+    titleSmall = TextStyle(
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 14.sp,
+        lineHeight = 20.sp
+    ),
+    bodyLarge = TextStyle(
+        fontWeight = FontWeight.Normal,
+        fontSize = 16.sp,
+        lineHeight = 24.sp
+    ),
+    bodyMedium = TextStyle(
+        fontWeight = FontWeight.Normal,
+        fontSize = 14.sp,
+        lineHeight = 20.sp
+    ),
+    bodySmall = TextStyle(
+        fontWeight = FontWeight.Normal,
+        fontSize = 12.sp,
+        lineHeight = 16.sp
+    ),
+    labelLarge = TextStyle(
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 14.sp,
+        lineHeight = 20.sp
+    ),
+    labelMedium = TextStyle(
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 12.sp,
+        lineHeight = 16.sp
+    ),
+    labelSmall = TextStyle(
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 11.sp,
+        lineHeight = 14.sp,
+        letterSpacing = 0.2.sp
+    )
+)
+
+private val LyrenneShapes = Shapes(
+    extraSmall = RoundedCornerShape(2.dp),
+    small = RoundedCornerShape(4.dp),
+    medium = RoundedCornerShape(6.dp),
+    large = RoundedCornerShape(8.dp),
+    extraLarge = RoundedCornerShape(12.dp)
 )
 
 
@@ -207,7 +296,12 @@ fun LyrenneTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = Typography(),
-        content = content
-    )
+        typography = LyrenneTypography,
+        shapes = LyrenneShapes
+    ) {
+        CompositionLocalProvider(
+            LocalMinimumInteractiveComponentSize provides 40.dp,
+            content = content
+        )
+    }
 }

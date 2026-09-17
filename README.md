@@ -60,7 +60,10 @@ own Java runtime. Windows 10 or 11, 64-bit.
 | **Extras** | Guided first-run setup, music recognition through Shazam, listening stats and history, downloads with progress, car/USB export to loudness-normalized MP3, backup and restore, proxy support, region and language settings, system tray with a mini player, Windows Now Playing and media controls, media-key and keyboard shortcuts, Material 3 theming that follows your system |
 
 Everything the app writes (database, credentials, preferences, cache, downloads) stays in the
-app's own folder. Nothing is written to `%APPDATA%`, and there is no telemetry.
+app's own folder, and there is no telemetry. One optional setting is the single exception: turning
+on "Name Lyrenne in Windows media controls" adds a Start Menu shortcut, which is what lets Windows
+label the Now Playing card as Lyrenne rather than "Unknown app". It is off by default, and turning
+it back off deletes the shortcut.
 
 Traffic goes to YouTube, plus whichever of these you actually turn on: the lyrics providers, Last.fm
 if you connect it, Discord's local pipe for Rich Presence, GitHub for update checks, and the Listen

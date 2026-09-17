@@ -33,6 +33,8 @@ import com.lyrenne.desktop.ui.theme.LyrenneTheme
 import com.lyrenne.desktop.playback.DesktopPlayer
 import com.lyrenne.desktop.integration.DiscordRPC
 import com.lyrenne.desktop.integration.LastFmManager
+import com.lyrenne.desktop.integration.WindowsAppIdentity
+import com.lyrenne.desktop.integration.WindowsStartMenuShortcut
 import com.lyrenne.desktop.integration.WindowsMediaSession
 import com.lyrenne.desktop.notification.DesktopNotification
 import kotlinx.coroutines.Dispatchers
@@ -206,6 +208,8 @@ private fun loadResourceImage(name: String): java.awt.image.BufferedImage? = try
 
 fun main() {
     val log = installCrashReporting()
+    // Before any window or the media session exists: both are named by the process's app id.
+    WindowsAppIdentity.apply()
     try {
         runApp()
     } catch (e: Throwable) {
@@ -280,6 +284,9 @@ private fun runApp() {
             // WinRT initializes in a multi-threaded COM apartment. Compose's UI thread may
             // already be an AWT single-threaded apartment, so create the session off the UI thread.
             val systemMediaSessionAvailable = withContext(Dispatchers.IO) {
+                // Keeps the Start Menu shortcut in step with the setting, and repoints it when the
+                // portable folder has moved. Without it Windows has no name for the app id.
+                WindowsStartMenuShortcut.apply(PreferencesManager.preferences.value.windowsMediaAppName)
                 WindowsMediaSession.initialize(player)
             }
             MediaKeyHandler.initialize(player, handleHardwareMediaKeys = !systemMediaSessionAvailable)

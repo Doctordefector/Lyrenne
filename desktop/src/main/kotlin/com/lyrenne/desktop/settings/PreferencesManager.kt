@@ -41,6 +41,8 @@ data class AppPreferences(
     val downloadPath: String? = null,
     val discordToken: String? = null,
     val discordRpcEnabled: Boolean = false,
+    // Off by default: enabling it writes the only file Lyrenne puts outside its own folder.
+    val windowsMediaAppName: Boolean = false,
     val lastFmEnabled: Boolean = false,
     val lastFmApiKey: String? = null,
     val lastFmSecret: String? = null,
@@ -124,6 +126,7 @@ object PreferencesManager {
                     downloadPath = props.getProperty("downloadPath"),
                     discordToken = props.getProperty("discordToken"),
                     discordRpcEnabled = props.getProperty("discordRpcEnabled")?.toBoolean() ?: false,
+                    windowsMediaAppName = props.getProperty("windowsMediaAppName")?.toBoolean() ?: false,
                     lastFmEnabled = props.getProperty("lastFmEnabled")?.toBoolean() ?: false,
                     lastFmApiKey = props.getProperty("lastFmApiKey"),
                     lastFmSecret = props.getProperty("lastFmSecret"),
@@ -199,6 +202,7 @@ object PreferencesManager {
             prefs.downloadPath?.let { props.setProperty("downloadPath", it) }
             prefs.discordToken?.let { props.setProperty("discordToken", it) }
             props.setProperty("discordRpcEnabled", prefs.discordRpcEnabled.toString())
+            props.setProperty("windowsMediaAppName", prefs.windowsMediaAppName.toString())
             props.setProperty("lastFmEnabled", prefs.lastFmEnabled.toString())
             prefs.lastFmApiKey?.let { props.setProperty("lastFmApiKey", it) }
             prefs.lastFmSecret?.let { props.setProperty("lastFmSecret", it) }
@@ -310,6 +314,11 @@ object PreferencesManager {
 
     fun setDiscordRpcEnabled(enabled: Boolean) {
         _preferences.value = _preferences.value.copy(discordRpcEnabled = enabled)
+        savePreferences()
+    }
+
+    fun setWindowsMediaAppName(enabled: Boolean) {
+        _preferences.value = _preferences.value.copy(windowsMediaAppName = enabled)
         savePreferences()
     }
 

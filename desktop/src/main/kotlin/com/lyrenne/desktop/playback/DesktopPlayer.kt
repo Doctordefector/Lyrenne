@@ -397,6 +397,7 @@ class DesktopPlayer {
         if (streamUrl != null) {
             queue.clear()
             queue.add(song)
+            syncOriginalQueue()
             currentIndex = 0
             playUrl(streamUrl, song)
             // Emit queue state so Listen Together and other observers see the updated queue
@@ -413,6 +414,7 @@ class DesktopPlayer {
 
         queue.clear()
         queue.addAll(songs)
+        syncOriginalQueue()
         currentIndex = startIndex
 
         val song = songs[startIndex]
@@ -693,6 +695,17 @@ class DesktopPlayer {
         }
     }
 
+    /**
+     * Mirrors [queue] into [originalQueue] while shuffle is off. Without this the unshuffle order is
+     * only ever captured when shuffle is switched on, so [originalQueue] sits empty through every
+     * normal flow and the indexed insert in [addToQueueNext] goes out of range.
+     */
+    private fun syncOriginalQueue() {
+        if (shuffleEnabled) return
+        originalQueue.clear()
+        originalQueue.addAll(queue)
+    }
+
     fun toggleShuffle() {
         shuffleEnabled = !shuffleEnabled
         if (shuffleEnabled) {
@@ -707,7 +720,7 @@ class DesktopPlayer {
                 queue.add(0, currentSong)
                 currentIndex = 0
             }
-        } else {
+        } else if (originalQueue.isNotEmpty()) {
             // Restore original order
             val currentSong = if (currentIndex >= 0 && currentIndex < queue.size) queue[currentIndex] else null
             queue.clear()
@@ -747,6 +760,7 @@ class DesktopPlayer {
     fun removeFromQueue(index: Int) {
         if (index in 0 until queue.size && index != currentIndex) {
             queue.removeAt(index)
+            syncOriginalQueue()
             if (index < currentIndex) {
                 currentIndex--
             }
@@ -758,6 +772,7 @@ class DesktopPlayer {
         if (fromIndex in 0 until queue.size && toIndex in 0 until queue.size) {
             val item = queue.removeAt(fromIndex)
             queue.add(toIndex, item)
+            syncOriginalQueue()
             // Adjust current index
             when {
                 fromIndex == currentIndex -> currentIndex = toIndex
@@ -777,10 +792,10 @@ class DesktopPlayer {
     }
 
     fun addToQueueNext(song: SongInfo) {
-        val insertIndex = (currentIndex + 1).coerceAtMost(queue.size)
+        val insertIndex = (currentIndex + 1).coerceIn(0, queue.size)
         queue.add(insertIndex, song)
         if (!shuffleEnabled) {
-            originalQueue.add(insertIndex, song)
+            originalQueue.add(insertIndex.coerceAtMost(originalQueue.size), song)
         }
         updateQueueState()
     }
@@ -795,6 +810,7 @@ class DesktopPlayer {
         } else {
             currentIndex = -1
         }
+        syncOriginalQueue()
         updateQueueState()
     }
 
@@ -811,6 +827,7 @@ class DesktopPlayer {
         lastVlcError = null
         queue.clear()
         queue.add(song)
+        syncOriginalQueue()
         currentIndex = 0
 
         audioPlayer?.mediaPlayer()?.media()?.play(filePath)
@@ -880,6 +897,8 @@ class DesktopPlayer {
             repeatMode = queueState?.repeatMode?.let {
                 try { RepeatMode.valueOf(it) } catch (_: Exception) { RepeatMode.OFF }
             } ?: RepeatMode.OFF
+            // After shuffleEnabled is known: a queue restored unshuffled is its own original order.
+            syncOriginalQueue()
 
             if (currentIndex in 0 until queue.size) {
                 val song = queue[currentIndex]

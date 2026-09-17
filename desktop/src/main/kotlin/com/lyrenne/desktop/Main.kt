@@ -33,6 +33,7 @@ import com.lyrenne.desktop.ui.theme.LyrenneTheme
 import com.lyrenne.desktop.playback.DesktopPlayer
 import com.lyrenne.desktop.integration.DiscordRPC
 import com.lyrenne.desktop.integration.LastFmManager
+import com.lyrenne.desktop.integration.WindowsMediaSession
 import com.lyrenne.desktop.notification.DesktopNotification
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -276,7 +277,12 @@ private fun runApp() {
             withContext(Dispatchers.IO) {
                 player.ensureVlcInitialized()
             }
-            MediaKeyHandler.initialize(player)
+            // WinRT initializes in a multi-threaded COM apartment. Compose's UI thread may
+            // already be an AWT single-threaded apartment, so create the session off the UI thread.
+            val systemMediaSessionAvailable = withContext(Dispatchers.IO) {
+                WindowsMediaSession.initialize(player)
+            }
+            MediaKeyHandler.initialize(player, handleHardwareMediaKeys = !systemMediaSessionAvailable)
             // Auth needs network — run after window is visible
             AuthManager.initialize()
             // Restore queue (metadata only, no stream URL resolution)
@@ -333,6 +339,7 @@ private fun runApp() {
                 DesktopNotification.release()
                 LastFmManager.release()
                 DiscordRPC.release()
+                WindowsMediaSession.release()
                 MediaKeyHandler.release()
                 player.release()
                 exitApplication()
@@ -363,6 +370,7 @@ private fun runApp() {
                     DesktopNotification.release()
                     LastFmManager.release()
                     DiscordRPC.release()
+                    WindowsMediaSession.release()
                     MediaKeyHandler.release()
                     player.release()
                     exitApplication()
@@ -532,6 +540,7 @@ private fun runApp() {
                             DesktopNotification.release()
                             LastFmManager.release()
                             DiscordRPC.release()
+                            WindowsMediaSession.release()
                             MediaKeyHandler.release()
                             player.release()
                             exitApplication()

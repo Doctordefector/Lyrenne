@@ -43,21 +43,23 @@ object MediaKeyHandler {
     /** True when any text field tagged with [suppressMediaKeys] currently has focus. */
     val textInputActive: Boolean get() = focusedTextFieldCount.get() > 0
 
-    fun initialize(desktopPlayer: DesktopPlayer) {
+    fun initialize(desktopPlayer: DesktopPlayer, handleHardwareMediaKeys: Boolean = true) {
         if (isInitialized) return
 
         player = desktopPlayer
 
-        keyDispatcher = KeyEventDispatcher { event ->
-            if (event.id == KeyEvent.KEY_PRESSED) {
-                handleKeyPress(event)
-            } else {
-                false
+        if (handleHardwareMediaKeys) {
+            keyDispatcher = KeyEventDispatcher { event ->
+                if (event.id == KeyEvent.KEY_PRESSED) {
+                    handleKeyPress(event)
+                } else {
+                    false
+                }
             }
-        }
 
-        KeyboardFocusManager.getCurrentKeyboardFocusManager()
-            .addKeyEventDispatcher(keyDispatcher)
+            KeyboardFocusManager.getCurrentKeyboardFocusManager()
+                .addKeyEventDispatcher(keyDispatcher)
+        }
 
         isInitialized = true
     }

@@ -31,14 +31,17 @@ object LyrenneTokens {
     val contentPadding = 20.dp
 }
 
+// Contrast ratios below are WCAG 2.x, measured against the colour named in each comment. They are
+// written down because the palette has been retuned twice and the ratios are the only part of it a
+// reviewer cannot judge by eye. Recompute them when a colour moves.
 private val DarkColorScheme = darkColorScheme(
-    primary = LyrenneGoldLight,                // foreground-capable gold, 9.6:1 on the background
-    onPrimary = Color(0xFF2A1B06),             // 8.3:1
+    primary = LyrenneGoldLight,                // foreground-capable gold, 10.7:1 on the background
+    onPrimary = Color(0xFF2A1B06),             // 9.4:1 on primary
     // Containers are DARK in a dark scheme. Filling a whole card with the mid-tone bronze made it
     // read as a flat brown slab: the accent looks metallic as a hairline or a label, not as a
     // large area. Dark panel, light gold on top, which is how the site uses it.
     primaryContainer = Color(0xFF54401E),
-    onPrimaryContainer = Color(0xFFF7E2BC),    // 8.6:1
+    onPrimaryContainer = Color(0xFFF7E2BC),    // 7.8:1 on primaryContainer
 
     secondary = Color(0xFFD3C3AA),
     onSecondary = Color(0xFF2A2015),
@@ -51,16 +54,16 @@ private val DarkColorScheme = darkColorScheme(
     onTertiaryContainer = Color(0xFFEDE0CB),
 
     background = Color(0xFF101112),
-    onBackground = Color(0xFFE8E9EA),
+    onBackground = Color(0xFFE8E9EA),          // 15.5:1 on the background
     surface = Color(0xFF161819),
-    onSurface = Color(0xFFE8E9EA),
+    onSurface = Color(0xFFE8E9EA),             // 14.7:1 on surface
     surfaceVariant = Color(0xFF24272A),
-    onSurfaceVariant = Color(0xFFBEC2C5),
+    onSurfaceVariant = Color(0xFFBEC2C5),      // 8.4:1 on surfaceVariant, 9.9:1 on surface
 
     // Borders lift with the surfaces. A hairline tuned for near-black disappears once the page
     // comes up, which would have traded one legibility problem for another.
-    outline = Color(0xFF8E9499),
-    outlineVariant = Color(0xFF363A3E),
+    outline = Color(0xFF8E9499),               // 6.2:1 on the background
+    outlineVariant = Color(0xFF363A3E),        // dividers, not held to a text ratio
 
     surfaceTint = LyrenneGoldLight,
     surfaceBright = Color(0xFF34383B),

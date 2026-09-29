@@ -20,9 +20,9 @@ import timber.log.Timber
  * registered. Windows confirms the session now carries this ID rather than a path-derived one.
  * Turning the ID into a *name* is a second step, because the shell resolves it through the app
  * resolver, which only knows about packaged apps and Start Menu shortcuts. A portable build has
- * neither, so the flyout can still fall back to "Unknown app". Writing that shortcut is planned
- * as an opt-in setting rather than something a portable app does behind the user's back, since it
- * is the only file Lyrenne would put outside its own folder.
+ * neither, so the flyout falls back to "Unknown app" until [WindowsStartMenuShortcut] writes one.
+ * The shell resolves the name when it draws the card, so the shortcut takes effect immediately,
+ * without re-registering the session or restarting.
  *
  * The call is worth making on its own regardless: it stops the taskbar splitting Lyrenne's windows
  * into separate groups, which is what it was designed for.

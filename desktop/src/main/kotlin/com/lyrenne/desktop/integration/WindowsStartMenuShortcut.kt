@@ -63,6 +63,7 @@ internal object WindowsStartMenuShortcut {
 
     private const val S_OK = 0
     private const val S_FALSE = 1
+    private const val RPC_E_CHANGED_MODE = 0x80010106.toInt()
     private const val COINIT_APARTMENTTHREADED = 0x2
     private const val CLSCTX_INPROC_SERVER = 0x1
 
@@ -138,7 +139,7 @@ internal object WindowsStartMenuShortcut {
      */
     internal fun readTargetPath(target: File): String? {
         val hr = Ole32.INSTANCE.CoInitializeEx(null, COINIT_APARTMENTTHREADED).toInt()
-        if (hr != S_OK && hr != S_FALSE) return null
+        if (hr != S_OK && hr != S_FALSE && hr != RPC_E_CHANGED_MODE) return null
         val ownsCom = hr == S_OK
         var link: Pointer? = null
         var persist: Pointer? = null
@@ -170,12 +171,15 @@ internal object WindowsStartMenuShortcut {
 
     internal fun write(target: File, exe: File): Boolean {
         val hr = Ole32.INSTANCE.CoInitializeEx(null, COINIT_APARTMENTTHREADED).toInt()
-        if (hr != S_OK && hr != S_FALSE) {
-            Timber.w("CoInitializeEx failed: 0x${hr.toString(16)}")
+        if (hr != S_OK && hr != S_FALSE && hr != RPC_E_CHANGED_MODE) {
+            Timber.w("CoInitializeEx failed: 0x${hr.toUInt().toString(16)}")
             return false
         }
         // S_FALSE means this thread was already initialised by someone else: ours to use, but not
-        // ours to tear down.
+        // ours to tear down. RPC_E_CHANGED_MODE is the same news from a thread that someone put in
+        // the multi-threaded apartment first, which the media session's WinRT calls do to pooled
+        // IO threads. The shell link object is registered for both apartments, so that is usable
+        // too; treating it as fatal meant the shortcut silently went unwritten.
         val ownsCom = hr == S_OK
         var link: Pointer? = null
         var store: Pointer? = null

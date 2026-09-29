@@ -28,4 +28,32 @@ class WindowsStartMenuShortcutSmokeTest {
             dir.deleteRecursively()
         }
     }
+
+    /**
+     * A thread already in the multi-threaded apartment answers CoInitializeEx(STA) with
+     * RPC_E_CHANGED_MODE. This was treated as fatal, so the shortcut went unwritten whenever
+     * WinRT had been on the thread first; this test only failed when run after the media
+     * session smoke test, which is exactly that.
+     */
+    @Test
+    fun `a thread already in the multi-threaded apartment can still write it`() {
+        assumeTrue(System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true))
+        var ok = false
+        val worker = Thread {
+            com.sun.jna.platform.win32.Ole32.INSTANCE.CoInitializeEx(null, 0x0) // COINIT_MULTITHREADED
+            val dir = Files.createTempDirectory("lyrenne shortcut mta").toFile()
+            try {
+                val exe = File(dir, "Lyrenne.exe").apply { writeText("") }
+                val link = File(dir, "Lyrenne.lnk")
+                ok = WindowsStartMenuShortcut.write(link, exe) &&
+                    File(WindowsStartMenuShortcut.readTargetPath(link)!!).absoluteFile == exe.absoluteFile
+            } finally {
+                dir.deleteRecursively()
+                com.sun.jna.platform.win32.Ole32.INSTANCE.CoUninitialize()
+            }
+        }
+        worker.start()
+        worker.join()
+        assertTrue(ok)
+    }
 }

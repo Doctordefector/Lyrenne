@@ -140,7 +140,7 @@ internal object WindowsStartMenuShortcut {
     internal fun readTargetPath(target: File): String? {
         val hr = Ole32.INSTANCE.CoInitializeEx(null, COINIT_APARTMENTTHREADED).toInt()
         if (hr != S_OK && hr != S_FALSE && hr != RPC_E_CHANGED_MODE) return null
-        val ownsCom = hr == S_OK
+        val ownsCom = hr == S_OK || hr == S_FALSE
         var link: Pointer? = null
         var persist: Pointer? = null
         try {
@@ -175,12 +175,13 @@ internal object WindowsStartMenuShortcut {
             Timber.w("CoInitializeEx failed: 0x${hr.toUInt().toString(16)}")
             return false
         }
-        // S_FALSE means this thread was already initialised by someone else: ours to use, but not
-        // ours to tear down. RPC_E_CHANGED_MODE is the same news from a thread that someone put in
-        // the multi-threaded apartment first, which the media session's WinRT calls do to pooled
-        // IO threads. The shell link object is registered for both apartments, so that is usable
-        // too; treating it as fatal meant the shortcut silently went unwritten.
-        val ownsCom = hr == S_OK
+        // S_FALSE means this thread was already initialised; it still counts, and has to be
+        // balanced by CoUninitialize like S_OK. RPC_E_CHANGED_MODE is a thread someone put in the
+        // multi-threaded apartment first, which the media session's WinRT calls do to pooled IO
+        // threads. It adds no reference, so it is not balanced, but the shell link object is
+        // registered for both apartments and works there. Treating it as fatal meant the shortcut
+        // silently went unwritten.
+        val ownsCom = hr == S_OK || hr == S_FALSE
         var link: Pointer? = null
         var store: Pointer? = null
         var persist: Pointer? = null

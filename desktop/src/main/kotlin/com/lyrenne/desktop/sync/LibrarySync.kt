@@ -10,6 +10,8 @@ import com.lyrenne.desktop.auth.AuthManager
 import com.lyrenne.desktop.db.DatabaseHelper
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import timber.log.Timber
 import java.time.LocalDateTime
 
@@ -41,13 +43,19 @@ object LibrarySync {
      * The old job is joined before the new one starts, so its transaction can never interleave.
      */
     fun resync() {
-        val previous = syncJob
         scope.launch {
-            previous?.cancelAndJoin()
-            _syncState.value = SyncState()
-            syncLibrary()
+            // Serialised, so two switches in quick succession cannot both cancel the same old
+            // job and then each start a sync of their own. syncLibrary assigns syncJob before
+            // returning, so the next one in line cancels the sync this one started.
+            resyncLock.withLock {
+                syncJob?.cancelAndJoin()
+                _syncState.value = SyncState()
+                syncLibrary()
+            }
         }
     }
+
+    private val resyncLock = Mutex()
 
     fun syncLibrary() {
         if (_syncState.value.isSyncing) return

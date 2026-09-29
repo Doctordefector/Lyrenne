@@ -110,6 +110,51 @@ class AccountSwitchTest {
     }
 
     @Test
+    fun `a saved copy of the active account under another id is dropped, not listed twice`() {
+        File(dir, "credentials.json").writeText(
+            json.encodeToString(creds("alice", "aaaaaaaaaaaaaaaa").copy(dataSyncId = "gaia1||"))
+        )
+        File(dir, "accounts").mkdirs()
+        val stale = File(dir, "accounts/1111111111111111.json")
+        stale.writeText(json.encodeToString(creds("alice", "1111111111111111").copy(dataSyncId = "gaia1")))
+        AuthManager.loadFromDisk()
+
+        assertTrue(AuthManager.savedAccounts.value.isEmpty())
+        assertFalse(stale.exists())
+    }
+
+    @Test
+    fun `a brand channel sharing its owner's email is a different account`() {
+        val owner = creds("alice", "aaaaaaaaaaaaaaaa").copy(dataSyncId = "gaia1")
+        val brand = creds("alice", "bbbbbbbbbbbbbbbb").copy(dataSyncId = "gaia2")
+        assertFalse(AuthManager.sameAccount(owner, brand))
+        // Without a DATASYNC_ID on one side, the email is what identifies it.
+        assertTrue(AuthManager.sameAccount(owner, brand.copy(dataSyncId = "", accountId = null)))
+    }
+
+    @Test
+    fun `signing out keeps the other accounts`() {
+        File(dir, "credentials.json").writeText(json.encodeToString(creds("alice", "aaaaaaaaaaaaaaaa")))
+        File(dir, "accounts").mkdirs()
+        File(dir, "accounts/bbbbbbbbbbbbbbbb.json").writeText(json.encodeToString(creds("bob", "bbbbbbbbbbbbbbbb")))
+        AuthManager.loadFromDisk()
+
+        AuthManager.logout()
+        assertFalse(File(dir, "credentials.json").exists())
+        assertFalse(AuthManager.authState.value.isLoggedIn)
+        assertTrue(File(dir, "accounts/bbbbbbbbbbbbbbbb.json").exists())
+    }
+
+    @Test
+    fun `restoring a backup first keeps whoever is signed in`() {
+        File(dir, "credentials.json").writeText(json.encodeToString(creds("alice", "aaaaaaaaaaaaaaaa")))
+        AuthManager.loadFromDisk()
+
+        AuthManager.stashActiveBeforeRestore()
+        assertEquals("alice", read(File(dir, "accounts/aaaaaaaaaaaaaaaa.json")).accountInfo?.name)
+    }
+
+    @Test
     fun `the id prefers the account's own id over the sign-in cookie`() {
         val a = AuthManager.deriveAccountId("gaia123||", "SAPISID=one")
         val b = AuthManager.deriveAccountId("gaia123", "SAPISID=two")

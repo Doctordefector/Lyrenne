@@ -116,16 +116,20 @@ object LyricsManager {
      */
     suspend fun search(songId: String?, title: String, artist: String): List<LyricsCandidate> =
         withContext(Dispatchers.IO) {
-            val found = withTimeoutOrNull(SEARCH_TIMEOUT_MS) {
-                listOf(
-                    async { tryBetterLyrics(title, artist, -1, null)?.let { listOf(LyricsCandidate(it.second, it.first)) }.orEmpty() },
-                    async { collectUpTo("LrcLib") { LrcLib.getAllLyrics(title, artist, -1, null, it) } },
-                    async { collectUpTo("KuGou") { KuGou.getAllPossibleLyricsOptions(title, artist, -1, null, it) } },
-                    async {
-                        songId?.let { id -> tryYouTubeLyrics(id)?.let { listOf(LyricsCandidate(it.second, it.first)) } }.orEmpty()
-                    },
-                ).awaitAll().flatten()
-            }.orEmpty()
+            // Each provider gets its own deadline. One shared deadline round the lot meant a slow
+            // KuGou (it downloads every match, one after another) threw away the answers the
+            // others had already given, and the dialog said nothing was found.
+            suspend fun single(fetch: suspend () -> Pair<String, String>?): List<LyricsCandidate> =
+                withTimeoutOrNull(SEARCH_TIMEOUT_MS) { fetch() }
+                    ?.let { listOf(LyricsCandidate(it.second, it.first)) }
+                    .orEmpty()
+
+            val found = listOf(
+                async { single { tryBetterLyrics(title, artist, -1, null) } },
+                async { collectUpTo("LrcLib") { LrcLib.getAllLyrics(title, artist, -1, null, it) } },
+                async { collectUpTo("KuGou") { KuGou.getAllPossibleLyricsOptions(title, artist, -1, null, it) } },
+                async { songId?.let { id -> single { tryYouTubeLyrics(id) } }.orEmpty() },
+            ).awaitAll().flatten()
 
             found
                 .filter { it.text.isNotBlank() }
@@ -156,24 +160,32 @@ object LyricsManager {
         search: suspend (callback: (String) -> Unit) -> Unit,
     ): List<LyricsCandidate> {
         val results = mutableListOf<LyricsCandidate>()
-        try {
-            search { text ->
-                results += LyricsCandidate(source, text)
-                if (results.size >= SEARCH_RESULTS_PER_PROVIDER) throw Enough()
+        // Whatever arrived before the deadline is kept.
+        withTimeoutOrNull(SEARCH_TIMEOUT_MS) {
+            try {
+                search { text ->
+                    results += LyricsCandidate(source, text)
+                    if (results.size >= SEARCH_RESULTS_PER_PROVIDER) throw Enough()
+                }
+            } catch (_: Enough) {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Timber.d("$source search failed: ${e.message}")
             }
-        } catch (_: Enough) {
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Timber.d("$source search failed: ${e.message}")
         }
-        return results
+        return results.toList()
     }
 
-    /** Shows [candidate] for [songId] and remembers the choice for next time. */
+    /**
+     * Remembers [candidate] for [songId], and shows it if that song's lyrics are the ones on
+     * screen. The track can move on while the search dialog is open; the choice still belongs to
+     * the song it was made for, and must not be shown against the one playing now.
+     */
     fun choose(songId: String, candidate: LyricsCandidate) {
-        fetchJob?.cancel()
         LyricsOverrides.put(songId, candidate)
+        if (_state.value.songId != songId) return
+        fetchJob?.cancel()
         publish(songId, candidate, isManual = true)
     }
 

@@ -1,6 +1,7 @@
 package com.lyrenne.desktop.backup
 
 import com.lyrenne.desktop.AppPaths
+import com.lyrenne.desktop.auth.AuthManager
 import timber.log.Timber
 import java.io.File
 import java.io.FileInputStream
@@ -84,12 +85,19 @@ object BackupManager {
                 val name = path.substringAfterLast('/')
                 if (path == "$ACCOUNTS_FOLDER/$name" && ACCOUNT_FILE.matches(name)) {
                     // Matched against the exact id shape, so an entry name can never climb out
-                    // of the accounts folder.
+                    // of the accounts folder. An account already saved here is newer than the
+                    // backup's copy of it, so that one is left alone.
                     accountsDir.mkdirs()
-                    FileOutputStream(File(accountsDir, name)).use { zip.copyTo(it) }
-                    count++
-                    Timber.i("Restored saved account $name")
+                    val out = File(accountsDir, name)
+                    if (!out.exists()) {
+                        FileOutputStream(out).use { zip.copyTo(it) }
+                        count++
+                        Timber.i("Restored saved account $name")
+                    }
                 } else if (name in backupFiles) {
+                    // The account signed in right now is kept as a saved account rather than
+                    // overwritten, so restoring cannot lose it.
+                    if (name == "credentials.json") AuthManager.stashActiveBeforeRestore()
                     val outFile = File(AppPaths.dataDir, name)
                     FileOutputStream(outFile).use { zip.copyTo(it) }
                     count++

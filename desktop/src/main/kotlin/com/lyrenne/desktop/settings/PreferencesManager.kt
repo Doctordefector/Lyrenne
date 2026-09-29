@@ -42,7 +42,7 @@ data class AppPreferences(
     val discordToken: String? = null,
     val discordRpcEnabled: Boolean = false,
     // Off by default: enabling it writes the only file Lyrenne puts outside its own folder.
-    val windowsMediaAppName: Boolean = false,
+    val windowsMediaAppName: Boolean = true,
     val lastFmEnabled: Boolean = false,
     val lastFmApiKey: String? = null,
     val lastFmSecret: String? = null,
@@ -101,6 +101,9 @@ object PreferencesManager {
 
     private val prefsFile: File get() = com.lyrenne.desktop.AppPaths.preferencesFile
 
+    /** See the read in [loadPreferences] for why this is not "windowsMediaAppName". */
+    private const val WINDOWS_MEDIA_NAME_KEY = "windowsMediaShortcut"
+
     fun initialize() {
         loadPreferences()
     }
@@ -126,7 +129,12 @@ object PreferencesManager {
                     downloadPath = props.getProperty("downloadPath"),
                     discordToken = props.getProperty("discordToken"),
                     discordRpcEnabled = props.getProperty("discordRpcEnabled")?.toBoolean() ?: false,
-                    windowsMediaAppName = props.getProperty("windowsMediaAppName")?.toBoolean() ?: false,
+                    // Read from a new key on purpose. 2.12.0 stored this under "windowsMediaAppName"
+                    // with an off default that nearly nobody changed, so that key records the
+                    // default rather than a choice; every 2.12.0 install would otherwise keep
+                    // "Unknown app". Starting a fresh key turns it on once for everyone, and a
+                    // choice made from here on is kept.
+                    windowsMediaAppName = props.getProperty(WINDOWS_MEDIA_NAME_KEY)?.toBoolean() ?: true,
                     lastFmEnabled = props.getProperty("lastFmEnabled")?.toBoolean() ?: false,
                     lastFmApiKey = props.getProperty("lastFmApiKey"),
                     lastFmSecret = props.getProperty("lastFmSecret"),
@@ -202,7 +210,7 @@ object PreferencesManager {
             prefs.downloadPath?.let { props.setProperty("downloadPath", it) }
             prefs.discordToken?.let { props.setProperty("discordToken", it) }
             props.setProperty("discordRpcEnabled", prefs.discordRpcEnabled.toString())
-            props.setProperty("windowsMediaAppName", prefs.windowsMediaAppName.toString())
+            props.setProperty(WINDOWS_MEDIA_NAME_KEY, prefs.windowsMediaAppName.toString())
             props.setProperty("lastFmEnabled", prefs.lastFmEnabled.toString())
             prefs.lastFmApiKey?.let { props.setProperty("lastFmApiKey", it) }
             prefs.lastFmSecret?.let { props.setProperty("lastFmSecret", it) }

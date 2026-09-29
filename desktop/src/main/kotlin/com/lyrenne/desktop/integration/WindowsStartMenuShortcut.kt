@@ -21,10 +21,11 @@ import java.io.File
  * shows the track, the artwork and the transport buttons under the heading "Unknown app". Setting
  * the id on the process is necessary but not sufficient on its own; see [WindowsAppIdentity].
  *
- * This is the only file Lyrenne writes outside its own folder, which is why it is opt-in rather
- * than something that happens on first run. Turning the setting off deletes it again, and it is
- * rewritten whenever the executable moves, since a portable app is expected to move and a shortcut
- * pointing at the old path would name nothing.
+ * This is the only file Lyrenne writes outside its own folder. It was opt-in in 2.12.0, and that
+ * shipped the fix to almost nobody: the flyout kept reading "Unknown app" for everyone who never
+ * went looking in Settings. It is on by default since 2.13.0 and can still be switched off, which
+ * deletes it again. It is rewritten on every startup, since a portable app is expected to move and
+ * a shortcut pointing at the old path would name nothing.
  *
  * ### Why this is hand-rolled COM
  *
@@ -52,7 +53,11 @@ internal object WindowsStartMenuShortcut {
     private const val ISHELLLINK_SET_WORKING_DIRECTORY = 9
     private const val ISHELLLINK_SET_ICON_LOCATION = 17
     private const val ISHELLLINK_SET_PATH = 20
+    private const val ISHELLLINK_GET_PATH = 3
+    private const val IPERSISTFILE_LOAD = 5
     private const val IPERSISTFILE_SAVE = 6
+    private const val STGM_READ = 0
+    private const val MAX_PATH_CHARS = 32_768
     private const val IPROPERTYSTORE_SET_VALUE = 6
     private const val IPROPERTYSTORE_COMMIT = 7
 
@@ -88,13 +93,22 @@ internal object WindowsStartMenuShortcut {
         if (!System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true)) return
         val target = shortcutFile
         try {
+            val exe = File(AppPaths.appDir, "Lyrenne.exe")
             if (!enabled) {
-                if (target.exists() && target.delete()) {
+                if (!target.exists()) return
+                // Only remove a shortcut this copy owns. With two copies of Lyrenne on one
+                // machine, one with the setting off used to delete the shortcut on every launch,
+                // which put "Unknown app" back on the copy that had asked for the name.
+                val pointsAt = readTargetPath(target)
+                if (pointsAt != null && !File(pointsAt).absoluteFile.equals(exe.absoluteFile)) {
+                    Timber.i("Leaving the Start Menu shortcut alone, it belongs to $pointsAt")
+                    return
+                }
+                if (target.delete()) {
                     Timber.i("Removed the Start Menu shortcut")
                 }
                 return
             }
-            val exe = File(AppPaths.appDir, "Lyrenne.exe")
             if (!exe.isFile) {
                 Timber.w("No Lyrenne.exe beside the app, skipping the Start Menu shortcut")
                 return
@@ -118,7 +132,43 @@ internal object WindowsStartMenuShortcut {
         return method.invokeInt(arrayOf(obj, *args))
     }
 
-    private fun write(target: File, exe: File): Boolean {
+    /**
+     * The executable an existing shortcut launches, or null when it cannot be read. Null is
+     * treated by the caller as "ours", so an unreadable shortcut can still be cleaned up.
+     */
+    internal fun readTargetPath(target: File): String? {
+        val hr = Ole32.INSTANCE.CoInitializeEx(null, COINIT_APARTMENTTHREADED).toInt()
+        if (hr != S_OK && hr != S_FALSE) return null
+        val ownsCom = hr == S_OK
+        var link: Pointer? = null
+        var persist: Pointer? = null
+        try {
+            val linkRef = PointerByReference()
+            val created = Ole32.INSTANCE.CoCreateInstance(
+                CLSID_ShellLink, null, CLSCTX_INPROC_SERVER, IID_IShellLinkW, linkRef
+            ).toInt()
+            if (created != S_OK) return null
+            link = linkRef.value
+            val persistRef = PointerByReference()
+            if (call(link, QUERY_INTERFACE, IID_IPersistFile, persistRef) != S_OK) return null
+            persist = persistRef.value
+            if (call(persist, IPERSISTFILE_LOAD, WString(target.absolutePath), STGM_READ) != S_OK) return null
+            Memory(MAX_PATH_CHARS * 2L).use { buffer ->
+                buffer.clear()
+                if (call(link, ISHELLLINK_GET_PATH, buffer, MAX_PATH_CHARS, null, 0) != S_OK) return null
+                return buffer.getWideString(0).takeIf { it.isNotBlank() }
+            }
+        } catch (e: Throwable) {
+            Timber.w("Could not read the Start Menu shortcut: ${e.message}")
+            return null
+        } finally {
+            persist?.let { call(it, RELEASE) }
+            link?.let { call(it, RELEASE) }
+            if (ownsCom) Ole32.INSTANCE.CoUninitialize()
+        }
+    }
+
+    internal fun write(target: File, exe: File): Boolean {
         val hr = Ole32.INSTANCE.CoInitializeEx(null, COINIT_APARTMENTTHREADED).toInt()
         if (hr != S_OK && hr != S_FALSE) {
             Timber.w("CoInitializeEx failed: 0x${hr.toString(16)}")

@@ -711,10 +711,10 @@ fun SettingsScreen(
                 icon = Icons.Default.PlayCircle,
                 title = "Name Lyrenne in Windows media controls",
                 subtitle = if (preferences.windowsMediaAppName)
-                    "Windows shows the Now Playing card as Lyrenne"
+                    "Windows shows the Now Playing card as Lyrenne. Uses a Start Menu shortcut, " +
+                        "the only file Lyrenne writes outside its own folder."
                 else
-                    "Windows shows the Now Playing card as \"Unknown app\". Turning this on adds a " +
-                        "Start Menu shortcut, the only file Lyrenne writes outside its own folder.",
+                    "Windows shows the Now Playing card as \"Unknown app\"",
                 trailing = {
                     Switch(
                         checked = preferences.windowsMediaAppName,

@@ -1298,7 +1298,7 @@ fun SettingsScreen(
                     onDismissRequest = { showEasterEgg = false },
                     text = {
                         Text(
-                            "Blub Blub 🐟",
+                            "In French, dandelions are called pissenlit... which means 'urinate in bed'",
                             style = MaterialTheme.typography.titleMedium,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth()

@@ -62,7 +62,9 @@ fun LyricsPanel(
 ) {
     val playerState by player.state.collectAsState()
     val lyricsState by LyricsManager.state.collectAsState()
-    var showSearch by remember { mutableStateOf(false) }
+    // The song the search dialog was opened for. Held rather than read from the player, so a
+    // track change while the dialog is open cannot file the pick under the next song.
+    var searchFor by remember { mutableStateOf<com.lyrenne.desktop.playback.SongInfo?>(null) }
 
     // Fetch lyrics when song changes
     LaunchedEffect(playerState.currentSong?.id) {
@@ -137,7 +139,7 @@ fun LyricsPanel(
                         }
                     }
                     IconButton(
-                        onClick = { showSearch = true },
+                        onClick = { searchFor = currentSong },
                         enabled = currentSong != null,
                         modifier = Modifier.size(32.dp)
                     ) {
@@ -180,7 +182,7 @@ fun LyricsPanel(
                                     textAlign = TextAlign.Center,
                                 )
                                 Spacer(Modifier.height(12.dp))
-                                OutlinedButton(onClick = { showSearch = true }) {
+                                OutlinedButton(onClick = { searchFor = currentSong }) {
                                     Icon(Icons.Default.Search, null, modifier = Modifier.size(18.dp))
                                     Spacer(Modifier.width(8.dp))
                                     Text("Search for lyrics")
@@ -220,15 +222,15 @@ fun LyricsPanel(
         }
     }
 
-    if (showSearch && currentSong != null) {
+    searchFor?.let { song ->
         LyricsSearchDialog(
-            songId = currentSong.id,
-            initialTitle = currentSong.title,
-            initialArtist = currentSong.artist,
-            onDismiss = { showSearch = false },
+            songId = song.id,
+            initialTitle = song.title,
+            initialArtist = song.artist,
+            onDismiss = { searchFor = null },
             onPick = { candidate ->
-                LyricsManager.choose(currentSong.id, candidate)
-                showSearch = false
+                LyricsManager.choose(song.id, candidate)
+                searchFor = null
             }
         )
     }

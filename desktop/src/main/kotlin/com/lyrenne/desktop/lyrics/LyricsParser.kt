@@ -103,13 +103,16 @@ object LyricsParser {
 
             val inlineWords = parseInlineWords(content)
             val display = if (inlineWords != null) {
-                content.replace(INLINE_WORD_TIME, " ").collapseSpaces()
+                // Removed, not replaced with a space: syllable-timed lines split words across
+                // tags ("<t>Hel<t>lo"), and the source already carries its own spaces.
+                content.replace(INLINE_WORD_TIME, "").collapseSpaces()
             } else {
                 content.collapseSpaces()
             }
 
             val produced = times.map { time ->
                 MutableEntry(
+                    order = entries.size,
                     timeMs = time,
                     text = display,
                     isBackground = isBackground,
@@ -145,13 +148,15 @@ object LyricsParser {
             })
         }
 
-        return group(sorted)
+        // Grouped in the order the file wrote them, then sorted: a backing line can start a
+        // moment before its lead, and grouping by time would hang it under the previous line.
+        return group(sorted.sortedBy { it.order }).sortedBy { it.timeMs }
     }
 
     /** Folds each `{bg}` entry into the lead line before it. A leading orphan stays a line. */
-    private fun group(sorted: List<MutableEntry>): List<LyricLine> {
+    private fun group(inFileOrder: List<MutableEntry>): List<LyricLine> {
         val lines = mutableListOf<LyricLine>()
-        for (entry in sorted) {
+        for (entry in inFileOrder) {
             val previous = lines.lastOrNull()
             if (entry.isBackground && previous != null && entry.text.isNotBlank()) {
                 lines[lines.lastIndex] = previous.copy(background = previous.background + entry.toLine())
@@ -239,6 +244,8 @@ object LyricsParser {
     }
 
     private data class MutableEntry(
+        /** Position in the file, for grouping. Ties on time keep this order too. */
+        val order: Int,
         val timeMs: Long,
         val text: String,
         val isBackground: Boolean,

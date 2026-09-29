@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -259,12 +260,18 @@ object AuthManager {
     /** Reads the active and saved accounts. Separate from [initialize] so tests skip the network. */
     internal fun loadFromDisk() {
         loadCredentials()
+        // A restored backup can bring back a saved copy of the account that is now active.
+        // The active one is the newer of the two, so the saved copy goes.
+        readCredentials()?.let { active -> dropSavedCopiesOf(active) }
         loadSavedAccounts()
     }
 
     private fun loadSavedAccounts() {
+        val active = readCredentials()
         _savedAccounts.value = savedAccountFiles().mapNotNull { file ->
             val creds = readAccountFile(file) ?: return@mapNotNull null
+            // Never list the active account a second time, whatever is on disk.
+            if (active != null && sameAccount(creds, active)) return@mapNotNull null
             SavedAccount(
                 id = file.nameWithoutExtension,
                 accountInfo = creds.accountInfo,
@@ -283,6 +290,35 @@ object AuthManager {
             ?: parseCookieString(cookie)["SAPISID"]
             ?: cookie
         return sha1(basis).take(16)
+    }
+
+    /**
+     * Whether two credential sets are the same Google account.
+     *
+     * The id alone is not enough. It falls back to the SAPISID cookie when a sign-in's ytcfg page
+     * gave no DATASYNC_ID, and SAPISID changes with every sign-in, so one account can carry two
+     * ids. The DATASYNC_ID and the email address are checked as well, whenever both sides have one.
+     */
+    internal fun sameAccount(a: AuthCredentials, b: AuthCredentials): Boolean {
+        if (a.accountId != null && a.accountId == b.accountId) return true
+        val da = a.dataSyncId.substringBefore("||")
+        val db = b.dataSyncId.substringBefore("||")
+        if (da.isNotBlank() && db.isNotBlank()) return da == db
+        // Email only settles it when one side has no DATASYNC_ID: a brand channel shares its
+        // owner's email while being a different account with its own id.
+        val ea = a.accountInfo?.email.orEmpty()
+        val eb = b.accountInfo?.email.orEmpty()
+        return ea.isNotBlank() && ea.equals(eb, ignoreCase = true)
+    }
+
+    /** Deletes every saved entry for the same account as [creds]. Caller holds [filesLock], or is starting up. */
+    private fun dropSavedCopiesOf(creds: AuthCredentials) {
+        for (file in savedAccountFiles()) {
+            val saved = readAccountFile(file) ?: continue
+            if (sameAccount(saved, creds) && file.delete()) {
+                Timber.i("Dropped a saved copy of the active account")
+            }
+        }
     }
 
     private fun AuthCredentials.withId(): AuthCredentials =
@@ -389,17 +425,18 @@ object AuthManager {
                 // Signing in while already signed in is how an account gets added: the one that
                 // was active is kept, not overwritten. Signing the same account in again just
                 // replaces it, and drops any saved copy of it.
-                stashActive(exceptId = credentials.accountId)
-                File(accountsDir, "${credentials.accountId}.json").delete()
+                stashActive(except = credentials)
+                dropSavedCopiesOf(credentials)
                 credentialsFile.writeText(json.encodeToString(credentials))
+                // Inside the lock, so memory and disk can never name different accounts.
+                applyCredentials(credentials)
+                _authState.value = AuthState(
+                    isLoggedIn = true,
+                    accountInfo = accountInfo,
+                    accountId = credentials.accountId,
+                )
             }
             loadSavedAccounts()
-
-            _authState.value = AuthState(
-                isLoggedIn = true,
-                accountInfo = accountInfo,
-                accountId = credentials.accountId,
-            )
 
             Result.success(accountInfo)
         } catch (e: Exception) {
@@ -412,12 +449,12 @@ object AuthManager {
     }
 
     /**
-     * Moves the active account into the saved set, unless it is [exceptId]. Caller holds
-     * [filesLock].
+     * Moves the active account into the saved set, unless it is the same account as [except].
+     * Caller holds [filesLock].
      */
-    private fun stashActive(exceptId: String?) {
+    private fun stashActive(except: AuthCredentials?) {
         val active = readCredentials()?.withId() ?: return
-        if (active.accountId == exceptId) return
+        if (except != null && sameAccount(active, except)) return
         accountsDir.mkdirs()
         File(accountsDir, "${active.accountId}.json")
             // An active account YouTube already signed out is kept, but marked, so it is not offered
@@ -440,17 +477,19 @@ object AuthManager {
             if (target.sessionExpired) {
                 error("This account's session expired. Sign in to it again to use it.")
             }
-            stashActive(exceptId = target.accountId)
+            stashActive(except = target)
             credentialsFile.writeText(json.encodeToString(target))
             file.delete()
+            // Inside the lock: two switches in quick succession otherwise interleaved here, and
+            // the app could end up playing as one account while credentials.json held another.
+            applyCredentials(target)
+            _authState.value = AuthState(
+                isLoggedIn = true,
+                accountInfo = target.accountInfo,
+                accountId = target.accountId,
+            )
             target
         }
-        applyCredentials(switched)
-        _authState.value = AuthState(
-            isLoggedIn = true,
-            accountInfo = switched.accountInfo,
-            accountId = switched.accountId,
-        )
         loadSavedAccounts()
         Timber.i("Switched to ${switched.accountInfo?.name ?: "another account"}")
         scope.launch { refreshSession() }
@@ -467,6 +506,21 @@ object AuthManager {
      * removing those is its own action.
      */
     fun logout() {
+        // Taken so a refresh cannot write credentials.json back between the delete and the
+        // state change, which would leave a live session on disk behind a signed-out UI. The
+        // lock is only ever held for file writes, so this waits milliseconds at most.
+        runBlocking { filesLock.withLock { logoutLocked() } }
+    }
+
+    /**
+     * Keeps the account that is active before a backup's credentials.json is written over it,
+     * so restoring a backup never loses whoever was signed in.
+     */
+    internal fun stashActiveBeforeRestore() {
+        runBlocking { filesLock.withLock { stashActive(except = null) } }
+    }
+
+    private fun logoutLocked() {
         try {
             if (credentialsFile.exists()) {
                 credentialsFile.delete()

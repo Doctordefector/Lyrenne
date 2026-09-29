@@ -114,6 +114,22 @@ class LyricsParserTest {
     }
 
     @Test
+    fun `syllable timed words are not split by spaces`() {
+        val lines = LyricsParser.parse("[00:01.00]<00:01.00>Hel<00:01.20>lo <00:01.50>there")!!
+        assertEquals("Hello there", lines[0].text)
+    }
+
+    @Test
+    fun `a backing line that starts before its lead still belongs to that lead`() {
+        val lines = LyricsParser.parse(
+            "[00:01.00]First\n[00:05.00]Second\n[00:04.80]{bg}(ooh)"
+        )!!
+        assertEquals(listOf("First", "Second"), lines.map { it.text })
+        assertTrue(lines[0].background.isEmpty())
+        assertEquals("(ooh)", lines[1].background.single().text)
+    }
+
+    @Test
     fun `plain lyrics are reported as unsynced`() {
         assertNull(LyricsParser.parse("Just words\nwith no timing\n"))
         assertNull(LyricsParser.parse(""))

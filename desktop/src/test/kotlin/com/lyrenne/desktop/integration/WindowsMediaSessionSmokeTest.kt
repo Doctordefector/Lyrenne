@@ -2,10 +2,12 @@ package com.lyrenne.desktop.integration
 
 import com.lyrenne.desktop.playback.DesktopPlayer
 import com.lyrenne.desktop.playback.SongInfo
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
+import java.io.File
 
 /** Verifies that the bundled native SMTC adapter can create a real Windows media session. */
 class WindowsMediaSessionSmokeTest {
@@ -22,16 +24,19 @@ class WindowsMediaSessionSmokeTest {
                 "The Windows media-session adapter could not be loaded",
                 WindowsMediaSession.initialize(player)
             )
-            player.playLocalFile(
-                filePath = "media-session-smoke-test",
-                song = SongInfo(
-                    id = "smoke-test",
-                    title = "SMTC Smoke Test",
-                    artist = "Lyrenne",
-                    thumbnailUrl = null,
-                    durationMs = 60_000
+            // Started as a download, so no stream has to be resolved
+            player.downloadedFileFor = { File("media-session-smoke-test") }
+            runBlocking {
+                player.playSong(
+                    SongInfo(
+                        id = "smoke-test",
+                        title = "SMTC Smoke Test",
+                        artist = "Lyrenne",
+                        thumbnailUrl = null,
+                        durationMs = 60_000
+                    )
                 )
-            )
+            }
 
             val deadline = System.currentTimeMillis() + 2_000
             while (!WindowsMediaSession.active && System.currentTimeMillis() < deadline) {

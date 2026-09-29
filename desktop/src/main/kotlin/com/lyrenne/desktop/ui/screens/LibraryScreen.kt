@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -298,7 +299,9 @@ private fun SongsTab(
 ) {
     val scope = rememberCoroutineScope()
     val playerState by player.state.collectAsState()
-    val queueSongs = playerState.queue
+    // What actually played, newest first. This was the head of the live queue, which only looked
+    // like history while every click here replaced the queue with a single song.
+    val recentSongs = playerState.recentlyPlayed
 
     var showLikedOnly by remember { mutableStateOf(false) }
     val baseSongs = if (showLikedOnly) likedSongs else songs
@@ -376,7 +379,7 @@ private fun SongsTab(
 
         Spacer(Modifier.height(8.dp))
 
-        if (displaySongs.isEmpty() && queueSongs.isEmpty()) {
+        if (displaySongs.isEmpty() && recentSongs.isEmpty()) {
             EmptyLibraryMessage(
                 icon = Icons.Default.MusicNote,
                 message = if (searchQuery.isNotBlank()) "No matching songs"
@@ -390,8 +393,8 @@ private fun SongsTab(
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // Show recent queue as "Recently Played" (only when not searching)
-                if (queueSongs.isNotEmpty() && !showLikedOnly && searchQuery.isBlank()) {
+                // Recently Played (only when not searching)
+                if (recentSongs.isNotEmpty() && !showLikedOnly && searchQuery.isBlank()) {
                     item {
                         Text(
                             "Recently Played",
@@ -399,7 +402,7 @@ private fun SongsTab(
                             modifier = Modifier.padding(vertical = 8.dp)
                         )
                     }
-                    items(queueSongs.take(10)) { song ->
+                    items(recentSongs) { song ->
                         SongListItem(
                             song = song,
                             isPlaying = playerState.currentSong?.id == song.id,
@@ -427,7 +430,7 @@ private fun SongsTab(
                             modifier = Modifier.padding(vertical = 8.dp)
                         )
                     }
-                    items(displaySongs, key = { it.id }) { dbSong ->
+                    itemsIndexed(displaySongs, key = { _, s -> s.id }) { index, dbSong ->
                         val song = dbSong.toSongInfo(artistNamesMap)
                         SongListItem(
                             song = song,
@@ -436,9 +439,10 @@ private fun SongsTab(
                             isLiked = dbSong.liked == 1L,
                             playlists = playlists,
                             onClick = {
-                                scope.launch {
-                                    player.playSong(song)
-                                }
+                                // The list plays on from here, as it does from an album or a
+                                // playlist. This played the one song and stopped (issue #11).
+                                val songInfos = displaySongs.map { it.toSongInfo(artistNamesMap) }
+                                scope.launch { player.playQueue(songInfos, index) }
                             },
                             onDownload = {
                                 DownloadManager.queueDownload(song)
@@ -1247,7 +1251,7 @@ private fun DownloadsTab(
                 }
             }
 
-            items(filteredDownloaded, key = { it.id }) { dbSong ->
+            itemsIndexed(filteredDownloaded, key = { _, s -> s.id }) { index, dbSong ->
                 val song = dbSong.toSongInfo(artistNamesMap)
                 SongListItem(
                     song = song,
@@ -1255,14 +1259,11 @@ private fun DownloadsTab(
                     isDownloaded = true,
                     playlists = playlists,
                     onClick = {
-                        scope.launch {
-                            val localPath = dbSong.localPath
-                            if (localPath != null) {
-                                player.playLocalFile(localPath, song)
-                            } else {
-                                player.playSong(song)
-                            }
-                        }
+                        // The list plays on from here, like the Songs tab. This used to play the
+                        // one file on its own. The player finds each song's download itself, so
+                        // the songs after it play from disk too.
+                        val songInfos = filteredDownloaded.map { it.toSongInfo(artistNamesMap) }
+                        scope.launch { player.playQueue(songInfos, index) }
                     },
                     onPlayNext = { player.addToQueueNext(song) },
                     onAddToQueue = { player.addToQueue(song) }

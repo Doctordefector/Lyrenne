@@ -8,12 +8,16 @@ import com.metrolist.innertube.strategy.ContentHints
 import com.metrolist.innertube.models.WatchEndpoint
 import com.metrolist.innertube.models.YouTubeClient
 import com.lyrenne.desktop.db.DatabaseHelper
+import com.lyrenne.desktop.download.DownloadManager
 import com.lyrenne.desktop.settings.PreferencesManager
 import kotlinx.coroutines.*
 import timber.log.Timber
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import uk.co.caprica.vlcj.factory.MediaPlayerFactory
 import uk.co.caprica.vlcj.factory.discovery.NativeDiscovery
 import uk.co.caprica.vlcj.log.LogLevel
@@ -90,7 +94,9 @@ data class PlaybackState(
     val error: String? = null,
     val vlcAvailable: Boolean = true,
     val shuffleEnabled: Boolean = false,
-    val repeatMode: RepeatMode = RepeatMode.OFF
+    val repeatMode: RepeatMode = RepeatMode.OFF,
+    /** Songs started this session, newest first, each once. Library shows it as Recently Played. */
+    val recentlyPlayed: List<SongInfo> = emptyList()
 )
 
 data class SongInfo(
@@ -100,8 +106,34 @@ data class SongInfo(
     val thumbnailUrl: String?,
     val durationMs: Long = 0L,
     val album: String? = null,
-    val duration: Int = -1 // in seconds
+    val duration: Int = -1, // in seconds
+    /**
+     * Queued by autoplay rather than by the user. Songs the user adds to the queue go in front of
+     * these, the way they would in front of Spotify's autoplay. Not persisted: a restored queue
+     * treats every song as the user's.
+     */
+    val fromAutoplay: Boolean = false
 )
+
+/** How many songs [PlaybackState.recentlyPlayed] keeps. */
+private const val RECENTLY_PLAYED_MAX = 10
+
+/**
+ * Turns a page of YouTube's radio into songs to queue: drops anything already [queued] (a radio
+ * opens with its own seed), repeats within the page, and explicit songs when those are hidden.
+ */
+internal fun similarSongsToQueue(
+    page: List<SongItem>,
+    queued: Set<String>,
+    hideExplicit: Boolean,
+    fromAutoplay: Boolean
+): List<SongInfo> {
+    val seen = HashSet(queued)
+    return page
+        .filterNot { hideExplicit && it.explicit }
+        .filter { seen.add(it.id) }
+        .map { it.toPlayerSongInfo().copy(fromAutoplay = fromAutoplay) }
+}
 
 /**
  * Metadata duration in milliseconds, or 0 when it is not known.
@@ -162,9 +194,52 @@ class DesktopPlayer {
     private var crossfadeFading = false
     private var fadeJob: Job? = null
 
-    // Radio: id of the song the current radio queue was seeded from (null = not radio)
-    private var radioSeedId: String? = null
-    private var radioLoading = false
+    // Autoplay: similar songs from YouTube's radio, added once the queue is down to its last song.
+    // radioStarted means "Start Radio" built this queue, which keeps going whatever the setting says.
+    private var radioStarted = false
+    private var autoplayFetch: Deferred<Boolean>? = null
+    // Bumped whenever the queue is replaced, so a fetch still in flight for the old one is dropped
+    private var queueGeneration = 0
+
+    /**
+     * Whether this client may pick what plays after the queue. Listen Together turns it off for
+     * guests: host and guests all announce track changes, so a guest that autoplayed on its own
+     * would move the whole room onto a song nobody chose.
+     */
+    var autoplayAllowed: () -> Boolean = { true }
+
+    /** YouTube's radio for a song. Swapped out by tests; nothing else touches it. */
+    internal var radioFor: suspend (videoId: String) -> Result<List<SongItem>> = { id ->
+        YouTube.next(WatchEndpoint(videoId = id, playlistId = "RDAMVM$id")).map { it.items }
+    }
+
+    /**
+     * A song's downloaded file, or null when it has none. Swapped out by tests; nothing else
+     * touches it. A lookup that fails costs the song its offline copy, not its playback: it
+     * streams instead.
+     */
+    internal var downloadedFileFor: suspend (songId: String) -> File? = { id ->
+        withContext(Dispatchers.IO) {
+            try {
+                DownloadManager.getDownloadPathById(id)
+            } catch (e: Exception) {
+                Timber.w("Download lookup failed for $id: ${e.message}")
+                null
+            }
+        }
+    }
+
+    /** A YouTube stream for a song. Swapped out by tests; nothing else touches it. */
+    internal var streamFor: suspend (videoId: String) -> String? = { id -> getStreamUrl(id) }
+
+    init {
+        // Switching autoplay off takes back the songs it already queued. Otherwise a queue it had
+        // topped up would keep playing its picks for hours after the user said stop.
+        scope.launch {
+            PreferencesManager.preferences.map { it.autoplay }.distinctUntilChanged().drop(1)
+                .collect { enabled -> if (!enabled) dropQueuedAutoplay() }
+        }
+    }
 
     // Play event tracking
     private var trackStartTime: Long = 0L       // System.currentTimeMillis when track started playing
@@ -332,7 +407,7 @@ class DesktopPlayer {
     /**
      * Crossfade: VLC has a single decoder, so two tracks cannot overlap. The tail of a track
      * fades to silence over the crossfade window instead, and the next one fades up from
-     * silence in [playUrl], so the transition is a fade out into a fade in.
+     * silence in [playMedia], so the transition is a fade out into a fade in.
      *
      * This used to jump to the next track the moment the window opened and fade in only the
      * incoming one, so the setting did the opposite of its name: the outgoing song was cut
@@ -390,27 +465,31 @@ class DesktopPlayer {
         positionUpdateJob = null
     }
 
-    suspend fun playSong(song: SongInfo) {
-        radioSeedId = null
-        // Get the stream URL from YouTube
-        val streamUrl = getStreamUrl(song.id)
-        if (streamUrl != null) {
-            queue.clear()
-            queue.add(song)
-            syncOriginalQueue()
-            currentIndex = 0
-            playUrl(streamUrl, song)
-            // Emit queue state so Listen Together and other observers see the updated queue
-            _state.value = _state.value.copy(
-                queue = queue.toList(),
-                currentIndex = currentIndex
-            )
-        }
+    /**
+     * Plays [song] on its own, replacing the queue. Autoplay carries on after it when that is on.
+     * False when it has neither a download nor a stream, in which case the old queue is left alone.
+     */
+    suspend fun playSong(song: SongInfo): Boolean = playSingle(song, radio = false)
+
+    private suspend fun playSingle(song: SongInfo, radio: Boolean): Boolean {
+        val media = mediaFor(song) ?: return false
+        resetAutoplay(radio)
+        queue.clear()
+        queue.add(song)
+        syncOriginalQueue()
+        currentIndex = 0
+        playMedia(media, song)
+        // Emit queue state so Listen Together and other observers see the updated queue
+        _state.value = _state.value.copy(
+            queue = queue.toList(),
+            currentIndex = currentIndex
+        )
+        return true
     }
 
     suspend fun playQueue(songs: List<SongInfo>, startIndex: Int = 0) {
         if (songs.isEmpty()) return
-        radioSeedId = null
+        resetAutoplay()
 
         queue.clear()
         queue.addAll(songs)
@@ -418,15 +497,25 @@ class DesktopPlayer {
         currentIndex = startIndex
 
         val song = songs[startIndex]
-        val streamUrl = getStreamUrl(song.id)
-        if (streamUrl != null) {
-            playUrl(streamUrl, song)
-        }
+        mediaFor(song)?.let { playMedia(it, song) }
 
         _state.value = _state.value.copy(
             queue = queue.toList(),
             currentIndex = currentIndex
         )
+    }
+
+    /**
+     * Where [song] plays from: its downloaded file when it has one, otherwise a YouTube stream, and
+     * null when it has neither. Every path that starts a song comes through here. They all used to
+     * stream, and only a click in the Downloads tab played the file, so a downloaded song reached
+     * any other way (an album, a playlist, Next, a restored queue) was streamed anyway, which
+     * fails offline.
+     */
+    private suspend fun mediaFor(song: SongInfo): String? {
+        val file = downloadedFileFor(song.id) ?: return streamFor(song.id)
+        Timber.d("Playing ${song.id} from its download")
+        return file.absolutePath
     }
 
     // ponytail: upstream's client chooser; kept in innertube so syncs update it for free
@@ -487,7 +576,12 @@ class DesktopPlayer {
         }
     }
 
-    private fun playUrl(url: String, song: SongInfo) {
+    /**
+     * Starts [song] from [media], a stream URL or a downloaded file's path. VLC opens either, and
+     * all of this applies to both. Files used to start through a path of their own, which skipped
+     * the previous song's play event, the crossfade, the EQ, the speed and the audio filters.
+     */
+    private fun playMedia(media: String, song: SongInfo) {
         // Record play event for the previous track before switching
         if (_state.value.currentSong != null) {
             recordPlayEvent()
@@ -502,9 +596,9 @@ class DesktopPlayer {
 
         val options = buildMediaOptions()
         if (options.isNotEmpty()) {
-            audioPlayer?.mediaPlayer()?.media()?.play(url, *options.toTypedArray())
+            audioPlayer?.mediaPlayer()?.media()?.play(media, *options.toTypedArray())
         } else {
-            audioPlayer?.mediaPlayer()?.media()?.play(url)
+            audioPlayer?.mediaPlayer()?.media()?.play(media)
         }
         _state.value = _state.value.copy(
             currentSong = song,
@@ -517,7 +611,8 @@ class DesktopPlayer {
             // because presence only re-fires on song change or seek. The longer the track, the
             // later lengthChanged lands and the wider that window gets.
             duration = song.knownDurationMs(),
-            currentIndex = currentIndex
+            currentIndex = currentIndex,
+            recentlyPlayed = recentlyPlayedWith(song)
         )
         resetPlayTracking()
         crossfadeFading = false
@@ -534,7 +629,13 @@ class DesktopPlayer {
         if (shouldFadeIn) {
             fadeIn(crossfadeMs.coerceAtMost(4000L))
         }
+
+        prefetchSimilarSongs()
     }
+
+    private fun recentlyPlayedWith(song: SongInfo): List<SongInfo> =
+        (listOf(song.copy(fromAutoplay = false)) + _state.value.recentlyPlayed.filter { it.id != song.id })
+            .take(RECENTLY_PLAYED_MAX)
 
     /**
      * Build VLC media options based on user preferences.
@@ -581,13 +682,10 @@ class DesktopPlayer {
                 // Media is loaded, just resume
                 player.controls().play()
             } else if (currentIndex in 0 until queue.size) {
-                // No media loaded (e.g. restored queue) — resolve stream and play
+                // No media loaded (e.g. restored queue): start it from its download or a stream
                 val song = queue[currentIndex]
                 scope.launch {
-                    val streamUrl = getStreamUrl(song.id)
-                    if (streamUrl != null) {
-                        playUrl(streamUrl, song)
-                    }
+                    mediaFor(song)?.let { playMedia(it, song) }
                 }
             }
         }
@@ -606,7 +704,8 @@ class DesktopPlayer {
         audioPlayer?.mediaPlayer()?.controls()?.play()
     }
 
-    private suspend fun onTrackFinished() {
+    /** VLC's finished event. Internal so the smoke test can end a track without VLC. */
+    internal suspend fun onTrackFinished() {
         // Sleep timer set to "end of track": stop here instead of advancing
         if (_sleepTimer.value?.endOfTrack == true) {
             _sleepTimer.value = null
@@ -628,14 +727,14 @@ class DesktopPlayer {
                     // Loop back to start
                     currentIndex = 0
                     val song = queue[0]
-                    val streamUrl = getStreamUrl(song.id)
-                    if (streamUrl != null) {
-                        playUrl(streamUrl, song)
-                    }
+                    mediaFor(song)?.let { playMedia(it, song) }
                 }
             }
             RepeatMode.OFF -> {
-                if (currentIndex < queue.size - 1) {
+                // A song played on its own is a one-song queue, so this used to be the end of
+                // everything played from search, home or the library (issues #11 and #12).
+                // Autoplay's songs are normally queued by now; this waits for them if not.
+                if (currentIndex < queue.size - 1 || awaitSimilarSongs()) {
                     playNext()
                 } else {
                     // End of queue
@@ -646,25 +745,25 @@ class DesktopPlayer {
     }
 
     suspend fun playNext() {
-        maybeLoadMoreRadio()
+        // Next on the last song: give autoplay the chance to add something to skip to
+        if (currentIndex >= queue.size - 1) awaitSimilarSongs()
         if (currentIndex < queue.size - 1) {
             currentIndex++
             val song = queue[currentIndex]
-            val streamUrl = getStreamUrl(song.id)
-            if (streamUrl != null) {
-                playUrl(streamUrl, song)
-            }
+            mediaFor(song)?.let { playMedia(it, song) }
             updateQueueState()
         } else if (repeatMode == RepeatMode.ALL && queue.isNotEmpty()) {
             currentIndex = 0
             val song = queue[0]
-            val streamUrl = getStreamUrl(song.id)
-            if (streamUrl != null) {
-                playUrl(streamUrl, song)
-            }
+            mediaFor(song)?.let { playMedia(it, song) }
             updateQueueState()
         } else {
-            _state.value = _state.value.copy(isPlaying = false)
+            // Nothing to skip to. Report what VLC is doing instead of claiming a stop: this is
+            // reached by pressing Next on the last song, which is usually still playing, and
+            // saying otherwise left the play button showing paused over audible music.
+            _state.value = _state.value.copy(
+                isPlaying = audioPlayer?.mediaPlayer()?.status()?.isPlaying == true
+            )
         }
     }
 
@@ -672,10 +771,7 @@ class DesktopPlayer {
         if (currentIndex > 0) {
             currentIndex--
             val song = queue[currentIndex]
-            val streamUrl = getStreamUrl(song.id)
-            if (streamUrl != null) {
-                playUrl(streamUrl, song)
-            }
+            mediaFor(song)?.let { playMedia(it, song) }
             updateQueueState()
         } else {
             // Restart current song
@@ -687,23 +783,43 @@ class DesktopPlayer {
         if (index in 0 until queue.size) {
             currentIndex = index
             val song = queue[index]
-            val streamUrl = getStreamUrl(song.id)
-            if (streamUrl != null) {
-                playUrl(streamUrl, song)
-            }
+            mediaFor(song)?.let { playMedia(it, song) }
             updateQueueState()
         }
     }
 
     /**
-     * Mirrors [queue] into [originalQueue] while shuffle is off. Without this the unshuffle order is
-     * only ever captured when shuffle is switched on, so [originalQueue] sits empty through every
-     * normal flow and the indexed insert in [addToQueueNext] goes out of range.
+     * Mirrors [queue] into [originalQueue] while shuffle is off. Without this the unshuffle order was
+     * only ever captured when shuffle was switched on, so [originalQueue] sat empty through every
+     * normal flow and "play next" inserting into it by index went out of range (issue #9). While
+     * shuffle is on, songs added to the queue go into it by hand: see [hasOrderToRestore].
      */
     private fun syncOriginalQueue() {
         if (shuffleEnabled) return
         originalQueue.clear()
         originalQueue.addAll(queue)
+    }
+
+    /**
+     * Whether turning shuffle off will go back to [originalQueue], so that a song added to the queue
+     * now has to go into it too. Left out, the song disappeared when shuffle went off, and if it was
+     * the one playing, the current index fell back to 0 while it played on.
+     *
+     * False when no order was saved, which a restart with shuffle on and clearing the queue while
+     * shuffled both leave behind. Turning shuffle off keeps the queue as it is then, and adding to
+     * the empty order would make it just the songs added since, which is all that turning shuffle
+     * off would leave.
+     */
+    private fun hasOrderToRestore(): Boolean = shuffleEnabled && originalQueue.isNotEmpty()
+
+    /**
+     * Where the playing song sits in [originalQueue]: -1 while nothing is playing, the same as
+     * [currentIndex], and the last position when the song is not in there, so that anything placed
+     * after it lands at the end.
+     */
+    private fun currentInOriginalQueue(): Int {
+        val current = queue.getOrNull(currentIndex) ?: return -1
+        return originalQueue.indexOf(current).takeIf { it >= 0 } ?: originalQueue.lastIndex
     }
 
     fun toggleShuffle() {
@@ -771,7 +887,9 @@ class DesktopPlayer {
     fun moveInQueue(fromIndex: Int, toIndex: Int) {
         if (fromIndex in 0 until queue.size && toIndex in 0 until queue.size) {
             val item = queue.removeAt(fromIndex)
-            queue.add(toIndex, item)
+            // Placed by hand, so it is the user's pick now: songs added later must not jump it
+            val placed = if (item.fromAutoplay && fromIndex != currentIndex) item.copy(fromAutoplay = false) else item
+            queue.add(toIndex, placed)
             syncOriginalQueue()
             // Adjust current index
             when {
@@ -783,25 +901,31 @@ class DesktopPlayer {
         }
     }
 
+    /** Where a song the user queues goes: in front of the first of autoplay's picks after [after], else at the end. */
+    private fun List<SongInfo>.slotAheadOfAutoplay(after: Int): Int =
+        (after + 1 until size).firstOrNull { this[it].fromAutoplay } ?: size
+
     fun addToQueue(song: SongInfo) {
-        queue.add(song)
-        if (!shuffleEnabled) {
-            originalQueue.add(song)
-        }
+        // In front of autoplay's picks, which only fill in after what the user chose. Otherwise
+        // a song queued during a search result would wait behind fifty suggestions. The order
+        // shuffle goes back to follows the same rule, from wherever the playing song sits in it.
+        if (hasOrderToRestore()) originalQueue.add(originalQueue.slotAheadOfAutoplay(currentInOriginalQueue()), song)
+        queue.add(queue.slotAheadOfAutoplay(currentIndex), song)
+        syncOriginalQueue()
         updateQueueState()
     }
 
     fun addToQueueNext(song: SongInfo) {
-        val insertIndex = (currentIndex + 1).coerceIn(0, queue.size)
-        queue.add(insertIndex, song)
-        if (!shuffleEnabled) {
-            originalQueue.add(insertIndex.coerceAtMost(originalQueue.size), song)
-        }
+        // Straight after the playing song, in the order shuffle goes back to as well
+        if (hasOrderToRestore()) originalQueue.add(currentInOriginalQueue() + 1, song)
+        queue.add((currentIndex + 1).coerceIn(0, queue.size), song)
+        syncOriginalQueue()
         updateQueueState()
     }
 
     fun clearQueue() {
         val currentSong = if (currentIndex >= 0 && currentIndex < queue.size) queue[currentIndex] else null
+        resetAutoplay()
         queue.clear()
         originalQueue.clear()
         if (currentSong != null) {
@@ -821,26 +945,6 @@ class DesktopPlayer {
 
     fun setVolume(volume: Float) {
         audioPlayer?.mediaPlayer()?.audio()?.setVolume(vlcVolume(volume))
-    }
-
-    fun playLocalFile(filePath: String, song: SongInfo) {
-        lastVlcError = null
-        queue.clear()
-        queue.add(song)
-        syncOriginalQueue()
-        currentIndex = 0
-
-        audioPlayer?.mediaPlayer()?.media()?.play(filePath)
-        _state.value = _state.value.copy(
-            currentSong = song,
-            position = 0L,
-            // Seeded for the same reason as in playUrl: otherwise the previous track's length
-            // stands until VLC reports this one's.
-            duration = song.knownDurationMs(),
-            currentIndex = currentIndex,
-            queue = queue.toList(),
-            error = null
-        )
     }
 
     // --- Queue Persistence ---
@@ -893,6 +997,7 @@ class DesktopPlayer {
 
             val queueState = withContext(Dispatchers.IO) { DatabaseHelper.getPlayQueueState() }
 
+            resetAutoplay()
             queue.clear()
             queue.addAll(restoredQueue)
             currentIndex = queueState?.currentIndex ?: 0
@@ -913,7 +1018,7 @@ class DesktopPlayer {
                     repeatMode = repeatMode,
                     position = queueState?.positionMs ?: 0L
                 )
-                // Stream URL resolved lazily on first play — no network call at startup
+                // Download or stream found lazily on first play: no network call at startup
             }
         } catch (e: Exception) {
             Timber.e("Failed to restore queue: ${e.message}")
@@ -1002,61 +1107,106 @@ class DesktopPlayer {
         _sleepTimer.value = null
     }
 
-    // ============ Radio ============
+    // ============ Radio and autoplay ============
 
     /**
-     * Start a radio queue seeded from [song]: plays the song followed by
-     * YouTube Music's auto-generated mix of related tracks.
+     * Start a radio queue seeded from [song]: plays the song straight away, then fills the queue
+     * with YouTube Music's mix of related tracks. The song used to wait for the mix, which takes
+     * between half a second and four seconds to arrive.
      */
     suspend fun startRadio(song: SongInfo) {
-        val result = YouTube.next(WatchEndpoint(videoId = song.id, playlistId = "RDAMVM${song.id}"))
-        result.onSuccess { next ->
-            val related = next.items
-                .map { it.toPlayerSongInfo() }
-                .filter { it.id != song.id }
-            playQueue(listOf(song) + related, 0)
-            radioSeedId = song.id // after playQueue (which clears it)
-        }.onFailure { e ->
-            Timber.w("Radio failed for ${song.id}: ${e.message}")
-            // Fall back to just playing the song
-            playSong(song)
+        if (!playSingle(song, radio = true)) return
+        awaitSimilarSongs(force = true)
+    }
+
+    private fun autoplayWanted(): Boolean =
+        (radioStarted || PreferencesManager.preferences.value.autoplay) &&
+            repeatMode == RepeatMode.OFF && autoplayAllowed()
+
+    /** A replaced queue starts over: nothing still in flight for the old one may land in it. */
+    private fun resetAutoplay(radio: Boolean = false) {
+        queueGeneration++
+        radioStarted = radio
+        autoplayFetch?.cancel()
+        autoplayFetch = null
+    }
+
+    /**
+     * Once the queue is down to its last song, fetches what autoplay will play after it, so the
+     * songs are queued before it ends. A fetch takes between half a second and four seconds,
+     * too long a silence to leave until the song has finished.
+     */
+    private fun prefetchSimilarSongs() {
+        if (currentIndex != queue.size - 1 || !autoplayWanted()) return
+        if (autoplayFetch?.isActive == true) return
+        fetchSimilarSongs()
+    }
+
+    private fun fetchSimilarSongs(force: Boolean = false): Deferred<Boolean> {
+        val generation = queueGeneration
+        return scope.async { appendSimilarSongs(generation, force) }.also { autoplayFetch = it }
+    }
+
+    /**
+     * The queue has run out: waits for the fetch [prefetchSimilarSongs] started, or starts one.
+     * True if songs were added. [force] is Start Radio, which fills the queue whatever the
+     * setting, the repeat mode or the Listen Together role.
+     */
+    internal suspend fun awaitSimilarSongs(force: Boolean = false): Boolean {
+        if (queue.isEmpty() || (!force && !autoplayWanted())) return false
+        val fetch = autoplayFetch?.takeIf { it.isActive } ?: fetchSimilarSongs(force)
+        return try {
+            fetch.await()
+        } catch (e: CancellationException) {
+            // The fetch was dropped because the queue was replaced. Only rethrow if it is this
+            // caller that is being cancelled.
+            currentCoroutineContext().ensureActive()
+            false
         }
     }
 
     /**
-     * Auto-queue: when enabled and the queue is nearly exhausted, append more
-     * related tracks seeded from the last queue item.
+     * Appends YouTube's radio for the last song in the queue, minus anything already queued.
+     *
+     * Seeded from the tail every time rather than paging through one radio. Measured on three
+     * seeds: a continuation page brought 5 to 14 new songs out of 49, because each page mostly
+     * repeats the one before, while a fresh radio from the tail brought 15 to 48.
      */
-    private suspend fun maybeLoadMoreRadio() {
-        val prefs = PreferencesManager.preferences.value
-        val radioActive = radioSeedId != null
-        if (!prefs.autoLoadRadio && !radioActive) return
-        if (radioLoading) return
-        if (queue.isEmpty() || currentIndex < queue.size - 3) return
-        if (repeatMode != RepeatMode.OFF) return
-
-        radioLoading = true
-        try {
-            val seed = queue.last()
-            val result = YouTube.next(WatchEndpoint(videoId = seed.id, playlistId = "RDAMVM${seed.id}"))
-            result.onSuccess { next ->
-                val existing = queue.map { it.id }.toSet()
-                val newSongs = next.items
-                    .map { it.toPlayerSongInfo() }
-                    .filter { it.id !in existing }
-                    .take(20)
-                if (newSongs.isNotEmpty()) {
-                    queue.addAll(newSongs)
-                    if (!shuffleEnabled) originalQueue.addAll(newSongs)
-                    updateQueueState()
-                    Timber.d("Auto-queued ${newSongs.size} related tracks")
-                }
-            }
-        } catch (e: Exception) {
-            Timber.w("Auto-queue failed: ${e.message}")
-        } finally {
-            radioLoading = false
+    private suspend fun appendSimilarSongs(generation: Int, force: Boolean): Boolean {
+        val seed = queue.lastOrNull() ?: return false
+        val page = radioFor(seed.id).getOrElse {
+            Timber.w("Autoplay: no radio for ${seed.id}: ${it.message}")
+            return false
         }
+        // The queue was replaced while this was in flight; these belong to the old one
+        if (generation != queueGeneration) return false
+        // Checked again: the setting or the Listen Together role can change during the fetch
+        if (!force && !autoplayWanted()) return false
+        val songs = similarSongsToQueue(
+            page = page,
+            queued = queue.mapTo(HashSet()) { it.id },
+            hideExplicit = PreferencesManager.preferences.value.hideExplicit,
+            // A radio the user started is the queue itself, like an album, so its songs are theirs
+            fromAutoplay = !radioStarted
+        )
+        if (songs.isEmpty()) return false
+        queue.addAll(songs)
+        // Into the unshuffle order as well, even while shuffled. Left out, turning shuffle off
+        // would drop them, and with them the song playing if it was one.
+        if (hasOrderToRestore()) originalQueue.addAll(songs)
+        syncOriginalQueue()
+        updateQueueState()
+        Timber.d("Autoplay: queued ${songs.size} songs after ${seed.id}")
+        return true
+    }
+
+    /** Takes out the autoplay songs still to come. Ones already played stay, as history. */
+    internal fun dropQueuedAutoplay() {
+        val pending = queue.filterIndexed { index, song -> index > currentIndex && song.fromAutoplay }
+        if (pending.isEmpty()) return
+        queue.removeAll { song -> pending.any { it === song } }
+        originalQueue.removeAll { song -> pending.any { it === song } }
+        updateQueueState()
     }
 
     // ============ Equalizer ============

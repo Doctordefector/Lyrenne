@@ -22,6 +22,13 @@ object BackupManager {
         "preferences.properties", "lyrenne.db", "credentials.json", "lyrics-overrides.json"
     )
 
+    private const val ACCOUNTS_FOLDER = "accounts"
+
+    /** A saved account's file name: the 16 hex character id AuthManager derives. */
+    private val ACCOUNT_FILE = Regex("""^[0-9a-f]{16}\.json$""")
+
+    private val accountsDir: File get() = File(AppPaths.dataDir, ACCOUNTS_FOLDER)
+
     fun defaultBackupFileName(): String {
         val stamp = SimpleDateFormat("yyyy-MM-dd_HHmm", Locale.US).format(Date())
         return "Lyrenne-backup-$stamp.zip"
@@ -36,6 +43,14 @@ object BackupManager {
                 if (!file.exists()) continue
                 // Forward slashes only — backslash entries break Java extraction
                 zip.putNextEntry(ZipEntry(name))
+                FileInputStream(file).use { it.copyTo(zip) }
+                zip.closeEntry()
+                count++
+            }
+            // Saved accounts for the account switcher. The same plaintext cookies as
+            // credentials.json, so a backup that carries one carries these.
+            accountsDir.listFiles { f -> f.isFile && ACCOUNT_FILE.matches(f.name) }?.forEach { file ->
+                zip.putNextEntry(ZipEntry("$ACCOUNTS_FOLDER/${file.name}"))
                 FileInputStream(file).use { it.copyTo(zip) }
                 zip.closeEntry()
                 count++
@@ -65,8 +80,16 @@ object BackupManager {
         ZipInputStream(FileInputStream(source)).use { zip ->
             var entry: ZipEntry? = zip.nextEntry
             while (entry != null) {
-                val name = entry.name.replace('\\', '/').substringAfterLast('/')
-                if (name in backupFiles) {
+                val path = entry.name.replace('\\', '/')
+                val name = path.substringAfterLast('/')
+                if (path == "$ACCOUNTS_FOLDER/$name" && ACCOUNT_FILE.matches(name)) {
+                    // Matched against the exact id shape, so an entry name can never climb out
+                    // of the accounts folder.
+                    accountsDir.mkdirs()
+                    FileOutputStream(File(accountsDir, name)).use { zip.copyTo(it) }
+                    count++
+                    Timber.i("Restored saved account $name")
+                } else if (name in backupFiles) {
                     val outFile = File(AppPaths.dataDir, name)
                     FileOutputStream(outFile).use { zip.copyTo(it) }
                     count++

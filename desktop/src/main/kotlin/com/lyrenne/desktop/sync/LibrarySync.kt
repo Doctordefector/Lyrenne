@@ -34,6 +34,21 @@ object LibrarySync {
 
     private var syncJob: Job? = null
 
+    /**
+     * Throws away any sync in flight and starts a fresh one. Used when the signed-in account
+     * changes: a sync still fetching for the previous account would otherwise either block the
+     * new one (syncLibrary no-ops while one runs) or land the old account's library afterwards.
+     * The old job is joined before the new one starts, so its transaction can never interleave.
+     */
+    fun resync() {
+        val previous = syncJob
+        scope.launch {
+            previous?.cancelAndJoin()
+            _syncState.value = SyncState()
+            syncLibrary()
+        }
+    }
+
     fun syncLibrary() {
         if (_syncState.value.isSyncing) return
 

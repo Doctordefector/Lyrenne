@@ -55,9 +55,10 @@ own Java runtime. Windows 10 or 11, 64-bit.
 | **Playback** | Streaming and local files through a bundled VLC engine, gapless queue, shuffle and repeat, crossfade, playback speed 0.25×–3×, sleep timer, 10-band equalizer with presets, skip silence, volume normalization |
 | **Library** | Full two-way sync with YouTube Music: liked songs, albums, artists and playlists, and every edit you make locally is pushed back to your account. Local playlists, auto playlists, sorting, search and grid/list views |
 | **Discovery** | Home feed with continuations, Explore (new releases, moods & genres, charts), search with filters and suggestions, radio and auto-queue, quick picks, podcasts |
-| **Lyrics** | Synced and plain, from a five-provider chain (BetterLyrics → LrcLib → KuGou → YouTube lyrics → YouTube transcript), with size, alignment and click-to-seek options |
+| **Lyrics** | Synced and plain, from a five-provider chain (BetterLyrics → LrcLib → KuGou → YouTube lyrics → YouTube transcript), word-by-word highlighting where the provider has word timing, manual search when the automatic match is wrong, and size, alignment and click-to-seek options |
 | **Social** | Listen Together rooms with live playback sync, Discord Rich Presence, Last.fm scrobbling |
-| **Extras** | Guided first-run setup, music recognition through Shazam, listening stats and history, downloads with progress, car/USB export to loudness-normalized MP3, backup and restore, proxy support, region and language settings, system tray with a mini player, Windows Now Playing and media controls, media-key and keyboard shortcuts, Material 3 theming that follows your system |
+| **Accounts** | Keep several YouTube accounts signed in and switch between them with one click, handy on a shared PC |
+| **Extras** | Guided first-run setup, floating always-on-top mini player, music recognition through Shazam, listening stats and history, downloads with progress, car/USB export to loudness-normalized MP3, backup and restore, proxy support, region and language settings, system tray with a mini player, Windows Now Playing and media controls, media-key and keyboard shortcuts, Material 3 theming that follows your system |
 
 Everything the app writes (database, credentials, preferences, cache, downloads) stays in the
 app's own folder, and there is no telemetry. One setting is the single exception: "Name Lyrenne in

@@ -44,7 +44,7 @@ Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop 
 - Material3 theme with system dark/light detection (Windows registry, macOS defaults, Linux GTK)
 - Detail screens: Album, Artist, Playlist (with full navigation stack)
 - Seekable progress bar in MiniPlayer
-- Lyrics display (synced + plain) via lrclib with auto-scroll
+- Lyrics display (synced + plain) with auto-scroll, word-by-word highlighting when the provider sends word timing, and manual search. See Lyrics parsing
 - Audio quality selection (128/192/256/320 kbps)
 - Queue persistence across app restarts (SQLDelight)
 - Discord Rich Presence via named pipe IPC (Windows `\\.\pipe\discord-ipc-N`, Unix `/tmp/discord-ipc-N`)
@@ -53,6 +53,8 @@ Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop 
 - Auto-updater (GitHub releases: Doctordefector/Lyrenne)
 - Listen Together (WebSocket, protobuf messages, room create/join, bidirectional playback sync, suggestions, session persistence with 10-min grace, reconnect with exponential backoff)
 - Account info display (name, handle, avatar from YouTube)
+- Several accounts signed in at once, switched with one click from Settings (issue #11). See Account switching
+- Floating mini player: round always-on-top disc while the main window is minimized or in the tray (Settings > System, off by default)
 - Library search/filter across all tabs (songs, albums, artists, playlists, downloads)
 - Library sorting by name, date added, play count (ascending/descending)
 - Podcast support (podcast detail screen, episode playback, search integration)
@@ -146,7 +148,9 @@ Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop 
 #### Lyrics
 | File | Purpose |
 |------|---------|
-| lyrics/LyricsManager.kt | LrcLib fetch, LRC parsing, caching by songId |
+| lyrics/LyricsManager.kt | Provider chain, manual search across all providers, caching by songId |
+| lyrics/LyricsParser.kt | Every lyric format the providers send, into timed lines with optional word timing |
+| lyrics/LyricsOverrides.kt | Lyrics picked by hand, per song, in `data/lyrics-overrides.json` |
 
 #### UI Screens
 | File | Purpose |
@@ -177,7 +181,9 @@ Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop 
 |------|---------|
 | ui/components/MiniPlayer.kt | Player bar with seek, controls, volume, queue/lyrics buttons |
 | ui/components/UpdateBadge.kt | Floating top-right "update waiting" pill, navigates to Settings |
-| ui/components/LyricsPanel.kt | Synced/plain lyrics sidebar with auto-scroll |
+| ui/components/LyricsPanel.kt | Synced/plain lyrics sidebar with auto-scroll, word highlight, search dialog |
+| ui/components/AccountSwitcher.kt | Saved accounts under the Settings account card: switch, remove, add |
+| ui/components/FloatingPlayer.kt | The floating mini player disc; its window is created in Main.kt |
 | ui/theme/Theme.kt | Material3 color schemes, system theme detection |
 
 #### Music Recognition
@@ -693,11 +699,12 @@ skipping is exactly what tripped the rate limit that rule 6 in `AGENTS.md` exist
 - VLC must be installed on the system for playback to work (bundled VLC also supported)
 - Stream URLs fetched using InnerTube clients: ANDROID_VR_NO_AUTH → IOS → WEB_REMIX fallback
 - This working copy IS a git clone with a working `origin`. Commit and push directly; older notes describing a robocopy-to-temp-dir push workflow are obsolete
-- **Nothing is written outside the app folder, with one opt-in exception.** All state lives in
-  `<app-dir>/data/`: `lyrenne.db`, `credentials.json`, `preferences.properties`, `cache/`, plus the
-  Listen Together session. 2.9.4 removed the last `%APPDATA%` paths and the migration that read
-  them. The exception is `windowsMediaAppName` (off by default), which writes a single Start Menu
-  shortcut and deletes it again when switched off. See Windows media identity
+- **Nothing is written outside the app folder, with one exception.** All state lives in
+  `<app-dir>/data/`: `lyrenne.db`, `credentials.json`, `accounts/`, `lyrics-overrides.json`,
+  `preferences.properties`, `cache/`, plus the Listen Together session. 2.9.4 removed the last
+  `%APPDATA%` paths and the migration that read them. The exception is `windowsMediaAppName` (on
+  by default since 2.13.0), which writes a single Start Menu shortcut and deletes it again when
+  switched off. See Windows media identity
 - Credentials stored at `<app-dir>/data/credentials.json`
 - Delete credentials.json to force re-login
 - All debug println converted to Timber logging (SLF4J-backed shim)
@@ -819,9 +826,27 @@ Two pieces, and both are needed:
 - `integration/WindowsAppIdentity.kt` calls `SetCurrentProcessExplicitAppUserModelID` from `main()`,
   before any window and before the media session. Without it the process carries a path-derived id.
 - `integration/WindowsStartMenuShortcut.kt` writes `%APPDATA%\...\Start Menu\Programs\Lyrenne.lnk`
-  carrying the same id. Gated behind the `windowsMediaAppName` preference because it is the only
-  file Lyrenne puts outside its own folder. Rewritten on every startup so a moved portable folder
-  repoints it; deleted when the setting goes off.
+  carrying the same id. Behind the `windowsMediaAppName` preference because it is the only file
+  Lyrenne puts outside its own folder. Rewritten on every startup so a moved portable folder
+  repoints it; deleted when the setting goes off, **but only if it points at this copy**.
+
+**It is on by default since 2.13.0, and read from a new key.** 2.12.0 shipped it off by default,
+which delivered the fix to almost nobody. The old key, `windowsMediaAppName`, was written on every
+save, so it records 2.12.0's default rather than anyone's choice; the preference is now stored as
+`windowsMediaShortcut` and the old key is ignored. Do not "tidy" it back.
+
+**The shell resolves the name when it draws the card**, verified on the live flyout: removing the
+shortcut turns the heading into "Unknown app" and restoring it turns it back into Lyrenne, with no
+restart and no re-registering of the session.
+
+**Two copies of Lyrenne share one shortcut.** Before 2.13.0 a copy with the setting off deleted it on
+every launch, unnaming the other copy. The delete now reads the target back through
+`IShellLinkW::GetPath` and leaves a shortcut that belongs to another exe alone.
+
+**`RPC_E_CHANGED_MODE` is not a failure.** CoInitializeEx(STA) answers it on a thread already in the
+multi-threaded apartment, which WinRT does to pooled IO threads. The shell link object is registered
+for both apartments, so it is treated like `S_FALSE`: usable, not ours to uninitialise. Treating it
+as fatal silently skipped the shortcut. The smoke test pins this.
 
 Verify with `Get-StartApps | ? { $_.AppID -like "*lyrenne*" }`. A row reading
 `Lyrenne / com.lyrenne.desktop.Lyrenne` is the exact lookup the flyout performs, and is a far better
@@ -842,8 +867,71 @@ check than squinting at the flyout.
 of the fields that object exposes. Hence the hand-rolled `IShellLinkW` / `IPropertyStore` vtable
 calls, since jna-platform binds neither.
 
+## Lyrics parsing
+
+`lyrics/LyricsParser.kt` is the only thing that reads lyric text. The parser it replaced (LrcLib's
+`Lyrics.sentences`) understood `[mm:ss.xx]text` and nothing else, and threw on anything else, which
+sent the whole song to the plain view as raw text. That was issue #10: BetterLyrics sends upstream's
+word-timed extension, a `<word:start:end|word:start:end>` line (seconds) after each lyric line, and
+all of it appeared on screen. The same fault swallowed any LRC with an ID tag, and misread YouTube
+transcripts' three-digit milliseconds, leaving a stray digit on every line.
+
+It never throws; an unreadable line is skipped. `{bg}` lines are attached to the lead line before
+them (`LyricLine.background`) so backing vocals never take "current line" away from the lead.
+`LyricsParserTest` holds a verbatim sample of each format; add one there before changing it.
+
+Two lookup bugs that look like "no lyrics for this song":
+
+- **Duration.** LrcLib and KuGou match on it, and every fetch used to go out with `-1`, because the
+  panel read the player's duration before this track had one. The panel now waits up to 4 s for the
+  live length. Measured: LrcLib finds "Risk It All" with the length and not without.
+- **Swallowed cancellation.** The vendored providers wrap their work in `runCatching`, which catches
+  the CancellationException a track change delivers. A cancelled lookup then ran on down the chain
+  and published "No lyrics found" over the next song's state. `ensureStillWanted()` after each
+  provider rethrows it.
+
+Manual picks are stored as full text in `data/lyrics-overrides.json`, keyed by song id, because no
+provider offers a stable id to refetch the same result. Backups include the file.
+
+## Account switching
+
+`credentials.json` is always the **active** account, so nothing that reads it changed. Other signed-in
+accounts sit in `data/accounts/<accountId>.json`, the same format, the same plaintext. Signing in while
+signed in adds an account: `saveCredentials` moves the current one aside instead of overwriting it.
+
+- `accountId` is a hash of the DATASYNC_ID (the SAPISID cookie if the page gave none), assigned once
+  and **stored**. Do not recompute it from live values: those move under a refresh, and a moving id
+  splits one account into two. Pre-2.13.0 credentials get one on first load.
+- Every read-modify-write of either file goes through `filesLock`. A refresh that started for the old
+  account otherwise wrote its cookies over the new one after a switch.
+- Saved accounts get their cookies rotated on the same 6 h cycle, or switching to one after a few weeks
+  lands on a dead session. One YouTube reports signed out is marked `sessionExpired` and offers Sign in
+  instead of Switch.
+- `AuthState.accountId` is what the library resync and the home cache key on. `isLoggedIn` does not
+  change on a switch, so anything keyed on it alone keeps showing the previous account.
+- `LibrarySync.resync()` cancels **and joins** a sync in flight before starting, so the old account's
+  transaction cannot land after the new one's. Pruning only clears liked and bookmarked flags, so a
+  switch never deletes downloads, local playlists or history; those are shared by every account.
+- Signing out removes only the active account. The rest stay.
+
+## Floating mini player
+
+Created in `Main.kt`, drawn by `ui/components/FloatingPlayer.kt`. Three things that are not obvious:
+
+- **The window exists for as long as the setting is on**, and only its visibility follows the main
+  window. Creating it on demand took around four seconds to appear.
+- **It is built through the `create` overload of `Window`**, because `type = UTILITY` (no taskbar
+  button), `isTransparent` and `focusableWindowState = false` must all be set before the window is
+  first shown, and the plain overload offers none of them.
+- **Drag and double-click share one pointer handler.** `WindowDraggableArea` only starts on an
+  unconsumed press, and a double-click detector consumes every press, so stacked together the disc
+  could never be dragged. Presses the transport buttons consume are left to them.
+
+To screenshot it, capture with `CAPTUREBLT`. A plain BitBlt (and `Graphics.CopyFromScreen`) skips
+layered windows, so the disc is invisible in the capture while being perfectly visible on screen.
+
 ## Version Management
-- **Current version**: v2.12.0
+- **Current version**: v2.13.0
 - **Version must be updated in TWO places** when releasing:
   1. `desktop/build.gradle.kts` → `lyrenneVersion = "X.Y.Z"`
   2. `desktop/.../update/AutoUpdater.kt` → `CURRENT_VERSION = "X.Y.Z"`
@@ -889,7 +977,7 @@ All data is fully portable — stored next to the executable via centralized `Ap
 - **Downloads**: `<app-dir>/Downloads/` (configurable via Settings folder picker)
 - **Updates staging**: `<app-dir>/updates/` (with fallbacks to user.dir then temp)
 - **Migration**: On first run, `AppPaths` auto-migrates files from old `%APPDATA%/Lyrenne` to `data/` if the data dir is empty
-- **CRITICAL**: nothing goes to %APPDATA% or %LOCALAPPDATA% except the opt-in Start Menu shortcut
+- **CRITICAL**: nothing goes to %APPDATA% or %LOCALAPPDATA% except the Start Menu shortcut
   described under Windows media identity. Everything else lives next to the app for full portability.
 
 ## GitHub & Release

@@ -50,6 +50,11 @@ data class AppPreferences(
     val lastFmUsername: String? = null,
     val notificationsEnabled: Boolean = true,
     val minimizeToTray: Boolean = true,
+    /** Show the round always-on-top player while the main window is minimized or in the tray. */
+    val floatingPlayer: Boolean = false,
+    /** Where the floating player was last left, in dp. Null until it has been moved. */
+    val floatingPlayerX: Int? = null,
+    val floatingPlayerY: Int? = null,
     val volume: Float = 1f,
     val isMuted: Boolean = false,
     val volumeBeforeMute: Float = 1f,
@@ -142,6 +147,9 @@ object PreferencesManager {
                     lastFmUsername = props.getProperty("lastFmUsername"),
                     notificationsEnabled = props.getProperty("notificationsEnabled")?.toBoolean() ?: true,
                     minimizeToTray = props.getProperty("minimizeToTray")?.toBoolean() ?: true,
+                    floatingPlayer = props.getProperty("floatingPlayer")?.toBoolean() ?: false,
+                    floatingPlayerX = props.getProperty("floatingPlayerX")?.toIntOrNull(),
+                    floatingPlayerY = props.getProperty("floatingPlayerY")?.toIntOrNull(),
                     volume = props.getProperty("volume")?.toFloatOrNull()?.coerceIn(0f, 1f) ?: 1f,
                     isMuted = props.getProperty("isMuted")?.toBoolean() ?: false,
                     volumeBeforeMute = props.getProperty("volumeBeforeMute")?.toFloatOrNull()?.coerceIn(0f, 1f) ?: 1f,
@@ -218,6 +226,9 @@ object PreferencesManager {
             prefs.lastFmUsername?.let { props.setProperty("lastFmUsername", it) }
             props.setProperty("notificationsEnabled", prefs.notificationsEnabled.toString())
             props.setProperty("minimizeToTray", prefs.minimizeToTray.toString())
+            props.setProperty("floatingPlayer", prefs.floatingPlayer.toString())
+            prefs.floatingPlayerX?.let { props.setProperty("floatingPlayerX", it.toString()) }
+            prefs.floatingPlayerY?.let { props.setProperty("floatingPlayerY", it.toString()) }
             props.setProperty("volume", prefs.volume.toString())
             props.setProperty("isMuted", prefs.isMuted.toString())
             props.setProperty("volumeBeforeMute", prefs.volumeBeforeMute.toString())
@@ -347,6 +358,17 @@ object PreferencesManager {
 
     fun setNotificationsEnabled(enabled: Boolean) {
         _preferences.value = _preferences.value.copy(notificationsEnabled = enabled)
+        savePreferences()
+    }
+
+    fun setFloatingPlayer(enabled: Boolean) {
+        _preferences.value = _preferences.value.copy(floatingPlayer = enabled)
+        savePreferences()
+    }
+
+    fun setFloatingPlayerPosition(x: Int, y: Int) {
+        if (_preferences.value.floatingPlayerX == x && _preferences.value.floatingPlayerY == y) return
+        _preferences.value = _preferences.value.copy(floatingPlayerX = x, floatingPlayerY = y)
         savePreferences()
     }
 

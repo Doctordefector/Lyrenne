@@ -41,7 +41,7 @@ fun CarExportStatus() {
     when (val s = state) {
         is CarExport.ExportState.Running -> Column(Modifier.padding(top = 8.dp)) {
             Text(
-                "Exporting ${s.done + 1}/${s.total} — ${s.current}",
+                "Exporting ${s.done + 1}/${s.total}: ${s.current}",
                 style = MaterialTheme.typography.bodySmall
             )
             LinearProgressIndicator(
@@ -52,7 +52,7 @@ fun CarExportStatus() {
 
         is CarExport.ExportState.Finished -> Text(
             "Exported ${s.ok} track(s) to ${s.outDir.absolutePath}" +
-                if (s.failed > 0) " — ${s.failed} failed" else "",
+                if (s.failed > 0) ", ${s.failed} failed" else "",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(top = 8.dp)

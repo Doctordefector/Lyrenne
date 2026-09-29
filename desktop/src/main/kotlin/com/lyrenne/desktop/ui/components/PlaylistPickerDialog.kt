@@ -91,7 +91,7 @@ fun PlaylistPickerDialog(
 
                 if (playlists.isEmpty() && !creating) {
                     Text(
-                        "No playlists yet — create one above",
+                        "No playlists yet. Create one above",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(16.dp)

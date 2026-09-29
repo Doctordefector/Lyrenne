@@ -7,6 +7,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.awt.ComposeWindow
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
@@ -19,6 +20,9 @@ import coil3.SingletonImageLoader
 import coil3.disk.DiskCache
 import coil3.memory.MemoryCache
 import com.lyrenne.desktop.ui.components.AutoScroll
+import com.lyrenne.desktop.ui.components.FLOATING_PLAYER_WINDOW_DP
+import com.lyrenne.desktop.ui.components.FloatingPlayer
+import com.lyrenne.desktop.ui.components.floatingPlayerLocation
 import com.lyrenne.desktop.ui.components.TRAY_PANEL_HEIGHT
 import com.lyrenne.desktop.ui.components.TRAY_PANEL_WIDTH
 import com.lyrenne.desktop.ui.components.TrayPanel
@@ -366,7 +370,7 @@ private fun runApp() {
 
         val windowTitle = remember(currentSong) {
             val song = currentSong
-            if (song != null) "♪ ${song.title} — ${song.artist} | Lyrenne" else "Lyrenne"
+            if (song != null) "♪ ${song.title} · ${song.artist} | Lyrenne" else "Lyrenne"
         }
 
         Window(
@@ -499,6 +503,63 @@ private fun runApp() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     App(player = player)
+                }
+            }
+        }
+
+        // Floating mini player (issue #11): only while the main window is out of sight, since
+        // on top of Lyrenne itself it would just cover the real player bar. Closing it hides it
+        // until the main window next comes back, rather than switching the setting off.
+        val mainHidden = !windowVisible || windowState.isMinimized
+        var floatingDismissed by remember { mutableStateOf(false) }
+        LaunchedEffect(mainHidden) { if (!mainHidden) floatingDismissed = false }
+        // The window exists for as long as the setting is on and is only shown and hidden after
+        // that. Creating it on demand took around four seconds to appear, most of it standing
+        // up a fresh render surface, which is long enough to look like it had not worked.
+        if (prefs.floatingPlayer) {
+            Window(
+                visible = currentSong != null && mainHidden && !floatingDismissed,
+                create = {
+                    ComposeWindow().apply {
+                        // A utility window has no taskbar button. Without it a second Lyrenne
+                        // appeared on the taskbar, including while the app was meant to be
+                        // tucked away in the tray. All of these must be set before the window is
+                        // first shown; AWT refuses most of them afterwards.
+                        type = java.awt.Window.Type.UTILITY
+                        isUndecorated = true
+                        isTransparent = true
+                        isAlwaysOnTop = true
+                        isResizable = false
+                        // Clicking the player must not pull focus away from whatever the user
+                        // is working in.
+                        focusableWindowState = false
+                        title = "Lyrenne"
+                        setSize(FLOATING_PLAYER_WINDOW_DP, FLOATING_PLAYER_WINDOW_DP)
+                        location = floatingPlayerLocation(
+                            PreferencesManager.preferences.value.floatingPlayerX,
+                            PreferencesManager.preferences.value.floatingPlayerY
+                        )
+                        // Dragging moves the window dozens of times a second. Save once it
+                        // settles, not on every step.
+                        val save = javax.swing.Timer(500) {
+                            PreferencesManager.setFloatingPlayerPosition(location.x, location.y)
+                        }.apply { isRepeats = false }
+                        addComponentListener(object : java.awt.event.ComponentAdapter() {
+                            override fun componentMoved(e: java.awt.event.ComponentEvent?) = save.restart()
+                        })
+                    }
+                },
+                dispose = { it.dispose() }
+            ) {
+                LyrenneTheme(themeMode = prefs.themeMode) {
+                    FloatingPlayer(
+                        player = player,
+                        onOpenMain = {
+                            windowVisible = true
+                            windowState.isMinimized = false
+                        },
+                        onClose = { floatingDismissed = true }
+                    )
                 }
             }
         }

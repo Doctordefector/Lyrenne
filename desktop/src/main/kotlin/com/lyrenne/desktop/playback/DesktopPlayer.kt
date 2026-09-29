@@ -834,6 +834,9 @@ class DesktopPlayer {
         _state.value = _state.value.copy(
             currentSong = song,
             position = 0L,
+            // Seeded for the same reason as in playUrl: otherwise the previous track's length
+            // stands until VLC reports this one's.
+            duration = song.knownDurationMs(),
             currentIndex = currentIndex,
             queue = queue.toList(),
             error = null

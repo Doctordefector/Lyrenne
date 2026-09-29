@@ -930,6 +930,21 @@ fun SettingsScreen(
 
         item {
             SettingsItem(
+                icon = Icons.Default.PictureInPictureAlt,
+                title = "Floating Mini Player",
+                subtitle = "A small round player that stays on top of other apps while Lyrenne " +
+                    "is minimized or in the tray. Drag it anywhere, double-click it to open Lyrenne",
+                trailing = {
+                    Switch(
+                        checked = preferences.floatingPlayer,
+                        onCheckedChange = { PreferencesManager.setFloatingPlayer(it) }
+                    )
+                }
+            )
+        }
+
+        item {
+            SettingsItem(
                 icon = Icons.Default.Notifications,
                 title = "Song Change Notifications",
                 subtitle = "Show a notification when the song changes",
@@ -994,10 +1009,10 @@ fun SettingsScreen(
                     is CarExport.ExportState.Running ->
                         "Converting ${s.done + 1}/${s.total}: ${s.current}"
                     is CarExport.ExportState.Finished ->
-                        "Done — ${s.ok} file(s) in ${s.outDir.absolutePath}" +
+                        "Done: ${s.ok} file(s) in ${s.outDir.absolutePath}" +
                             if (s.failed > 0) " (${s.failed} failed)" else ""
                     is CarExport.ExportState.Failed -> s.message
-                    else -> "Pick a folder of downloaded tracks — writes evened-out stereo MP3s to a Normalized subfolder"
+                    else -> "Pick a folder of downloaded tracks. Writes evened-out stereo MP3s to a Normalized subfolder"
                 },
                 onClick = {
                     if (exportRunning) return@SettingsItem
@@ -1092,7 +1107,7 @@ fun SettingsScreen(
                     if (source != null) {
                         com.lyrenne.desktop.backup.BackupManager.importBackup(source)
                             .onSuccess { count ->
-                                restoreStatus = "Restored $count files — restart Lyrenne to apply"
+                                restoreStatus = "Restored $count files. Restart Lyrenne to apply"
                                 showRestartNotice = true
                             }
                             .onFailure { e ->

@@ -166,9 +166,9 @@ object LibrarySync {
 
         return if (looksLikeAuth) {
             "Sync failed for ${failures.keys.joinToString(", ")}. Your YouTube session has most " +
-                "likely expired — sign out and sign in again in Settings. ($detail)"
+                "likely expired. Sign out and sign in again in Settings. ($detail)"
         } else {
-            "Could not fetch ${failures.keys.joinToString(", ")} — those were left untouched. ($detail)"
+            "Could not fetch ${failures.keys.joinToString(", ")}. Those were left untouched. ($detail)"
         }
     }
 

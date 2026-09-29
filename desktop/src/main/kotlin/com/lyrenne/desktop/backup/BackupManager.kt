@@ -18,7 +18,9 @@ import java.util.zip.ZipOutputStream
  */
 object BackupManager {
 
-    private val backupFiles = listOf("preferences.properties", "lyrenne.db", "credentials.json")
+    private val backupFiles = listOf(
+        "preferences.properties", "lyrenne.db", "credentials.json", "lyrics-overrides.json"
+    )
 
     fun defaultBackupFileName(): String {
         val stamp = SimpleDateFormat("yyyy-MM-dd_HHmm", Locale.US).format(Date())

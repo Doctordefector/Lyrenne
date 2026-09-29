@@ -66,7 +66,7 @@ data class AppPreferences(
     // Playback extras
     val playbackSpeed: Float = 1.0f,           // 0.25x - 3.0x
     val crossfadeSec: Int = 0,                 // 0 = off, 1-12 seconds
-    val autoLoadRadio: Boolean = false,        // auto-queue related tracks near queue end
+    val autoplay: Boolean = true,              // queue similar songs when the queue runs out
     // Privacy
     val pauseListenHistory: Boolean = false,
     val pauseSearchHistory: Boolean = false,
@@ -108,6 +108,9 @@ object PreferencesManager {
 
     /** See the read in [loadPreferences] for why this is not "windowsMediaAppName". */
     private const val WINDOWS_MEDIA_NAME_KEY = "windowsMediaShortcut"
+
+    /** See the read in [loadPreferences] for why this is not "autoLoadRadio". */
+    private const val AUTOPLAY_KEY = "autoplay"
 
     fun initialize() {
         loadPreferences()
@@ -161,7 +164,11 @@ object PreferencesManager {
                         ?.takeIf { it.size == 10 } ?: List(10) { 0f },
                     playbackSpeed = props.getProperty("playbackSpeed")?.toFloatOrNull()?.coerceIn(0.25f, 3f) ?: 1f,
                     crossfadeSec = props.getProperty("crossfadeSec")?.toIntOrNull()?.coerceIn(0, 12) ?: 0,
-                    autoLoadRadio = props.getProperty("autoLoadRadio")?.toBoolean() ?: false,
+                    // A new key for the same reason as windowsMediaShortcut. Up to 2.13.0 this was
+                    // "autoLoadRadio", off by default and written on every save, so that key holds
+                    // the old default rather than anyone's choice. The setting also never worked
+                    // for a song played on its own, which is most plays (issue #12).
+                    autoplay = props.getProperty(AUTOPLAY_KEY)?.toBoolean() ?: true,
                     pauseListenHistory = props.getProperty("pauseListenHistory")?.toBoolean() ?: false,
                     pauseSearchHistory = props.getProperty("pauseSearchHistory")?.toBoolean() ?: false,
                     contentCountry = props.getProperty("contentCountry") ?: "system",
@@ -238,7 +245,7 @@ object PreferencesManager {
             props.setProperty("eqBands", prefs.eqBands.joinToString(","))
             props.setProperty("playbackSpeed", prefs.playbackSpeed.toString())
             props.setProperty("crossfadeSec", prefs.crossfadeSec.toString())
-            props.setProperty("autoLoadRadio", prefs.autoLoadRadio.toString())
+            props.setProperty(AUTOPLAY_KEY, prefs.autoplay.toString())
             props.setProperty("pauseListenHistory", prefs.pauseListenHistory.toString())
             props.setProperty("pauseSearchHistory", prefs.pauseSearchHistory.toString())
             props.setProperty("contentCountry", prefs.contentCountry)
@@ -437,8 +444,8 @@ object PreferencesManager {
         savePreferences()
     }
 
-    fun setAutoLoadRadio(enabled: Boolean) {
-        _preferences.value = _preferences.value.copy(autoLoadRadio = enabled)
+    fun setAutoplay(enabled: Boolean) {
+        _preferences.value = _preferences.value.copy(autoplay = enabled)
         savePreferences()
     }
 

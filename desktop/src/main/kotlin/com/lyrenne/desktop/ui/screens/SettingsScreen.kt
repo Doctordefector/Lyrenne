@@ -437,12 +437,12 @@ fun SettingsScreen(
         item {
             SettingsItem(
                 icon = Icons.Default.Radio,
-                title = "Auto-Queue Related Songs",
-                subtitle = "Keep the music going when your queue runs out",
+                title = "Autoplay",
+                subtitle = "Keep playing similar songs when your queue runs out",
                 trailing = {
                     Switch(
-                        checked = preferences.autoLoadRadio,
-                        onCheckedChange = { PreferencesManager.setAutoLoadRadio(it) }
+                        checked = preferences.autoplay,
+                        onCheckedChange = { PreferencesManager.setAutoplay(it) }
                     )
                 }
             )

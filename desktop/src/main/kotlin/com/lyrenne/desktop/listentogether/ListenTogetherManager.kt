@@ -106,6 +106,9 @@ object ListenTogetherManager {
     fun initialize(desktopPlayer: DesktopPlayer) {
         Timber.tag(TAG).d("Initializing ListenTogetherManager")
         player = desktopPlayer
+        // Only the host may autoplay. A guest sends track changes too, so a guest that ran out of
+        // queue and autoplayed would move the whole room onto its own pick.
+        desktopPlayer.autoplayAllowed = { !isInRoom || isHost }
 
         // Start collecting events from the client
         eventCollectorJob?.cancel()

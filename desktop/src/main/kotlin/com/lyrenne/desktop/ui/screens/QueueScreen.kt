@@ -49,6 +49,11 @@ fun QueueScreen(
         }
     }
 
+    // Where autoplay's songs start. Songs the user adds go in above them, so the header says so.
+    val firstAutoplayIndex = remember(state.queue, state.currentIndex) {
+        (state.currentIndex + 1 until state.queue.size).firstOrNull { state.queue[it].fromAutoplay }
+    }
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
@@ -211,45 +216,50 @@ fun QueueScreen(
                     val isDragged = draggedIndex == displayIndex
                     val isTarget = targetIndex == displayIndex
 
-                    QueueItem(
-                        song = song,
-                        index = queueIndex,
-                        isDragged = isDragged,
-                        isDropTarget = isTarget,
-                        dragOffsetY = if (isDragged) dragOffsetY else 0f,
-                        onPlay = {
-                            scope.launch {
-                                player.playAtIndex(queueIndex)
-                            }
-                        },
-                        onRemove = {
-                            player.removeFromQueue(queueIndex)
-                        },
-                        onDragStart = {
-                            draggedIndex = displayIndex
-                            dragOffsetY = 0f
-                        },
-                        onDrag = { deltaY ->
-                            dragOffsetY += deltaY
-                            // Calculate target position based on drag offset
-                            val itemHeight = 72 // approximate item height in dp
-                            val draggedItems = (dragOffsetY / itemHeight).toInt()
-                            val newTarget = (displayIndex + draggedItems).coerceIn(0, upNextItems.size - 1)
-                            targetIndex = if (newTarget != displayIndex) newTarget else null
-                        },
-                        onDragEnd = {
-                            val from = draggedIndex
-                            val to = targetIndex
-                            if (from != null && to != null && from != to) {
-                                val fromQueueIndex = upNextItems[from].first
-                                val toQueueIndex = upNextItems[to].first
-                                player.moveInQueue(fromQueueIndex, toQueueIndex)
-                            }
-                            draggedIndex = null
-                            dragOffsetY = 0f
-                            targetIndex = null
+                    Column {
+                        if (queueIndex == firstAutoplayIndex) {
+                            AutoplayHeader()
                         }
-                    )
+                        QueueItem(
+                            song = song,
+                            index = queueIndex,
+                            isDragged = isDragged,
+                            isDropTarget = isTarget,
+                            dragOffsetY = if (isDragged) dragOffsetY else 0f,
+                            onPlay = {
+                                scope.launch {
+                                    player.playAtIndex(queueIndex)
+                                }
+                            },
+                            onRemove = {
+                                player.removeFromQueue(queueIndex)
+                            },
+                            onDragStart = {
+                                draggedIndex = displayIndex
+                                dragOffsetY = 0f
+                            },
+                            onDrag = { deltaY ->
+                                dragOffsetY += deltaY
+                                // Calculate target position based on drag offset
+                                val itemHeight = 72 // approximate item height in dp
+                                val draggedItems = (dragOffsetY / itemHeight).toInt()
+                                val newTarget = (displayIndex + draggedItems).coerceIn(0, upNextItems.size - 1)
+                                targetIndex = if (newTarget != displayIndex) newTarget else null
+                            },
+                            onDragEnd = {
+                                val from = draggedIndex
+                                val to = targetIndex
+                                if (from != null && to != null && from != to) {
+                                    val fromQueueIndex = upNextItems[from].first
+                                    val toQueueIndex = upNextItems[to].first
+                                    player.moveInQueue(fromQueueIndex, toQueueIndex)
+                                }
+                                draggedIndex = null
+                                dragOffsetY = 0f
+                                targetIndex = null
+                            }
+                        )
+                    }
                 }
 
                 if (upNextItems.isEmpty() && state.queue.size <= 1) {
@@ -284,6 +294,30 @@ fun QueueScreen(
                 }
             }
         }
+    }
+}
+
+/** Marks where autoplay's songs start in the queue. */
+@Composable
+private fun AutoplayHeader() {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            Icons.Default.Radio,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.width(8.dp))
+        Text("Autoplay", style = MaterialTheme.typography.titleSmall)
+        Spacer(Modifier.width(8.dp))
+        Text(
+            "Similar songs, after anything you add",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

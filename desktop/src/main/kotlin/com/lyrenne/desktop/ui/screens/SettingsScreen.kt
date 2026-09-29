@@ -27,6 +27,7 @@ import com.lyrenne.desktop.settings.PreferencesManager
 import com.lyrenne.desktop.settings.ThemeMode
 import com.lyrenne.desktop.integration.LastFmManager
 import com.lyrenne.desktop.media.suppressMediaKeys
+import com.lyrenne.desktop.ui.components.AccountSwitcher
 import com.lyrenne.desktop.ui.components.NativeFileDialog
 import com.lyrenne.desktop.update.AutoUpdater
 import kotlinx.coroutines.launch
@@ -62,7 +63,12 @@ fun SettingsScreen(
             onDismissRequest = { showLogoutDialog = false },
             icon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null) },
             title = { Text("Sign Out") },
-            text = { Text("Are you sure you want to sign out? You'll need to sign in again to access your library and playlists.") },
+            text = {
+                Text(
+                    "Are you sure you want to sign out? You'll need to sign in again to access your " +
+                        "library and playlists. Any other accounts you added stay available to switch to."
+                )
+            },
             confirmButton = {
                 Button(
                     onClick = {
@@ -275,6 +281,10 @@ fun SettingsScreen(
                     }
                 }
             }
+        }
+
+        item {
+            AccountSwitcher(onAddAccount = onLoginClick)
         }
 
         // Appearance section

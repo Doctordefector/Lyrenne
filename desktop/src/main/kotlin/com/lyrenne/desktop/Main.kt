@@ -319,14 +319,16 @@ private fun runApp() {
              * their library to appear. `syncLibrary()` already no-ops if one is in flight.
              */
             launch {
+                // Keyed on the account, not just on being signed in, so switching accounts
+                // resyncs too: that changes who is signed in without isLoggedIn ever changing.
                 AuthManager.authState
-                    .map { it.isLoggedIn }
+                    .map { if (it.isLoggedIn) it.accountId else null }
                     .distinctUntilChanged()
                     .drop(1)
-                    .collect { loggedIn ->
-                        if (loggedIn) {
-                            Timber.i("Signed in — syncing library")
-                            LibrarySync.syncLibrary()
+                    .collect { accountId ->
+                        if (accountId != null) {
+                            Timber.i("Signed in, syncing library")
+                            LibrarySync.resync()
                         }
                     }
             }

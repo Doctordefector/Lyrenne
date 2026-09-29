@@ -14,6 +14,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -34,7 +36,22 @@ data class AuthCredentials(
     val visitorData: String,
     val dataSyncId: String,
     val accountIndex: Int = 0,
-    val accountInfo: AccountInfo? = null
+    val accountInfo: AccountInfo? = null,
+    /**
+     * Stable identity for this account, used to tell saved accounts apart. Assigned once at
+     * sign-in and carried through every refresh, because the values it is derived from can
+     * change or arrive late, and a moving id would make one account look like two.
+     */
+    val accountId: String? = null,
+    /** Set when YouTube said this saved account is signed out. Only ever true on a saved one. */
+    val sessionExpired: Boolean = false,
+)
+
+/** An account signed in once and kept for switching back to with one click. */
+data class SavedAccount(
+    val id: String,
+    val accountInfo: AccountInfo?,
+    val sessionExpired: Boolean,
 )
 
 /** Everything one fetch of the YouTube Music page tells us about the session. */
@@ -49,7 +66,9 @@ data class AuthState(
     val isLoggedIn: Boolean = false,
     val isLoading: Boolean = false,
     val accountInfo: AccountInfo? = null,
-    val error: String? = null
+    val error: String? = null,
+    /** Which account is signed in. Changes on a switch even though isLoggedIn does not. */
+    val accountId: String? = null,
 )
 
 object AuthManager {
@@ -62,19 +81,42 @@ object AuthManager {
     private val _authState = MutableStateFlow(AuthState())
     val authState: StateFlow<AuthState> = _authState.asStateFlow()
 
-    private val credentialsFile: File get() = com.lyrenne.desktop.AppPaths.credentialsFile
+    /** Tests point this at a temporary folder; the app always uses data/. */
+    internal var storageDirOverride: File? = null
+
+    private val credentialsFile: File
+        get() = storageDirOverride?.let { File(it, "credentials.json") } ?: com.lyrenne.desktop.AppPaths.credentialsFile
+
+    /**
+     * Accounts that are signed in but not active, one `<accountId>.json` each, in exactly the
+     * format of credentials.json and just as plaintext. credentials.json stays the active account,
+     * so nothing that reads it needed to change.
+     */
+    private val accountsDir: File
+        get() = File(storageDirOverride ?: com.lyrenne.desktop.AppPaths.dataDir, "accounts")
+
+    private val _savedAccounts = MutableStateFlow<List<SavedAccount>>(emptyList())
+    val savedAccounts: StateFlow<List<SavedAccount>> = _savedAccounts.asStateFlow()
+
+    /**
+     * Serialises every read-modify-write of the credential files. A switch moves credentials.json
+     * aside while a refresh may be about to write it; without this, a refresh that started for
+     * the old account landed its cookies on top of the new one.
+     */
+    private val filesLock = Mutex()
 
     /** Google rotates the session cookies faster than this; the point is only not to drift. */
     private const val REFRESH_INTERVAL_MS = 6L * 60 * 60 * 1000
 
     fun initialize() {
-        loadCredentials()
-        if (!_authState.value.isLoggedIn) return
+        loadFromDisk()
         scope.launch {
-            refreshSession()
+            // Saved accounts need their cookies rotated too, or switching to one after a few
+            // weeks lands on a session Google has stopped honouring.
             while (true) {
-                delay(REFRESH_INTERVAL_MS)
                 if (_authState.value.isLoggedIn) refreshSession()
+                refreshSavedAccounts()
+                delay(REFRESH_INTERVAL_MS)
             }
         }
     }
@@ -115,11 +157,15 @@ object AuthManager {
             return
         }
         if (answer.loggedIn == false) {
-            Timber.w("Stored YouTube session is no longer valid, marking signed out")
-            _authState.value = AuthState(
-                isLoggedIn = false,
-                error = "Your YouTube session expired. Sign in again to sync your library."
-            )
+            filesLock.withLock {
+                // A switch may have happened while the page was loading.
+                if (readCredentials()?.accountId != credentials.accountId) return
+                Timber.w("Stored YouTube session is no longer valid, marking signed out")
+                _authState.value = AuthState(
+                    isLoggedIn = false,
+                    error = "Your YouTube session expired. Sign in again to sync your library."
+                )
+            }
             return
         }
 
@@ -130,11 +176,47 @@ object AuthManager {
             accountIndex = answer.values["SESSION_INDEX"]?.toIntOrNull() ?: credentials.accountIndex
         )
         if (refreshed == credentials) return
-        runCatching {
-            credentialsFile.writeText(json.encodeToString(refreshed))
-            applyCredentials(refreshed)
-            Timber.i("Refreshed the stored YouTube session")
-        }.onFailure { Timber.e("Could not save the refreshed session: ${it.message}") }
+        filesLock.withLock {
+            if (readCredentials() != credentials) {
+                Timber.i("Credentials changed while refreshing, dropping the stale refresh")
+                return
+            }
+            runCatching {
+                credentialsFile.writeText(json.encodeToString(refreshed))
+                applyCredentials(refreshed)
+                Timber.i("Refreshed the stored YouTube session")
+            }.onFailure { Timber.e("Could not save the refreshed session: ${it.message}") }
+        }
+    }
+
+    /**
+     * Same job as [refreshSession] for the accounts not in use: fold rotated cookies back in, and
+     * mark any that YouTube reports signed out so the switcher can say so instead of switching
+     * into an anonymous session. An unreachable page leaves the file alone, as it does for the
+     * active account.
+     */
+    private suspend fun refreshSavedAccounts() {
+        for (file in savedAccountFiles()) {
+            val saved = readAccountFile(file) ?: continue
+            val cfg = fetchYtCfg(saved.cookie).takeIf { it.loggedIn != null } ?: continue
+            val updated = if (cfg.loggedIn == false) {
+                saved.copy(sessionExpired = true)
+            } else {
+                saved.copy(
+                    cookie = mergeCookies(saved.cookie, cfg.setCookies),
+                    visitorData = cfg.values["VISITOR_DATA"] ?: saved.visitorData,
+                    sessionExpired = false,
+                )
+            }
+            if (updated == saved) continue
+            filesLock.withLock {
+                // Switched to, or removed, while the page was loading.
+                if (!file.isFile || readAccountFile(file) != saved) return@withLock
+                runCatching { file.writeText(json.encodeToString(updated)) }
+                    .onFailure { Timber.w("Could not save a refreshed saved account: ${it.message}") }
+            }
+        }
+        loadSavedAccounts()
     }
 
     /**
@@ -167,14 +249,60 @@ object AuthManager {
         json.decodeFromString<AuthCredentials>(credentialsFile.readText())
     }.getOrNull()
 
+    private fun readAccountFile(file: File): AuthCredentials? = runCatching {
+        json.decodeFromString<AuthCredentials>(file.readText())
+    }.getOrNull()
+
+    private fun savedAccountFiles(): List<File> =
+        accountsDir.listFiles { f -> f.isFile && f.name.endsWith(".json") }?.sortedBy { it.name }.orEmpty()
+
+    /** Reads the active and saved accounts. Separate from [initialize] so tests skip the network. */
+    internal fun loadFromDisk() {
+        loadCredentials()
+        loadSavedAccounts()
+    }
+
+    private fun loadSavedAccounts() {
+        _savedAccounts.value = savedAccountFiles().mapNotNull { file ->
+            val creds = readAccountFile(file) ?: return@mapNotNull null
+            SavedAccount(
+                id = file.nameWithoutExtension,
+                accountInfo = creds.accountInfo,
+                sessionExpired = creds.sessionExpired,
+            )
+        }.sortedBy { it.accountInfo?.name?.lowercase() ?: "" }
+    }
+
+    /**
+     * Derives an account id from what identifies the account to YouTube. The DATASYNC_ID is the
+     * account's own id and is preferred; the SAPISID cookie is per sign-in and stands in when the
+     * page did not return one. Hashed, so the id is a safe file name and says nothing on its own.
+     */
+    internal fun deriveAccountId(dataSyncId: String, cookie: String): String {
+        val basis = dataSyncId.substringBefore("||").takeIf { it.isNotBlank() }
+            ?: parseCookieString(cookie)["SAPISID"]
+            ?: cookie
+        return sha1(basis).take(16)
+    }
+
+    private fun AuthCredentials.withId(): AuthCredentials =
+        if (accountId != null) this else copy(accountId = deriveAccountId(dataSyncId, cookie))
+
     private fun loadCredentials() {
         try {
             if (credentialsFile.exists()) {
-                val credentials = json.decodeFromString<AuthCredentials>(credentialsFile.readText())
+                val stored = json.decodeFromString<AuthCredentials>(credentialsFile.readText())
+                // Credentials from before account switching have no id yet. Give them one and
+                // keep it, so it never changes under a refresh.
+                val credentials = stored.withId()
+                if (credentials != stored) {
+                    runCatching { credentialsFile.writeText(json.encodeToString(credentials)) }
+                }
                 applyCredentials(credentials)
                 _authState.value = AuthState(
                     isLoggedIn = true,
-                    accountInfo = credentials.accountInfo
+                    accountInfo = credentials.accountInfo,
+                    accountId = credentials.accountId,
                 )
             }
         } catch (e: Exception) {
@@ -253,14 +381,24 @@ object AuthManager {
                 visitorData = actualVisitorData ?: "",
                 dataSyncId = actualDataSyncId,
                 accountIndex = sessionIndex,
-                accountInfo = accountInfo
+                accountInfo = accountInfo,
+                accountId = deriveAccountId(actualDataSyncId, cookie),
             )
 
-            credentialsFile.writeText(json.encodeToString(credentials))
+            filesLock.withLock {
+                // Signing in while already signed in is how an account gets added: the one that
+                // was active is kept, not overwritten. Signing the same account in again just
+                // replaces it, and drops any saved copy of it.
+                stashActive(exceptId = credentials.accountId)
+                File(accountsDir, "${credentials.accountId}.json").delete()
+                credentialsFile.writeText(json.encodeToString(credentials))
+            }
+            loadSavedAccounts()
 
             _authState.value = AuthState(
                 isLoggedIn = true,
-                accountInfo = accountInfo
+                accountInfo = accountInfo,
+                accountId = credentials.accountId,
             )
 
             Result.success(accountInfo)
@@ -273,6 +411,61 @@ object AuthManager {
         }
     }
 
+    /**
+     * Moves the active account into the saved set, unless it is [exceptId]. Caller holds
+     * [filesLock].
+     */
+    private fun stashActive(exceptId: String?) {
+        val active = readCredentials()?.withId() ?: return
+        if (active.accountId == exceptId) return
+        accountsDir.mkdirs()
+        File(accountsDir, "${active.accountId}.json")
+            // An active account YouTube already signed out is kept, but marked, so it is not offered
+            // as a one-click switch into an anonymous session.
+            .writeText(json.encodeToString(active.copy(sessionExpired = !_authState.value.isLoggedIn)))
+        Timber.i("Kept ${active.accountInfo?.name ?: "the previous account"} for switching back")
+    }
+
+    /**
+     * Makes a saved account the active one, keeping the current one saved in its place.
+     *
+     * No network is involved in the switch itself, so it is instant. The session is checked
+     * straight afterwards by the same refresh that runs at startup, which also marks the account
+     * signed out if YouTube no longer honours it.
+     */
+    suspend fun switchTo(accountId: String): Result<Unit> = runCatching {
+        val switched = filesLock.withLock {
+            val file = File(accountsDir, "$accountId.json")
+            val target = readAccountFile(file)?.withId() ?: error("That account is no longer saved")
+            if (target.sessionExpired) {
+                error("This account's session expired. Sign in to it again to use it.")
+            }
+            stashActive(exceptId = target.accountId)
+            credentialsFile.writeText(json.encodeToString(target))
+            file.delete()
+            target
+        }
+        applyCredentials(switched)
+        _authState.value = AuthState(
+            isLoggedIn = true,
+            accountInfo = switched.accountInfo,
+            accountId = switched.accountId,
+        )
+        loadSavedAccounts()
+        Timber.i("Switched to ${switched.accountInfo?.name ?: "another account"}")
+        scope.launch { refreshSession() }
+    }
+
+    /** Forgets a saved account. Its cookies are deleted from disk. */
+    suspend fun removeSaved(accountId: String) {
+        filesLock.withLock { File(accountsDir, "$accountId.json").delete() }
+        loadSavedAccounts()
+    }
+
+    /**
+     * Signs the active account out. Saved accounts are kept, so the others stay one click away;
+     * removing those is its own action.
+     */
     fun logout() {
         try {
             if (credentialsFile.exists()) {

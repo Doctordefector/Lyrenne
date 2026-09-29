@@ -41,7 +41,8 @@ import timber.log.Timber
 /** Simple in-memory cache for the home feed to avoid re-fetching on every navigation */
 private object HomeFeedCache {
     var cachedPage: HomePage? = null
-    var cachedForLogin: Boolean? = null
+    /** The account the cache was built for, or "" when signed out. Null means nothing cached. */
+    var cachedForAccount: String? = null
     var quickPicks: List<SongItem>? = null
 }
 
@@ -86,9 +87,12 @@ fun HomeScreen(
     }
 
     // Re-fetch when auth state changes (e.g. after login) or if no cache
-    LaunchedEffect(authState.isLoggedIn) {
-        // Use cache if available and login state hasn't changed
-        if (HomeFeedCache.cachedPage != null && HomeFeedCache.cachedForLogin == authState.isLoggedIn) {
+    // Keyed on the account rather than on being signed in: switching accounts must not keep
+    // showing the previous account's recommendations.
+    val homeAccount = if (authState.isLoggedIn) authState.accountId.orEmpty() else ""
+    LaunchedEffect(homeAccount) {
+        // Use cache if available and the account hasn't changed
+        if (HomeFeedCache.cachedPage != null && HomeFeedCache.cachedForAccount == homeAccount) {
             homePage = HomeFeedCache.cachedPage
             isLoading = false
             return@LaunchedEffect
@@ -105,7 +109,7 @@ fun HomeScreen(
                 homePage = current
                 isLoading = false
                 HomeFeedCache.cachedPage = current
-                HomeFeedCache.cachedForLogin = authState.isLoggedIn
+                HomeFeedCache.cachedForAccount = homeAccount
 
                 // Load continuation pages in background for more sections
                 var continuation = current.continuation

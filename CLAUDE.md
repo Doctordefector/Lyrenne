@@ -66,7 +66,9 @@ Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop 
 - Playback speed control (0.25x–3x via VLC setRate, persisted, MiniPlayer menu)
 - Sleep timer (5-60 min or end-of-track, MiniPlayer menu)
 - Crossfade (early-transition + fade-in approach — VLC single decoder can't overlap; setting 0-12s)
-- Start Radio (RDAMVM radio queue from any song) + Auto-Queue Related Songs setting (appends near queue end)
+- Start Radio (plays the song at once, then fills the queue with its RDAMVM radio) + Autoplay (on by default: similar songs queued when the queue runs out). See Autoplay
+- Library song lists play on from the clicked song, like albums and playlists; Recently Played is what actually played this session
+- Downloaded songs play from disk wherever they are queued, not only from the Downloads tab, which also plays its list on from the clicked song now. See Downloads play from disk
 - Explore screen (new releases, moods & genres via innertube, Charts via generic BrowseScreen FEmusic_charts)
 - Generic BrowseScreen for any browseId (moods, charts drill-down)
 - Local playlists (create/rename/delete, add/remove songs, move up/down reorder, LocalPlaylistScreen)
@@ -382,7 +384,7 @@ and explore fill only the second. **Reading either field directly is a bug**; us
 `SongInfo.knownDurationMs()`, and prefer the live `PlaybackState.duration` whenever it is non-zero,
 because that comes from VLC and is authoritative.
 
-`PlaybackState.duration` is assigned in exactly two places: `playUrl` seeds it from metadata, and
+`PlaybackState.duration` is assigned in exactly two places: `playMedia` seeds it from metadata, and
 VLC's async `lengthChanged` corrects it. Before 2.10.1 only the second existed, so every track
 began carrying **the previous track's duration** until VLC parsed the stream. That window is wider
 on long tracks, and three things read it and got it wrong: the progress bar was mis-scaled, Discord
@@ -930,8 +932,74 @@ Created in `Main.kt`, drawn by `ui/components/FloatingPlayer.kt`. Three things t
 To screenshot it, capture with `CAPTUREBLT`. A plain BitBlt (and `Graphics.CopyFromScreen`) skips
 layered windows, so the disc is invisible in the capture while being perfectly visible on screen.
 
+## Autoplay
+
+A song played on its own (search, home, recognition, stats, Recently Played) is a one-song queue.
+Through 2.13.0 that meant silence when it ended, with Next doing nothing: the auto-queue check lived
+inside `playNext()`, which a finished track only reached when there was a song after it, and the
+setting was off by default anyway. Issue #12. The Library song list did the same thing, playing
+one song where the list should carry on, which is the follow-up report on #11.
+
+- **When**: `prefetchSimilarSongs()` runs on every track start and fetches only when the current
+  song is the last in the queue. A fetch measured 0.6 to 3.8 s, too long a silence to leave until
+  the song ends. `onTrackFinished` and `playNext` fall back to `awaitSimilarSongs()`, which joins
+  the fetch in flight or starts one.
+- **Seed**: a fresh `RDAMVM<id>` radio of the last song in the queue, every time. Paging one radio
+  through its continuations looks more coherent but measured 5 to 14 new songs per 49-song page,
+  because each page mostly repeats the last. Re-seeding from the tail brought 15 to 48.
+- **Order**: autoplay's songs carry `SongInfo.fromAutoplay`, and `addToQueue` inserts in front of
+  the first one after the current song. Without that, a song queued while a search result plays
+  would wait behind 49 suggestions. Moving one by hand clears its flag, since it is the user's pick
+  now. The queue panel draws an Autoplay header where they start. The flag is not persisted.
+- **Start Radio's songs are not flagged.** A radio the user asked for is the queue itself, like an
+  album. `radioStarted` keeps it topping up even with autoplay off, as it always did.
+- **Switching autoplay off** removes its flagged songs still to come. Played ones stay as history.
+- **Listen Together guests never autoplay** (`DesktopPlayer.autoplayAllowed`, set by
+  `ListenTogetherManager`). Host and guests both send track changes, so a guest that autoplayed
+  would move the whole room onto its own pick. The host autoplays and the room follows.
+- **A replaced queue drops fetches in flight**: `queueGeneration` bumps on every replacement and
+  the append checks it, so a slow fetch cannot land in the queue the user has since started.
+- **Hide explicit content** applies to everything autoplay and Start Radio queue.
+- **Shuffle**: appended songs go into `originalQueue` too, even while shuffled, and so do songs the
+  user adds (Add to queue in front of autoplay's picks there as well, Play next straight after the
+  playing song). Left out, turning shuffle off dropped them, and with them the song playing if it
+  was one of them: the current index fell back to 0 while it played on. Except when `originalQueue`
+  is empty, which a restart with shuffle on or clearing the queue while shuffled leaves behind.
+  Turning shuffle off keeps the queue as it is then, and adding to the empty order would make it
+  just the songs added since. `hasOrderToRestore()` is that check.
+- **The setting lives under a new key, `autoplay`, on by default.** The old `autoLoadRadio` was off
+  by default and written on every save, the same trap as `windowsMediaShortcut`: it records the
+  old default rather than a choice. Do not read the old key back.
+
+`AutoplayTest` pins the queue rules offline with a stubbed radio (`DesktopPlayer.radioFor`).
+`AutoplaySmokeTest` runs the real player against YouTube without VLC, which it tolerates.
+
+## Downloads play from disk
+
+Through 2.13.0 every path that starts a song resolved a YouTube stream, downloaded or not: the
+queue paths (`playQueue`, `playNext`, `playPrevious`, `playAtIndex`, the repeat-all loop in
+`onTrackFinished`, the restored-queue branch of `togglePlayPause`) and `playSong` alike. Only a
+click in the Downloads tab played the file, through a `playLocalFile` of its own. A downloaded song
+reached any other way, the Downloaded auto playlist included, was streamed, which fails offline.
+
+- **One chooser.** `mediaFor(song)` returns the download's path when
+  `DownloadManager.getDownloadPathById` finds one (the database `localPath` if that file still
+  exists, else the legacy `<id>.m4a`), and a stream otherwise. Every path that starts a song goes
+  through it. A file deleted behind the app's back just streams.
+- **One starter.** `playMedia` (formerly `playUrl`) takes either; VLC opens a path and a URL through
+  the same call. So the play event, the crossfade fade-in, EQ, speed, the audio filters, the
+  duration seed, `recentlyPlayed` and the autoplay prefetch all apply to files. `playLocalFile` had
+  only the last three, and credited the previous song's listening time to the file's song.
+- **A failed lookup streams.** The lookup catches its own failure and returns null, so a database
+  problem costs the song its offline copy, not its playback. It is also what lets the tests play at
+  all, since none of them opens the database.
+- **The Downloads tab plays the list on** from the clicked song, like the Songs tab.
+
+`DownloadedPlaybackTest` pins it offline, with the lookup (`DesktopPlayer.downloadedFileFor`) and
+the stream (`DesktopPlayer.streamFor`) both stubbed.
+
 ## Version Management
-- **Current version**: v2.13.0
+- **Current version**: v2.14.0
 - **Version must be updated in TWO places** when releasing:
   1. `desktop/build.gradle.kts` → `lyrenneVersion = "X.Y.Z"`
   2. `desktop/.../update/AutoUpdater.kt` → `CURRENT_VERSION = "X.Y.Z"`

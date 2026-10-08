@@ -2,7 +2,7 @@ name: linux
 
 on:
   push:
-    branches: [main, linux-port, linux-e2e]
+    branches: [main, linux-port, linux-e2e, linux-signin-e2e]
   pull_request:
   workflow_dispatch:
 
@@ -107,11 +107,13 @@ jobs:
                    audio_filter/libequalizer_plugin.so; do
             test -f "$P/$m" && echo "ok $m" || { echo "MISSING $m"; exit 1; }
           done
-      - name: Playback and MPRIS end to end
+      - name: Playback, MPRIS and browser sign-in plumbing end to end
         run: |
           dbus-run-session -- bash -c '
             pulseaudio -D --exit-idle-time=-1 --system=false
-            LYRENNE_LINUX_E2E=1 ./gradlew -Pci :desktop:test --tests "*LinuxPlaybackE2ETest" -i | grep -E "LinuxPlaybackE2ETest|PASSED|FAILED|SKIPPED|initialized|timed out" '
+            LYRENNE_LINUX_E2E=1 ./gradlew -Pci :desktop:test --tests "*LinuxPlaybackE2ETest" --tests "*LinuxBrowserE2ETest" -i | grep -E "E2ETest|PASSED|FAILED|SKIPPED|initialized|timed out|cookies read|AssertionError" '
           test -f desktop/build/test-results/test/TEST-com.lyrenne.desktop.playback.LinuxPlaybackE2ETest.xml
           grep -q 'skipped="0"' desktop/build/test-results/test/TEST-com.lyrenne.desktop.playback.LinuxPlaybackE2ETest.xml
           grep -q 'failures="0" errors="0"' desktop/build/test-results/test/TEST-com.lyrenne.desktop.playback.LinuxPlaybackE2ETest.xml
+          R=desktop/build/test-results/test/TEST-com.lyrenne.desktop.auth.LinuxBrowserE2ETest.xml
+          test -f $R && grep -q 'tests="2" skipped="0" failures="0" errors="0"' $R

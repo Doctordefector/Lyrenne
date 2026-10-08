@@ -239,7 +239,7 @@ object BrowserLoginHelper {
         readCookiesFromProfile(browser)
     }
 
-    private fun launchArgs(browser: LoginBrowser): List<String> = when (browser.kind) {
+    internal fun launchArgs(browser: LoginBrowser): List<String> = when (browser.kind) {
         BrowserKind.FIREFOX -> listOfNotNull(
             browser.exe.absolutePath,
             "-profile", browser.profileDir.absolutePath,
@@ -296,7 +296,7 @@ object BrowserLoginHelper {
      */
     internal fun isProfileInUse(browser: LoginBrowser): Boolean {
         val dir = browser.profileDir
-        fun linkExists(name: String) = Files.exists(dir.toPath().resolve(name), LinkOption.NOFOLLOW_LINKS)
+        fun linkExists(name: String) = liveLock(dir.toPath().resolve(name))
         return when (browser.kind) {
             BrowserKind.CHROMIUM -> linkExists("SingletonLock") || File(dir, "lockfile").exists()
             BrowserKind.FIREFOX -> {
@@ -307,6 +307,20 @@ object BrowserLoginHelper {
                     runCatching { RandomAccessFile(parentLock, "rw").close() }.isFailure
             }
         }
+    }
+
+    /**
+     * A lock symlink whose owner is still running. The link outlives a browser that crashed or was
+     * killed, so its existence alone would leave the handoff poll waiting forever. Its target names
+     * the owner, `host-<pid>` (Chromium) or `<ip>:+<pid>` (Firefox), which is exactly how the
+     * browsers themselves tell a stale lock from a live one. Same-host only, which a login profile is.
+     */
+    private fun liveLock(link: java.nio.file.Path): Boolean {
+        if (!Files.exists(link, LinkOption.NOFOLLOW_LINKS)) return false
+        if (!Files.isSymbolicLink(link)) return true
+        val target = runCatching { Files.readSymbolicLink(link).toString() }.getOrNull() ?: return true
+        val pid = Regex("""(\d+)$""").find(target)?.groupValues?.get(1)?.toLongOrNull() ?: return true
+        return ProcessHandle.of(pid).map { it.isAlive }.orElse(false)
     }
 
     private fun readCookiesFromProfile(browser: LoginBrowser): CookieExtractResult {

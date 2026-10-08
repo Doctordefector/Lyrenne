@@ -65,16 +65,23 @@ class LinuxLoginTest {
     }
 
     @Test
-    fun `a dangling SingletonLock symlink counts as in use`() {
+    fun `a SingletonLock symlink is in use only while its pid lives`() {
         val dir = Files.createTempDirectory("lock").toFile()
         try {
             val browser = LoginBrowser(BrowserKind.CHROMIUM, File("x"), "Chromium", dir)
             assertFalse(BrowserLoginHelper.isProfileInUse(browser))
+            val lock = dir.toPath().resolve("SingletonLock")
+            // Dangling target, like the real one; this process's pid stands in for a live browser.
             val linked = runCatching {
-                Files.createSymbolicLink(dir.toPath().resolve("SingletonLock"), File("host-12345").toPath())
+                Files.createSymbolicLink(lock, File("host-${ProcessHandle.current().pid()}").toPath())
             }.isSuccess
             assumeTrue("symlinks not permitted here", linked)
             assertTrue(BrowserLoginHelper.isProfileInUse(browser))
+
+            // A browser that crashed leaves the link behind with a dead pid: not in use.
+            Files.delete(lock)
+            Files.createSymbolicLink(lock, File("host-999999999").toPath())
+            assertFalse(BrowserLoginHelper.isProfileInUse(browser))
         } finally {
             dir.deleteRecursively()
         }

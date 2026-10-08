@@ -55,3 +55,26 @@ jobs:
         with:
           name: lyrenne-linux
           path: dist/
+
+  # Same install-and-launch check on Fedora, from the .rpm built above. Fedora's own repos carry
+  # VLC, so the rpm's `vlc` dependency resolves without RPM Fusion.
+  fedora:
+    needs: build
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: lyrenne-linux
+          path: dist
+      - name: Install .rpm and smoke-run
+        run: |
+          dnf install -y ./dist/*.rpm xorg-x11-server-Xvfb xorg-x11-xauth which
+          mkdir -p ~/.local/share/lyrenne
+          echo "onboardingCompleted=true" > ~/.local/share/lyrenne/preferences.properties
+          timeout 60 xvfb-run -a lyrenne > stdout.log 2>&1 || true
+          cat stdout.log ~/.local/share/lyrenne/lyrenne.log > run.log
+          tail -80 run.log
+          grep -q "VLC initialized successfully" run.log
+          test -f ~/.local/share/lyrenne/lyrenne.db
+          ! grep -E "Exception in thread|Fatal|FATAL" run.log

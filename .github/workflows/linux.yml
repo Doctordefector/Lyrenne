@@ -2,7 +2,7 @@ name: linux
 
 on:
   push:
-    branches: [main, linux-port]
+    branches: [main, linux-port, linux-e2e]
   pull_request:
   workflow_dispatch:
 
@@ -80,3 +80,38 @@ jobs:
           grep -q "VLC initialized successfully" run.log
           test -f "$DATA/lyrenne.db"
           ! grep -E "Exception in thread|Fatal|FATAL" run.log
+
+  # Phase 1 playback criteria against Ubuntu's real VLC: a local file plays, EQ / speed /
+  # normalize / skip-silence apply, MPRIS is visible to and controllable from playerctl.
+  # Streaming itself needs a signed-in session, so instead this checks the distro VLC carries
+  # every plugin a YouTube stream goes through (HTTPS, adaptive streaming, Opus and AAC).
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install VLC, PulseAudio, playerctl
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y vlc pulseaudio playerctl dbus-x11
+      - name: VLC carries the streaming plugins
+        run: |
+          P=$(dirname "$(find /usr/lib -name libhttps_plugin.so | head -1)")/..
+          for m in access/libhttps_plugin.so demux/libadaptive_plugin.so demux/libmp4_plugin.so \
+                   demux/libmkv_plugin.so codec/libopus_plugin.so codec/libavcodec_plugin.so \
+                   audio_filter/libnormvol_plugin.so audio_filter/libcompressor_plugin.so \
+                   audio_filter/libequalizer_plugin.so; do
+            test -f "$P/$m" && echo "ok $m" || { echo "MISSING $m"; exit 1; }
+          done
+      - name: Playback and MPRIS end to end
+        run: |
+          dbus-run-session -- bash -c '
+            pulseaudio -D --exit-idle-time=-1 --system=false
+            LYRENNE_LINUX_E2E=1 ./gradlew -Pci :desktop:test --tests "*LinuxPlaybackE2ETest" -i | grep -E "LinuxPlaybackE2ETest|PASSED|FAILED|SKIPPED|initialized|timed out" '
+          test -f desktop/build/test-results/test/TEST-com.lyrenne.desktop.playback.LinuxPlaybackE2ETest.xml
+          grep -q 'skipped="0"' desktop/build/test-results/test/TEST-com.lyrenne.desktop.playback.LinuxPlaybackE2ETest.xml
+          grep -q 'failures="0" errors="0"' desktop/build/test-results/test/TEST-com.lyrenne.desktop.playback.LinuxPlaybackE2ETest.xml

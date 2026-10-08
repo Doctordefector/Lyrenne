@@ -33,11 +33,42 @@ sealed class CookieExtractResult {
  */
 object BrowserCookieExtractor {
 
+    /** What a Chromium cookie DB yielded, before deciding whether it is a usable sign-in. */
+    internal class ChromiumRead(
+        val cookies: Map<String, String>,
+        val appBoundBlocked: Boolean,
+        val keyringBlocked: Boolean
+    )
+
     fun extractChromiumCookies(
         cookieDbPath: File,
         localStatePath: File,
         browserName: String
     ): CookieExtractResult {
+        val read = when (val r = readChromiumCookies(cookieDbPath, localStatePath, browserName)) {
+            is ChromiumRead -> r
+            else -> return r as CookieExtractResult
+        }
+        val cookieMap = read.cookies
+        val hasAuth = cookieMap.containsKey("SAPISID") || cookieMap.containsKey("__Secure-3PAPISID")
+        if (!hasAuth && read.keyringBlocked) {
+            return CookieExtractResult.Error(
+                "$browserName saved its cookies in the desktop keyring (it ignored " +
+                    "--password-store=basic, often because a launcher script dropped the flag). " +
+                    "Sign in with Firefox instead, or paste your cookie under Advanced."
+            )
+        }
+        if (!hasAuth && read.appBoundBlocked) {
+            return CookieExtractResult.Error(
+                "$browserName wrote app-bound encrypted cookies (v20), which can't be read from " +
+                "user space. Try signing in with a different browser (Edge works)."
+            )
+        }
+        return buildCookieResult(cookieMap, browserName)
+    }
+
+    /** Decrypted YouTube/Google cookies, or a [CookieExtractResult.Error]. Split out for the e2e test. */
+    internal fun readChromiumCookies(cookieDbPath: File, localStatePath: File, browserName: String): Any {
         Timber.i("Extracting cookies from $browserName: db=$cookieDbPath")
         // Linux has no key in Local State: v10 values use the fixed basic-store key instead.
         val masterKey = if (Platform.isWindows) {
@@ -100,30 +131,21 @@ object BrowserCookieExtractor {
         }
 
         Timber.i("$browserName: found ${cookieMap.size} cookies (keys: ${cookieMap.keys.take(10)})")
-
-        val hasAuth = cookieMap.containsKey("SAPISID") || cookieMap.containsKey("__Secure-3PAPISID")
-        if (!hasAuth && keyringBlocked) {
-            return CookieExtractResult.Error(
-                "$browserName saved its cookies in the desktop keyring (it ignored " +
-                    "--password-store=basic, often because a launcher script dropped the flag). " +
-                    "Sign in with Firefox instead, or paste your cookie under Advanced."
-            )
-        }
-        if (!hasAuth && appBoundBlocked) {
-            return CookieExtractResult.Error(
-                "$browserName wrote app-bound encrypted cookies (v20), which can't be read from " +
-                "user space. Try signing in with a different browser (Edge works)."
-            )
-        }
-
-        return buildCookieResult(cookieMap, browserName)
+        return ChromiumRead(cookieMap, appBoundBlocked, keyringBlocked)
     }
 
     /**
      * Firefox keeps cookies unencrypted in `cookies.sqlite` on every OS: no key, no keyring, no
      * DPAPI, no app-bound encryption. That is why it is the first choice on Linux.
      */
-    fun extractFirefoxCookies(profileDir: File, browserName: String): CookieExtractResult {
+    fun extractFirefoxCookies(profileDir: File, browserName: String): CookieExtractResult =
+        when (val r = readFirefoxCookies(profileDir, browserName)) {
+            is CookieExtractResult -> r
+            else -> @Suppress("UNCHECKED_CAST") buildCookieResult(r as Map<String, String>, browserName)
+        }
+
+    /** The YouTube/Google cookies, or a [CookieExtractResult.Error]. Split out for the e2e test. */
+    internal fun readFirefoxCookies(profileDir: File, browserName: String): Any {
         val cookieDb = File(profileDir, "cookies.sqlite")
         if (!cookieDb.exists()) {
             return CookieExtractResult.Error(
@@ -155,7 +177,7 @@ object BrowserCookieExtractor {
             deleteCopy(tempDb)
         }
         Timber.i("$browserName: found ${cookieMap.size} cookies (keys: ${cookieMap.keys.take(10)})")
-        return buildCookieResult(cookieMap, browserName)
+        return cookieMap
     }
 
     /**

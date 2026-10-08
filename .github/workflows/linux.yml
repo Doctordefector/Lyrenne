@@ -70,11 +70,13 @@ jobs:
       - name: Install .rpm and smoke-run
         run: |
           dnf install -y ./dist/*.rpm xorg-x11-server-Xvfb xorg-x11-xauth which
-          mkdir -p ~/.local/share/lyrenne
-          echo "onboardingCompleted=true" > ~/.local/share/lyrenne/preferences.properties
+          # In a container $HOME is /github/home, but Java takes user.home from passwd (/root).
+          DATA="$(getent passwd "$(id -u)" | cut -d: -f6)/.local/share/lyrenne"
+          mkdir -p "$DATA"
+          echo "onboardingCompleted=true" > "$DATA/preferences.properties"
           timeout 60 xvfb-run -a lyrenne > stdout.log 2>&1 || true
-          cat stdout.log ~/.local/share/lyrenne/lyrenne.log > run.log
+          cat stdout.log "$DATA/lyrenne.log" > run.log || true
           tail -80 run.log
           grep -q "VLC initialized successfully" run.log
-          test -f ~/.local/share/lyrenne/lyrenne.db
+          test -f "$DATA/lyrenne.db"
           ! grep -E "Exception in thread|Fatal|FATAL" run.log

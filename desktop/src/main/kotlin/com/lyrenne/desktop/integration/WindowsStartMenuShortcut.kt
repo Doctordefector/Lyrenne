@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.integration
 
+import com.lyrenne.desktop.Platform
 import com.lyrenne.desktop.AppPaths
 import com.sun.jna.Function
 import com.sun.jna.Memory
@@ -91,7 +92,7 @@ internal object WindowsStartMenuShortcut {
      * nothing has changed.
      */
     fun apply(enabled: Boolean) {
-        if (!System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true)) return
+        if (!Platform.isWindows) return
         val target = shortcutFile
         try {
             val exe = File(AppPaths.appDir, "Lyrenne.exe")

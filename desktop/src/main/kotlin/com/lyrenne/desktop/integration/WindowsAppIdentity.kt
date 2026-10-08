@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.integration
 
+import com.lyrenne.desktop.Platform
 import com.sun.jna.Native
 import com.sun.jna.WString
 import com.sun.jna.win32.StdCallLibrary
@@ -44,7 +45,7 @@ internal object WindowsAppIdentity {
     }
 
     fun apply() {
-        if (!System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true)) return
+        if (!Platform.isWindows) return
         try {
             val shell32 = Native.load("shell32", Shell32::class.java)
             val result = shell32.SetCurrentProcessExplicitAppUserModelID(WString(APP_USER_MODEL_ID))

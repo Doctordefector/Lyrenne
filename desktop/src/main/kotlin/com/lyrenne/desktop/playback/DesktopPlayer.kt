@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.playback
 
+import com.lyrenne.desktop.Platform
 import com.metrolist.innertube.NewPipeUtils
 import com.metrolist.innertube.YouTube
 import com.metrolist.innertube.models.SongItem
@@ -112,7 +113,9 @@ data class SongInfo(
      * these, the way they would in front of Spotify's autoplay. Not persisted: a restored queue
      * treats every song as the user's.
      */
-    val fromAutoplay: Boolean = false
+    val fromAutoplay: Boolean = false,
+    /** Mixed into a playlist by Smart Shuffle: not in the playlist, picked to sound like it. */
+    val suggested: Boolean = false
 )
 
 /** How many songs [PlaybackState.recentlyPlayed] keeps. */
@@ -133,6 +136,26 @@ internal fun similarSongsToQueue(
         .filterNot { hideExplicit && it.explicit }
         .filter { seen.add(it.id) }
         .map { it.toPlayerSongInfo().copy(fromAutoplay = fromAutoplay) }
+}
+
+/** Smart Shuffle puts one suggestion after every this many playlist songs. */
+internal const val SMART_SHUFFLE_EVERY = 3
+
+/** How many of the playlist's songs Smart Shuffle seeds radios from, fetched in parallel. */
+private const val SMART_SHUFFLE_SEEDS = 3
+
+/**
+ * [songs] with one of [suggestions] after every [every] of them, in order. Suggestions left over
+ * once the songs run out are dropped, so the playlist stays the bulk of what plays.
+ */
+internal fun interleaveSuggestions(songs: List<SongInfo>, suggestions: List<SongInfo>, every: Int): List<SongInfo> {
+    val extra = suggestions.iterator()
+    return buildList {
+        songs.forEachIndexed { i, song ->
+            add(song)
+            if ((i + 1) % every == 0 && extra.hasNext()) add(extra.next())
+        }
+    }
 }
 
 /**
@@ -292,26 +315,19 @@ class DesktopPlayer {
 
     private fun initializeVlc() {
         try {
-            // Try bundled VLC first, then fall back to system VLC
+            // Windows: try the VLC bundled in the app folder first. Linux: never bundled, the
+            // distro's libvlc is found by NativeDiscovery in /usr/lib and friends.
             val bundledVlcDir = findBundledVlc()
             val bundledPath = bundledVlcDir?.absolutePath
             if (bundledPath != null) {
                 Timber.i("Using bundled VLC from: $bundledPath")
-                // Add bundled dir to JNA search path and set VLC plugin path
+                // libvlc finds plugins/ next to libvlc.dll by itself; only the library path is needed.
                 val currentPath = System.getProperty("jna.library.path", "")
                 System.setProperty("jna.library.path",
                     if (currentPath.isEmpty()) bundledPath else "$bundledPath${File.pathSeparator}$currentPath")
-                System.setProperty("VLC_PLUGIN_PATH", File(bundledVlcDir, "plugins").absolutePath)
             }
             // NativeDiscovery checks jna.library.path, system PATH, and standard install locations
             val found = NativeDiscovery().discover()
-            if (!found && bundledPath != null) {
-                Timber.w("NativeDiscovery failed even with bundled VLC, retrying with PATH override...")
-                // Fallback: also prepend to java.library.path
-                val javaPath = System.getProperty("java.library.path", "")
-                System.setProperty("java.library.path",
-                    if (javaPath.isEmpty()) bundledPath else "$bundledPath${File.pathSeparator}$javaPath")
-            }
 
             if (found) {
                 audioPlayer = AudioPlayerComponent(LoggingMediaPlayerFactory())
@@ -321,7 +337,7 @@ class DesktopPlayer {
                 Timber.w("VLC not found")
                 _state.value = _state.value.copy(
                     vlcAvailable = false,
-                    error = "VLC not found. Please install VLC media player (64-bit)."
+                    error = vlcMissingMessage(bundled = bundledPath != null)
                 )
             }
         } catch (e: Exception) {
@@ -333,10 +349,19 @@ class DesktopPlayer {
         }
     }
 
+    private fun vlcMissingMessage(bundled: Boolean): String = when {
+        Platform.isLinux -> "Lyrenne needs VLC. Install it with your package manager, e.g. " +
+            "sudo apt install vlc / sudo dnf install vlc / sudo pacman -S vlc. " +
+            "The Snap and Flatpak versions of VLC can't be used."
+        bundled -> "VLC failed to load from the app folder. Re-extract the ZIP."
+        else -> "VLC not found. Please install VLC media player (64-bit)."
+    }
+
     private fun findBundledVlc(): File? {
+        if (!Platform.isWindows) return null
         // Check for bundled VLC in app resources (Compose Desktop native distribution)
         val candidates = listOf(
-            // When running as packaged app (createDistributable/MSI/EXE)
+            // When running as packaged app (createDistributable)
             System.getProperty("compose.application.resources.dir")?.let { File(it, "vlc") },
             // When running from IDE / gradle run — check relative to working dir
             File("resources/windows-x64/vlc"),
@@ -540,8 +565,13 @@ class DesktopPlayer {
                     if (playerResponse?.playabilityStatus?.status == "OK") {
                         // Get audio stream matching quality preference
                         val targetBitrate = PreferencesManager.preferences.value.audioQuality.bitrate * 1000 // kbps to bps
-                        val audioFormats = playerResponse.streamingData?.adaptiveFormats
+                        val allAudio = playerResponse.streamingData?.adaptiveFormats
                             ?.filter { it.isAudio }
+                        // Linux: distro VLC builds (Fedora's stock one) may ship without an AAC
+                        // decoder, while Opus is decodable everywhere. Prefer it when offered.
+                        val audioFormats = if (Platform.isLinux) {
+                            allAudio?.filter { "opus" in it.mimeType }?.ifEmpty { null } ?: allAudio
+                        } else allAudio
 
                         // Pick closest to target bitrate (prefer not exceeding it)
                         val audioFormat = audioFormats
@@ -560,6 +590,8 @@ class DesktopPlayer {
                             }
                         }
                     }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e // cancellation must propagate, not be treated as a failure
                 } catch (e: Exception) {
                     Timber.w("Client ${client.clientName} failed: ${e.message}")
                     continue
@@ -569,6 +601,8 @@ class DesktopPlayer {
             Timber.w("Could not get playable stream for $videoId")
             _state.value = _state.value.copy(error = "Could not load audio stream")
             null
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e // cancellation must propagate, not be treated as a failure
         } catch (e: Exception) {
             Timber.e("Failed to get stream URL: ${e.message}")
             _state.value = _state.value.copy(error = "Failed to load: ${e.message}")
@@ -1016,10 +1050,15 @@ class DesktopPlayer {
                     currentIndex = currentIndex,
                     shuffleEnabled = shuffleEnabled,
                     repeatMode = repeatMode,
-                    position = queueState?.positionMs ?: 0L
+                    position = queueState?.positionMs ?: 0L,
+                    // playMedia normally seeds this; a restored song is not played yet, so seed it
+                    // here or the bar reads 0:00 / 0:00 until it is. VLC corrects it on play.
+                    duration = song.knownDurationMs()
                 )
                 // Download or stream found lazily on first play: no network call at startup
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e // cancellation must propagate, not be treated as a failure
         } catch (e: Exception) {
             Timber.e("Failed to restore queue: ${e.message}")
         }
@@ -1198,6 +1237,44 @@ class DesktopPlayer {
         updateQueueState()
         Timber.d("Autoplay: queued ${songs.size} songs after ${seed.id}")
         return true
+    }
+
+    /**
+     * Plays [songs] shuffled with songs like them mixed in, one after every [SMART_SHUFFLE_EVERY]
+     * (issue #15), the way Spotify's Smart Shuffle does. The playlist starts at once: suggestions
+     * come from YouTube's radio for a few of its songs, which takes up to four seconds, and are then
+     * woven into what has not played yet. Each carries [SongInfo.suggested] so the queue can mark it.
+     */
+    suspend fun smartShuffle(songs: List<SongInfo>) {
+        if (songs.isEmpty()) return
+        playQueue(songs.shuffled())
+        val generation = queueGeneration
+        val pages = coroutineScope {
+            songs.shuffled().take(SMART_SHUFFLE_SEEDS)
+                .map { seed -> async { radioFor(seed.id).getOrNull().orEmpty() } }
+                .awaitAll()
+        }
+        // The queue was replaced while the radios loaded; these belong to the old one
+        if (generation != queueGeneration) return
+        // Round robin across the radios, so the first suggestions do not all come from one seed
+        val merged = (0 until (pages.maxOfOrNull { it.size } ?: 0)).flatMap { i -> pages.mapNotNull { it.getOrNull(i) } }
+        val suggestions = similarSongsToQueue(
+            page = merged,
+            queued = queue.mapTo(HashSet()) { it.id },
+            hideExplicit = PreferencesManager.preferences.value.hideExplicit,
+            fromAutoplay = false
+        ).map { it.copy(suggested = true) }
+        val upcoming = queue.subList(currentIndex + 1, queue.size)
+        val woven = interleaveSuggestions(upcoming.toList(), suggestions, SMART_SHUFFLE_EVERY)
+        val added = suggestions.take(woven.size - upcoming.size)
+        if (added.isEmpty()) return
+        upcoming.clear()
+        upcoming.addAll(woven)
+        // Into the unshuffle order too, as autoplay does, or turning shuffle off would drop them
+        if (hasOrderToRestore()) originalQueue.addAll(added)
+        syncOriginalQueue()
+        updateQueueState()
+        Timber.d("Smart Shuffle: mixed ${added.size} suggestions into ${songs.size} songs")
     }
 
     /** Takes out the autoplay songs still to come. Ones already played stay, as history. */

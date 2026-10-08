@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.sp
 import com.lyrenne.desktop.media.suppressMediaKeys
 import com.lyrenne.desktop.playback.DesktopPlayer
 import com.lyrenne.desktop.settings.PreferencesManager
+import com.lyrenne.desktop.ui.components.wheelStep
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -124,6 +125,10 @@ fun EqualizerScreen(
                     },
                     valueRange = -20f..20f,
                     modifier = Modifier.weight(1f)
+                        .wheelStep({ PreferencesManager.preferences.value.eqPreamp }, 1f, -20f..20f) {
+                            localPreamp = it
+                            player.setEqualizerPreamp(it)
+                        }
                 )
             }
 
@@ -163,7 +168,11 @@ fun EqualizerScreen(
                             valueRange = -20f..20f,
                             modifier = Modifier
                                 .weight(1f)
-                                .width(48.dp),
+                                .width(48.dp)
+                                .wheelStep({ PreferencesManager.preferences.value.eqBands.getOrElse(index) { 0f } }, 1f, -20f..20f) {
+                                    localBands = localBands.toMutableList().also { bands -> bands[index] = it }
+                                    player.setEqualizerBand(index, it)
+                                },
                         )
 
                         // Frequency label

@@ -3,7 +3,7 @@ package com.lyrenne.desktop.ui.screens
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -12,6 +12,7 @@ import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,8 +27,12 @@ import com.lyrenne.desktop.download.CarExport
 import com.lyrenne.desktop.download.DownloadManager
 import com.lyrenne.desktop.playback.DesktopPlayer
 import com.lyrenne.desktop.ui.components.CarExportStatus
+import com.lyrenne.desktop.ui.components.PlaylistSearchField
+import com.lyrenne.desktop.ui.components.matchesQuery
 import com.lyrenne.desktop.ui.components.chooseExportFolder
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 @Composable
 fun PlaylistScreen(
@@ -37,15 +42,22 @@ fun PlaylistScreen(
     onArtistClick: (String) -> Unit
 ) {
     val scope = rememberCoroutineScope()
-    var playlistPage by remember { mutableStateOf<PlaylistPage?>(null) }
-    var allSongs by remember { mutableStateOf<List<SongItem>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
+    // rememberSaveable: App keeps this screen's state while it is under another on the back
+    // stack, so going back restores the page and scroll position instead of refetching.
+    var playlistPage by rememberSaveable { mutableStateOf<PlaylistPage?>(null) }
+    var allSongs by rememberSaveable { mutableStateOf<List<SongItem>>(emptyList()) }
+    var isLoading by rememberSaveable { mutableStateOf(true) }
     var isLoadingMore by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var continuation by remember { mutableStateOf<String?>(null) }
+    var error by rememberSaveable { mutableStateOf<String?>(null) }
+    var continuation by rememberSaveable { mutableStateOf<String?>(null) }
     val playerState by player.state.collectAsState()
+    var query by remember { mutableStateOf("") }
+    // One page fetch at a time: scrolling, searching and Download All each page through the
+    // playlist, and two of them reading the same continuation appended that page twice
+    val pageLock = remember { Mutex() }
 
     LaunchedEffect(playlistId) {
+        if (playlistPage != null) return@LaunchedEffect // restored from the back stack
         isLoading = true
         error = null
         YouTube.playlist(playlistId).onSuccess { page ->
@@ -58,17 +70,44 @@ fun PlaylistScreen(
         isLoading = false
     }
 
+    /** Appends the next page. False once there is none, or when it fails to load. */
+    suspend fun loadNextPage(): Boolean = pageLock.withLock {
+        val cont = continuation ?: return false
+        YouTube.playlistContinuation(cont).onSuccess { page ->
+            allSongs = allSongs + page.songs
+            continuation = page.continuation
+        }.isSuccess
+    }
+
+    suspend fun loadAllPages() {
+        while (loadNextPage()) Unit
+    }
+
     // Load more songs when reaching the end
     fun loadMore() {
-        val cont = continuation ?: return
-        if (isLoadingMore) return
+        if (continuation == null || isLoadingMore) return
         scope.launch {
             isLoadingMore = true
-            YouTube.playlistContinuation(cont).onSuccess { page ->
-                allSongs = allSongs + page.songs
-                continuation = page.continuation
-            }
+            loadNextPage()
             isLoadingMore = false
+        }
+    }
+
+    // A search has to see the whole playlist, not just the pages scrolled to so far
+    LaunchedEffect(query.isNotBlank(), playlistPage) {
+        if (query.isNotBlank() && playlistPage != null) {
+            isLoadingMore = true
+            try {
+                loadAllPages()
+            } finally {
+                isLoadingMore = false // also when clearing the search cancels this
+            }
+        }
+    }
+
+    val shownSongs = remember(allSongs, query) {
+        allSongs.withIndex().filter { (_, song) ->
+            matchesQuery(query, song.title, song.album?.name, song.artists.joinToString { it.name })
         }
     }
 
@@ -165,7 +204,10 @@ fun PlaylistScreen(
 
                                 Spacer(Modifier.height(8.dp))
 
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
                                     Button(
                                         onClick = {
                                             scope.launch {
@@ -194,16 +236,19 @@ fun PlaylistScreen(
 
                                     OutlinedButton(
                                         onClick = {
+                                            scope.launch { player.smartShuffle(allSongs.map { it.toDesktopSongInfo() }) }
+                                        }
+                                    ) {
+                                        Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("Smart Shuffle")
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = {
                                             // Load ALL remaining pages before downloading
                                             scope.launch {
-                                                var cont = continuation
-                                                while (cont != null) {
-                                                    YouTube.playlistContinuation(cont).onSuccess { page ->
-                                                        allSongs = allSongs + page.songs
-                                                        cont = page.continuation
-                                                    }.onFailure { cont = null }
-                                                }
-                                                continuation = null
+                                                loadAllPages()
                                                 DownloadManager.queueDownloads(
                                                     allSongs.map { it.toDesktopSongInfo() },
                                                     subfolder = page.playlist.title
@@ -220,14 +265,7 @@ fun PlaylistScreen(
                                         onClick = {
                                             val targetDir = chooseExportFolder(page.playlist.title) ?: return@OutlinedButton
                                             scope.launch {
-                                                var cont = continuation
-                                                while (cont != null) {
-                                                    YouTube.playlistContinuation(cont).onSuccess { p ->
-                                                        allSongs = allSongs + p.songs
-                                                        cont = p.continuation
-                                                    }.onFailure { cont = null }
-                                                }
-                                                continuation = null
+                                                loadAllPages()
                                                 CarExport.exportSongs(allSongs.map { it.toDesktopSongInfo() }, targetDir)
                                             }
                                         }
@@ -247,8 +285,22 @@ fun PlaylistScreen(
                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                     }
 
-                    // Song list
-                    itemsIndexed(allSongs) { index, song ->
+                    item {
+                        PlaylistSearchField(query, { query = it }, Modifier.padding(bottom = 8.dp))
+                    }
+
+                    if (shownSongs.isEmpty() && query.isNotBlank() && !isLoadingMore) {
+                        item {
+                            Text(
+                                "No songs in this playlist match \"${query.trim()}\"",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(16.dp)
+                            )
+                        }
+                    }
+
+                    // Song list. A click plays the whole playlist from that song, filtered or not.
+                    items(shownSongs) { (index, song) ->
                         PlaylistSongItem(
                             song = song,
                             isPlaying = playerState.currentSong?.id == song.id,

@@ -527,6 +527,8 @@ object DownloadManager {
                         baseUrl = baseUrl
                     )
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // cancellation must propagate, not be treated as a failure
             } catch (e: Exception) {
                 Timber.d("Client ${client.clientName} failed for $videoId: ${e.message}")
                 continue

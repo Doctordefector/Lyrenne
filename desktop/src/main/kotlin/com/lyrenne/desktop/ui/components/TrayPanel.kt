@@ -133,6 +133,12 @@ fun TrayPanel(
                     },
                     enabled = known,
                     modifier = Modifier.fillMaxWidth().height(16.dp)
+                        .wheelStep(
+                            value = { player.state.value.position.toFloat() },
+                            step = 5_000f,
+                            range = 0f..duration.toFloat(),
+                            enabled = known
+                        ) { player.seekTo(it.toLong()) }
                 )
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(formatMs(state.position), style = MaterialTheme.typography.labelSmall)
@@ -177,14 +183,22 @@ fun TrayPanel(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(Modifier.width(8.dp))
-                    Slider(
+                    val onVolume: (Float) -> Unit = {
+                        if (PreferencesManager.preferences.value.isMuted) PreferencesManager.setMuted(false)
+                        PreferencesManager.setVolume(it)
+                        player.setVolume(it)
+                    }
+                    PlayerSlider(
                         value = prefs.volume,
+                        // Dragging fires dozens of times a second: keep it in memory, write once on release.
                         onValueChange = {
-                            if (prefs.isMuted) PreferencesManager.setMuted(false)
-                            PreferencesManager.setVolume(it)
+                            if (PreferencesManager.preferences.value.isMuted) PreferencesManager.setMuted(false)
+                            PreferencesManager.setVolume(it, persist = false)
                             player.setVolume(it)
                         },
+                        onValueChangeFinished = { PreferencesManager.setVolume(PreferencesManager.preferences.value.volume) },
                         modifier = Modifier.weight(1f).height(16.dp)
+                            .wheelStep({ PreferencesManager.preferences.value.volume }, 0.05f, onChange = onVolume)
                     )
                     // The leading icon and its spacer inset the volume bar by 22dp, putting its
                     // midpoint 11dp right of the axis the seek bar and transport buttons sit on,

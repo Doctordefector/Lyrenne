@@ -17,6 +17,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.lyrenne.desktop.AppPaths
+import com.lyrenne.desktop.Platform
 import com.lyrenne.desktop.auth.AuthManager
 import com.lyrenne.desktop.auth.BrowserLoginHelper
 import com.lyrenne.desktop.auth.CookieExtractResult
@@ -186,11 +187,12 @@ private val CLOUD_MARKERS = listOf("onedrive", "dropbox", "icloud", "google driv
 private fun WelcomeStep() {
     StepHeading(
         "Welcome to Lyrenne",
-        "A YouTube Music player for Windows. This takes about a minute, and everything here " +
+        "A YouTube Music player for your desktop. This takes about a minute, and everything here " +
             "can be changed later in Settings."
     )
 
-    val appDir = remember { AppPaths.appDir.absolutePath }
+    // Portable (Windows): everything sits next to the app. Otherwise: the XDG data dir.
+    val appDir = remember { (if (AppPaths.isPortable) AppPaths.appDir else AppPaths.dataDir).absolutePath }
     val cloudSynced = remember(appDir) { CLOUD_MARKERS.any { appDir.contains(it, ignoreCase = true) } }
 
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -198,12 +200,19 @@ private fun WelcomeStep() {
             Icon(Icons.Default.FolderSpecial, contentDescription = null)
             Spacer(Modifier.width(16.dp))
             Column {
-                Text("Lyrenne is portable", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    if (AppPaths.isPortable) "Lyrenne is portable" else "Where your data lives",
+                    style = MaterialTheme.typography.titleSmall
+                )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "Your library, login, settings and downloads all live in this folder and " +
-                        "nowhere else. Nothing is written to AppData, and moving the folder " +
-                        "takes everything with it.",
+                    if (AppPaths.isPortable)
+                        "Your library, login, settings and downloads all live in this folder and " +
+                            "nowhere else. Nothing is written to AppData, and moving the folder " +
+                            "takes everything with it."
+                    else
+                        "Your library, login and settings live in this folder. Downloads go to " +
+                            "${AppPaths.defaultDownloadsDir.absolutePath} unless you pick another.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -242,7 +251,7 @@ private fun WelcomeStep() {
                     Text(
                         "A sync client that reopens the database mid-write will corrupt it or " +
                             "lock it on startup. Close Lyrenne and move this folder somewhere " +
-                            "local, such as C:\\Lyrenne.",
+                            "local" + (if (Platform.isWindows) ", such as C:\\Lyrenne." else "."),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onErrorContainer
                     )
@@ -260,23 +269,12 @@ private fun SignInStep() {
     var status by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
 
-    val browser = remember { BrowserLoginHelper.findBrowserExecutable() }
-    val browserName = remember(browser) {
-        when {
-            browser == null -> "your browser"
-            browser.absolutePath.contains("Edge", ignoreCase = true) -> "Edge"
-            browser.absolutePath.contains("Chrome", ignoreCase = true) -> "Chrome"
-            browser.absolutePath.contains("brave", ignoreCase = true) -> "Brave"
-            else -> "your browser"
-        }
-    }
+    val browser = remember { BrowserLoginHelper.findLoginBrowser() }
+    val browserName = browser?.name ?: "your browser"
 
-    fun signIn() {
-        phase = SignInPhase.WAITING
-        status = "Opening $browserName..."
-        error = null
+    fun handle(result: CookieExtractResult) {
         scope.launch {
-            when (val result = BrowserLoginHelper.loginWithBrowser { status = it }) {
+            when (result) {
                 is CookieExtractResult.Success -> {
                     phase = SignInPhase.VALIDATING
                     status = "Signing in..."
@@ -293,6 +291,13 @@ private fun SignInStep() {
                 }
             }
         }
+    }
+
+    fun signIn() {
+        phase = SignInPhase.WAITING
+        status = "Opening $browserName..."
+        error = null
+        scope.launch { handle(BrowserLoginHelper.loginWithBrowser { status = it }) }
     }
 
     StepHeading(
@@ -411,8 +416,8 @@ private fun SignInStep() {
 
             if (browser == null) {
                 Text(
-                    "No supported browser found. Lyrenne needs Microsoft Edge, Chrome or Brave " +
-                        "installed to sign in.",
+                    "No supported browser found. Lyrenne looks for " +
+                        "${BrowserLoginHelper.supportedBrowserNames}. You can also paste a cookie below.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.error
                 )
@@ -422,6 +427,13 @@ private fun SignInStep() {
                     Spacer(Modifier.width(8.dp))
                     Text(if (error != null) "Try again" else "Open $browserName and sign in")
                 }
+            }
+            Spacer(Modifier.height(8.dp))
+            com.lyrenne.desktop.ui.components.PasteCookieSection { result ->
+                phase = SignInPhase.VALIDATING
+                status = "Signing in..."
+                error = null
+                handle(result)
             }
         }
     }
@@ -537,7 +549,8 @@ private fun FilesStep() {
 
     Spacer(Modifier.height(16.dp))
 
-    ToggleRow(
+    // No tray (GNOME): hiding the window would leave no way back, so the option is not offered.
+    if (com.lyrenne.desktop.notification.DesktopNotification.trayActive) ToggleRow(
         icon = Icons.Default.DesktopWindows,
         title = "Keep playing when I close the window",
         subtitle = "Closing the window hides Lyrenne in the system tray instead of quitting. " +

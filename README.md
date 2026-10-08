@@ -48,12 +48,30 @@ own Java runtime. Windows 10 or 11, 64-bit.
 > `Lyrenne.exe`. A sync client that reopens those files mid-write will corrupt the database or
 > lock it on startup. `C:\Lyrenne` is a good home; the Desktop usually is not.
 
+### Linux (preview)
+
+`.deb` and `.rpm` packages are built by the `linux` GitHub Actions workflow. They install to
+`/opt/lyrenne`, add a `lyrenne` command and a menu entry, and pull in VLC from your distro
+(VLC is not bundled on Linux; the Snap and Flatpak versions of VLC can't be used).
+
+```bash
+sudo apt install ./lyrenne_*_amd64.deb
+```
+
+- Your library and settings live in `~/.local/share/lyrenne`, downloads in `~/Music/Lyrenne`.
+- Sign-in uses Firefox if you have it (Snap Firefox included), otherwise Chrome/Chromium/Edge/Brave/
+  Vivaldi. With none of those, or only Flatpak browsers, use **Advanced: paste a cookie** on the
+  sign-in screen.
+- Media keys, the GNOME/KDE media widget and `playerctl` work through MPRIS. GNOME has no tray, so
+  closing the window quits there.
+- Car/USB export needs `ffmpeg` from your package manager.
+
 ## Features
 
 | | |
 |---|---|
-| **Playback** | Streaming and local files through a bundled VLC engine, gapless queue, shuffle and repeat, crossfade, playback speed 0.25×–3×, sleep timer, 10-band equalizer with presets, skip silence, volume normalization |
-| **Library** | Full two-way sync with YouTube Music: liked songs, albums, artists and playlists, and every edit you make locally is pushed back to your account. Local playlists, auto playlists, sorting, search and grid/list views |
+| **Playback** | Streaming and local files through a bundled VLC engine, gapless queue, shuffle and repeat, Smart Shuffle that mixes songs like your playlist into it, crossfade, playback speed 0.25×–3×, sleep timer, 10-band equalizer with presets, skip silence, volume normalization, mouse wheel on any slider |
+| **Library** | Full two-way sync with YouTube Music: liked songs, albums, artists and playlists, and every edit you make locally is pushed back to your account. Local playlists, auto playlists, sorting, search across the library or within one playlist, and grid/list views |
 | **Discovery** | Home feed with continuations, Explore (new releases, moods & genres, charts), search with filters and suggestions, Start Radio, autoplay that keeps similar songs coming when your queue runs out, quick picks, podcasts |
 | **Lyrics** | Synced and plain, from a five-provider chain (BetterLyrics → LrcLib → KuGou → YouTube lyrics → YouTube transcript), word-by-word highlighting where the provider has word timing, manual search when the automatic match is wrong, and size, alignment and click-to-seek options |
 | **Social** | Listen Together rooms with live playback sync, Discord Rich Presence, Last.fm scrobbling |

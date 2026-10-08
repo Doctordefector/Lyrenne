@@ -30,8 +30,10 @@ class LinuxBrowserE2ETest {
         assertEquals(BrowserKind.FIREFOX, found!!.kind)
 
         val browser = found.copy(profileDir = Files.createTempDirectory("ff-login").toFile())
-        val cookies = visit(browser) { BrowserLoginHelper.isProfileInUse(browser) }
-            .let { BrowserCookieExtractor.readFirefoxCookies(browser.profileDir, browser.name) }
+        visit(browser, ready = {
+            (BrowserCookieExtractor.readFirefoxCookies(browser.profileDir, browser.name) as? Map<*, *>)?.isNotEmpty() == true
+        }) { BrowserLoginHelper.isProfileInUse(browser) }
+        val cookies = BrowserCookieExtractor.readFirefoxCookies(browser.profileDir, browser.name)
         assertVisitorCookies(cookies)
     }
 
@@ -45,10 +47,14 @@ class LinuxBrowserE2ETest {
 
         val browser = LoginBrowser(BrowserKind.CHROMIUM, exe!!, "Chrome", Files.createTempDirectory("cr-login").toFile())
         assertTrue(BrowserLoginHelper.launchArgs(browser).contains("--password-store=basic"))
-        visit(browser, extra = listOf("--headless=new", "--disable-gpu")) { BrowserLoginHelper.isProfileInUse(browser) }
-
         val dir = browser.profileDir
-        val db = File(dir, "Default/Network/Cookies").takeIf { it.exists() } ?: File(dir, "Default/Cookies")
+        fun db() = File(dir, "Default/Network/Cookies").takeIf { it.exists() } ?: File(dir, "Default/Cookies")
+        visit(browser, extra = listOf("--headless=new", "--disable-gpu"), ready = {
+            val r = if (db().exists()) BrowserCookieExtractor.readChromiumCookies(db(), File(dir, "Local State"), browser.name) else null
+            (r as? BrowserCookieExtractor.ChromiumRead)?.cookies?.isNotEmpty() == true
+        }) { BrowserLoginHelper.isProfileInUse(browser) }
+
+        val db = db()
         val read = BrowserCookieExtractor.readChromiumCookies(db, File(dir, "Local State"), browser.name)
         assertTrue("read failed: $read", read is BrowserCookieExtractor.ChromiumRead)
         read as BrowserCookieExtractor.ChromiumRead
@@ -57,16 +63,24 @@ class LinuxBrowserE2ETest {
     }
 
     /**
-     * Launches [browser] headless with Lyrenne's own arguments, checks the lock reports it running,
+     * Launches [browser] headless with Lyrenne's own arguments, waits until [ready], checks the lock reports it running,
      * then closes it the way a user would (SIGTERM, a clean shutdown that flushes cookies) and
      * checks the lock clears.
      */
-    private fun visit(browser: LoginBrowser, extra: List<String> = listOf("--headless"), inUse: () -> Boolean) {
+    private fun visit(
+        browser: LoginBrowser,
+        extra: List<String> = listOf("--headless"),
+        ready: () -> Boolean,
+        inUse: () -> Boolean
+    ) {
         val args = BrowserLoginHelper.launchArgs(browser).toMutableList().apply { addAll(1, extra) }
         val process = ProcessBuilder(args).redirectErrorStream(true)
             .redirectOutput(File(browser.profileDir.parentFile, "${browser.profileDir.name}.log")).start()
         try {
-            Thread.sleep(20_000)
+            // Page load time varies on a runner: wait until the visit's cookies reach disk
+            // (the reader copies the DB and its WAL, so this works while the browser runs).
+            val deadline = System.currentTimeMillis() + 90_000
+            while (!ready() && System.currentTimeMillis() < deadline) Thread.sleep(2_000)
             assertTrue("${browser.name} exited early", process.isAlive)
             assertTrue("profile lock not seen while ${browser.name} runs", inUse())
         } finally {

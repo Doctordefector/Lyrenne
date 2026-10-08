@@ -1191,4 +1191,7 @@ Plan and rationale: `AUDIT_AND_LINUX_PLAN.md`. What is in place:
 - **Packaging**: `packaging/linux/nfpm.yaml` builds .deb/.rpm from `createDistributable` with VLC as a
   dependency. CI: `.github/workflows/linux.yml` (`-Pci` skips the network smoke tests).
   `fetchFfmpeg` and `packagePortableZip` only run on a Windows host.
-- **Not yet verified on real Linux**: the acceptance matrices in the plan still need a run.
+- **Verified in CI** (every push): unit tests on Ubuntu; the .deb installs on Ubuntu and the .rpm on
+  Fedora with their VLC dependencies, the app starts under Xvfb, loads the distro libvlc, and writes
+  its DB to `~/.local/share/lyrenne`. **Not verifiable in CI**, needs a real desktop: browser sign-in,
+  streamed playback (needs a session), MPRIS widgets, tray behaviour per desktop.

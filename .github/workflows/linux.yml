@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
@@ -35,6 +35,21 @@ jobs:
           mkdir -p dist
           nfpm package -f packaging/linux/nfpm.yaml -p deb -t dist/
           nfpm package -f packaging/linux/nfpm.yaml -p rpm -t dist/
+
+      # Phase 1 exit check: the package installs with its VLC dependency, the app starts under X,
+      # finds the distro libvlc, and keeps its data in ~/.local/share/lyrenne. Onboarding is
+      # skipped because it blocks on a sign-in a runner cannot do.
+      - name: Install .deb and smoke-run
+        run: |
+          sudo apt-get install -y ./dist/*.deb xvfb
+          mkdir -p ~/.local/share/lyrenne
+          echo "onboardingCompleted=true" > ~/.local/share/lyrenne/preferences.properties
+          timeout 60 xvfb-run -a lyrenne > stdout.log 2>&1 || true
+          cat stdout.log ~/.local/share/lyrenne/lyrenne.log > run.log
+          tail -80 run.log
+          grep -q "VLC initialized successfully" run.log
+          test -f ~/.local/share/lyrenne/lyrenne.db
+          ! grep -E "Exception in thread|Fatal|FATAL" run.log
 
       - uses: actions/upload-artifact@v4
         with:

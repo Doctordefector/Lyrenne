@@ -239,7 +239,7 @@ object BrowserLoginHelper {
         readCookiesFromProfile(browser)
     }
 
-    private fun launchArgs(browser: LoginBrowser): List<String> = when (browser.kind) {
+    internal fun launchArgs(browser: LoginBrowser): List<String> = when (browser.kind) {
         BrowserKind.FIREFOX -> listOfNotNull(
             browser.exe.absolutePath,
             "-profile", browser.profileDir.absolutePath,

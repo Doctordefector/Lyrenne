@@ -1193,5 +1193,7 @@ Plan and rationale: `AUDIT_AND_LINUX_PLAN.md`. What is in place:
   `fetchFfmpeg` and `packagePortableZip` only run on a Windows host.
 - **Verified in CI** (every push): unit tests on Ubuntu; the .deb installs on Ubuntu and the .rpm on
   Fedora with their VLC dependencies, the app starts under Xvfb, loads the distro libvlc, and writes
-  its DB to `~/.local/share/lyrenne`. **Not verifiable in CI**, needs a real desktop: browser sign-in,
+  its DB to `~/.local/share/lyrenne`. `LinuxPlaybackE2ETest` plays a file through system VLC and drives
+  it over MPRIS with `playerctl`; `LinuxBrowserE2ETest` runs real Firefox and Chrome through the login
+  launch/lock/cookie-read path (signed out). **Not verifiable in CI**, needs a real desktop: browser sign-in,
   streamed playback (needs a session), MPRIS widgets, tray behaviour per desktop.

@@ -55,9 +55,10 @@ class LinuxPlaybackE2ETest {
             assertNull("player reported an error", player.state.value.error)
 
             waitFor("playerctl to see the title", diagnose = {
-                "players=[${playerctl("-l")}] metadata=[${playerctl("metadata")}] status=[${playerctl("status")}] " +
+                "sessionFailure=[${SystemMediaSession.lastFailure}] players=[${playerctl("-l")}] metadata=[${playerctl("metadata")}] status=[${playerctl("status")}] " +
                     "busNames=[${run("dbus-send", "--session", "--print-reply", "--dest=org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus.ListNames")}]"
             }) { playerctl("metadata", "title") == "Lyrenne E2E Tone" }
+            assertNull("media session reported a failure", SystemMediaSession.lastFailure)
             assertEquals("Playing", playerctl("status"))
             playerctl("pause")
             waitFor("MPRIS pause to reach the player") { !player.state.value.isPlaying }

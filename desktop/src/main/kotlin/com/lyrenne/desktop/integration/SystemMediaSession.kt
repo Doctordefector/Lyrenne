@@ -190,17 +190,27 @@ object SystemMediaSession {
         safely {
             it.setMetadata(
                 MediaSessionMetadata(
-                    track_id = song.id,
+                    track_id = trackId(song.id),
                     title = song.title,
                     artist = song.artist,
                     album = song.album,
                     album_artists = listOf(song.artist),
                     length_ms = duration,
-                    art_url = artwork.absolutePath
+                    // MPRIS wants a URI; SMTC is given the plain path, as it always was.
+                    art_url = if (Platform.isLinux) artwork.toURI().toString() else artwork.absolutePath
                 )
             )
         }
     }
+
+    /**
+     * MPRIS types `mpris:trackid` as a D-Bus object path (`/` plus `[A-Za-z0-9_]` segments), and
+     * mediasession-kt throws on anything else. A YouTube id has `-` in it, so on Linux every
+     * metadata update was rejected: no title, no artwork, nothing in the media widget.
+     */
+    internal fun trackId(songId: String): String =
+        if (Platform.isLinux) "/com/lyrenne/track/" + songId.replace(Regex("[^A-Za-z0-9_]"), "_").ifEmpty { "_" }
+        else songId
 
     private fun fallbackArtwork(): File? = try {
         val directory = artworkDirectory()
@@ -304,7 +314,7 @@ object SystemMediaSession {
             synchronized(lock) { action(current) }
         } catch (e: Throwable) {
             lastFailure = e.message ?: e::class.simpleName
-            Timber.w("Windows media-session update failed: ${e.message}")
+            Timber.w("Media-session update failed: ${e.message}")
         }
     }
 

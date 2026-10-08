@@ -840,3 +840,37 @@ cross-platform fixes that can ship in any release.
 4. **ARM64 Linux** (Raspberry Pi, Asahi): in scope? Needs `Linux/aarch64` sqlite natives kept
    and an ARM CI runner; VLC is available on both.
 5. **Update signing key:** who holds it, and where is it stored offline?
+
+### Decisions (2026-10-08)
+
+1. **Format:** `.deb` + `.rpm` (nfpm, VLC as a dependency). Fedora is a supported target and is
+   tested in CI. No AppImage/Flatpak for now.
+2. **Portable mode on Linux:** kept. A `portable` file next to the app puts data beside it;
+   otherwise XDG dirs.
+3. **Firefox on Windows:** fallback only, after Edge, Chrome and Brave.
+4. **ARM64 Linux:** out of scope for now (amd64 packages only).
+5. **Update signing key:** held by the maintainer at `~/.lyrenne/update-signing.key`, copied to their
+   second dev machine. Public key embedded in `AutoUpdater.UPDATE_PUBLIC_KEY` from 2.15.0.
+
+---
+
+## 8. Status (implemented in 2.15.0)
+
+Every item in the master action plan (§6) is implemented. Deliberately skipped: shelf edge fades
+(arrows cover the affordance), stripping foreign sqlite natives from the Linux packages (~9 MB),
+a shared empty/loading component, `systemd-inhibit` for sleep, an AppImage, apt/COPR repositories.
+
+Verified automatically on every push (`.github/workflows/linux.yml`):
+
+| Criterion | How |
+|---|---|
+| Unit tests on Linux (incl. Linux v10 decrypt, Firefox reader, dangling `SingletonLock`) | `build` job, Ubuntu |
+| `.deb` installs with its VLC dependency; app starts; system libvlc found; data in `~/.local/share/lyrenne` | `build` job, Xvfb |
+| Same for `.rpm` on Fedora with Fedora's own `vlc` | `fedora` job, `fedora:latest` container |
+| Local file plays through system VLC; EQ, speed, normalize, skip-silence apply without error | `e2e` job, `LinuxPlaybackE2ETest` |
+| MPRIS visible to and controllable from `playerctl` | `e2e` job |
+| Distro VLC has every plugin a YouTube stream needs (HTTPS, adaptive, MP4/MKV, Opus, avcodec) | `e2e` job |
+
+Not automatable, needs a person on a Linux desktop: browser sign-in (needs a real Google account),
+streamed playback (needs that session), tray and media widgets on specific desktops (GNOME, KDE,
+Cinnamon), HiDPI scaling.

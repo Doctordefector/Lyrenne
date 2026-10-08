@@ -154,7 +154,8 @@ private fun defaultWindowSize(): DpSize {
  * Resolved before anything else runs, so it must not depend on app state.
  */
 private fun logFile(): File {
-    val next = File(AppPaths.appDir, "lyrenne.log")
+    // Next to the app when portable; installed (Linux) copies live in a read-only /opt.
+    val next = if (AppPaths.isPortable) File(AppPaths.appDir, "lyrenne.log") else File(AppPaths.dataDir, "lyrenne.log")
     return if (next.parentFile?.canWrite() == true) next
     else File(System.getProperty("java.io.tmpdir"), "lyrenne.log")
 }

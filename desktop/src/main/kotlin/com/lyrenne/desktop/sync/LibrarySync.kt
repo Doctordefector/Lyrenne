@@ -61,10 +61,8 @@ object LibrarySync {
         if (_syncState.value.isSyncing) return
 
         val authState = AuthManager.authState.value
-        if (!authState.isLoggedIn) {
-            _syncState.value = SyncState(error = "Not logged in")
-            return
-        }
+        // Signed out is a normal state, not a failure: Library shows a sign-in prompt for it.
+        if (!authState.isLoggedIn) return
 
         syncJob = scope.launch {
             _syncState.value = SyncState(isSyncing = true, progress = "Syncing library...")

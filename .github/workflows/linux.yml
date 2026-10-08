@@ -1,0 +1,42 @@
+name: linux
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # -Pci skips the *SmokeTest classes, which need real YouTube / OS APIs.
+      - name: Test and build distributable
+        run: ./gradlew -Pci :desktop:test :desktop:createDistributable
+
+      - name: Install nfpm
+        run: |
+          echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | sudo tee /etc/apt/sources.list.d/goreleaser.list
+          sudo apt-get update
+          sudo apt-get install -y nfpm
+
+      - name: Package .deb and .rpm
+        run: |
+          export LYRENNE_VERSION=$(grep -oP 'val lyrenneVersion = "\K[^"]+' desktop/build.gradle.kts)
+          mkdir -p dist
+          nfpm package -f packaging/linux/nfpm.yaml -p deb -t dist/
+          nfpm package -f packaging/linux/nfpm.yaml -p rpm -t dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lyrenne-linux
+          path: dist/

@@ -91,18 +91,19 @@ fun MiniPlayer(
     ) {
         Column {
             // Seekable progress bar
-            Slider(
+            PlayerSlider(
                 value = if (state.duration > 0) state.position.toFloat() / state.duration else 0f,
                 onValueChange = { fraction ->
                     val seekPos = (fraction * state.duration).toLong()
                     player.seekTo(seekPos)
                 },
-                modifier = Modifier.fillMaxWidth().height(12.dp).padding(horizontal = 0.dp),
-                colors = SliderDefaults.colors(
-                    thumbColor = MaterialTheme.colorScheme.primary,
-                    activeTrackColor = MaterialTheme.colorScheme.primary,
-                    inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                )
+                modifier = Modifier.fillMaxWidth().height(12.dp).padding(horizontal = 0.dp)
+                    .wheelStep(
+                        value = { player.state.value.position.toFloat() },
+                        step = 5_000f,
+                        range = 0f..state.duration.toFloat(),
+                        enabled = state.duration > 0
+                    ) { player.seekTo(it.toLong()) }
             )
 
             BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -118,7 +119,7 @@ fun MiniPlayer(
                 ) {
                     // Album art
                     AsyncImage(
-                        model = song.thumbnailUrl,
+                        model = squareCropFriendly(song.thumbnailUrl),
                         contentDescription = "Album art",
                         modifier = Modifier
                             .size(48.dp)
@@ -224,30 +225,37 @@ fun MiniPlayer(
                             onClick = player::toggleShuffle,
                             icon = Icons.Default.Shuffle,
                             contentDescription = if (state.shuffleEnabled) "Disable shuffle" else "Enable shuffle",
-                            selected = state.shuffleEnabled
+                            selected = state.shuffleEnabled,
+                            shortcut = "Ctrl+S"
                         )
                     }
 
                     // Controls
-                    IconButton(
-                        onClick = { scope.launch { player.playPrevious() } }
-                    ) {
-                        Icon(Icons.Default.SkipPrevious, "Previous")
+                    Tip("Previous (Ctrl+Left)") {
+                        IconButton(
+                            onClick = { scope.launch { player.playPrevious() } }
+                        ) {
+                            Icon(Icons.Default.SkipPrevious, "Previous")
+                        }
                     }
 
-                    FilledIconButton(
-                        onClick = { player.togglePlayPause() }
-                    ) {
-                        Icon(
-                            if (state.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (state.isPlaying) "Pause" else "Play"
-                        )
+                    Tip(if (state.isPlaying) "Pause (Space)" else "Play (Space)") {
+                        FilledIconButton(
+                            onClick = { player.togglePlayPause() }
+                        ) {
+                            Icon(
+                                if (state.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = if (state.isPlaying) "Pause" else "Play"
+                            )
+                        }
                     }
 
-                    IconButton(
-                        onClick = { scope.launch { player.playNext() } }
-                    ) {
-                        Icon(Icons.Default.SkipNext, "Next")
+                    Tip("Next (Ctrl+Right)") {
+                        IconButton(
+                            onClick = { scope.launch { player.playNext() } }
+                        ) {
+                            Icon(Icons.Default.SkipNext, "Next")
+                        }
                     }
 
                     // Repeat button
@@ -263,22 +271,25 @@ fun MiniPlayer(
                                 RepeatMode.ALL -> "Repeat all enabled"
                                 RepeatMode.ONE -> "Repeat one enabled"
                             },
-                            selected = state.repeatMode != RepeatMode.OFF
+                            selected = state.repeatMode != RepeatMode.OFF,
+                            shortcut = "Ctrl+R"
                         )
                     }
 
                     Spacer(Modifier.width(8.dp))
 
                     // Queue button
-                    IconButton(
-                        onClick = onQueueClick,
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.QueueMusic,
-                            contentDescription = "Queue",
-                            modifier = Modifier.size(20.dp)
-                        )
+                    Tip("Queue (Ctrl+Q)") {
+                        IconButton(
+                            onClick = onQueueClick,
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.QueueMusic,
+                                contentDescription = "Queue",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
 
                     // Lyrics button
@@ -287,7 +298,8 @@ fun MiniPlayer(
                             onClick = onLyricsClick,
                             icon = Icons.Default.MusicNote,
                             contentDescription = if (lyricsActive) "Close lyrics" else "Open lyrics",
-                            selected = lyricsActive
+                            selected = lyricsActive,
+                            shortcut = "Ctrl+L"
                         )
                     }
 
@@ -344,11 +356,13 @@ fun MiniPlayer(
                     // Keep actions removed by the responsive layout available from one overflow.
                     if (!showExtendedControls) {
                         Box {
-                            IconButton(
-                                onClick = { showMoreMenu = true },
-                                modifier = Modifier.size(40.dp)
-                            ) {
-                                Icon(Icons.Default.MoreVert, "More playback controls")
+                            Tip("More playback controls") {
+                                IconButton(
+                                    onClick = { showMoreMenu = true },
+                                    modifier = Modifier.size(40.dp)
+                                ) {
+                                    Icon(Icons.Default.MoreVert, "More playback controls")
+                                }
                             }
                             DropdownMenu(
                                 expanded = showMoreMenu,
@@ -460,29 +474,40 @@ fun MiniPlayer(
                     // Volume slider (persisted) with proper mute state
                     val volume = prefs.volume
                     val isMuted = prefs.isMuted
-                    IconButton(
-                        onClick = {
-                            MediaKeyHandler.toggleMute(player)
-                        },
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Icon(
-                            if (isMuted || volume == 0f) Icons.AutoMirrored.Filled.VolumeOff
-                            else if (volume > 0.5f) Icons.AutoMirrored.Filled.VolumeUp
-                            else Icons.AutoMirrored.Filled.VolumeDown,
-                            contentDescription = if (isMuted) "Unmute" else "Mute",
-                            modifier = Modifier.size(20.dp)
-                        )
+                    Tip(if (isMuted) "Unmute (M)" else "Mute (M)") {
+                        IconButton(
+                            onClick = {
+                                MediaKeyHandler.toggleMute(player)
+                            },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                if (isMuted || volume == 0f) Icons.AutoMirrored.Filled.VolumeOff
+                                else if (volume > 0.5f) Icons.AutoMirrored.Filled.VolumeUp
+                                else Icons.AutoMirrored.Filled.VolumeDown,
+                                contentDescription = if (isMuted) "Unmute" else "Mute",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
-                    Slider(
+                    val onVolume: (Float) -> Unit = {
+                        // Moving the slider unmutes
+                        if (PreferencesManager.preferences.value.isMuted) PreferencesManager.setMuted(false)
+                        PreferencesManager.setVolume(it)
+                        player.setVolume(it)
+                    }
+                    PlayerSlider(
                         value = volume,
+                        // Dragging fires dozens of times a second: keep it in memory, write once on release.
                         onValueChange = {
-                            // If user drags slider, unmute
-                            if (isMuted) PreferencesManager.setMuted(false)
-                            PreferencesManager.setVolume(it)
+                            if (PreferencesManager.preferences.value.isMuted) PreferencesManager.setMuted(false)
+                            PreferencesManager.setVolume(it, persist = false)
                             player.setVolume(it)
                         },
-                        modifier = Modifier.width(responsiveLayout.volumeSliderWidth)
+                        onValueChangeFinished = { PreferencesManager.setVolume(PreferencesManager.preferences.value.volume) },
+                        modifier = Modifier
+                            .width(responsiveLayout.volumeSliderWidth)
+                            .wheelStep({ PreferencesManager.preferences.value.volume }, 0.05f, onChange = onVolume)
                     )
                 }
             }
@@ -504,8 +529,9 @@ private fun PlayerIconButton(
     onClick: () -> Unit,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     contentDescription: String,
-    selected: Boolean = false
-) {
+    selected: Boolean = false,
+    shortcut: String? = null
+) = Tip(if (shortcut != null) "$contentDescription ($shortcut)" else contentDescription) {
     IconButton(
         onClick = onClick,
         modifier = Modifier.size(40.dp),
@@ -623,4 +649,40 @@ private fun formatTime(ms: Long): String {
     val seconds = totalSeconds % 60
     return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, seconds)
     else "%d:%02d".format(minutes, seconds)
+}
+
+/** Hover tooltip for the icon-only player controls: the action, and its shortcut if it has one. */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun Tip(text: String, content: @Composable () -> Unit) {
+    androidx.compose.foundation.TooltipArea(
+        tooltip = {
+            Surface(
+                color = MaterialTheme.colorScheme.inverseSurface,
+                shape = MaterialTheme.shapes.extraSmall
+            ) {
+                Text(
+                    text,
+                    color = MaterialTheme.colorScheme.inverseOnSurface,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                )
+            }
+        },
+        delayMillis = 500,
+        tooltipPlacement = androidx.compose.foundation.TooltipPlacement.CursorPoint(
+            offset = androidx.compose.ui.unit.DpOffset(0.dp, (-32).dp)
+        ),
+        content = content
+    )
+}
+
+/**
+ * Music videos carry an i.ytimg.com frame, and `hqdefault` is 4:3 with the 16:9 picture
+ * letterboxed inside, so a square centre crop was mostly black bar. `mqdefault` is the same frame
+ * at true 16:9, whose centre square is picture. Album art (googleusercontent) is already square.
+ */
+internal fun squareCropFriendly(url: String?): String? {
+    if (url == null || "ytimg.com" !in url) return url
+    return url.substringBefore('?').replace(Regex("/(hq|sd|maxres)default"), "/mqdefault")
 }

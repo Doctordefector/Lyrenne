@@ -28,6 +28,8 @@ import com.lyrenne.desktop.playback.SongInfo
 import com.lyrenne.desktop.sync.YouTubeWrites
 import com.lyrenne.desktop.ui.AutoPlaylistType
 import com.lyrenne.desktop.ui.components.CarExportStatus
+import com.lyrenne.desktop.ui.components.PlaylistSearchField
+import com.lyrenne.desktop.ui.components.matchesQuery
 import com.lyrenne.desktop.ui.components.chooseExportFolder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -48,6 +50,7 @@ fun LocalPlaylistScreen(
     var showRenameDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var renameText by remember { mutableStateOf("") }
+    var query by remember { mutableStateOf("") }
 
     if (showRenameDialog) {
         AlertDialog(
@@ -136,7 +139,10 @@ fun LocalPlaylistScreen(
 
         // Play controls
         if (songs.isNotEmpty()) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 FilledTonalButton(onClick = {
                     val infos = songs.map { it.toPlaylistSongInfo(artistNamesMap) }
                     scope.launch { player.playQueue(infos) }
@@ -152,6 +158,13 @@ fun LocalPlaylistScreen(
                     Icon(Icons.Default.Shuffle, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(4.dp))
                     Text("Shuffle")
+                }
+                OutlinedButton(onClick = {
+                    scope.launch { player.smartShuffle(songs.map { it.toPlaylistSongInfo(artistNamesMap) }) }
+                }) {
+                    Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Smart Shuffle")
                 }
                 OutlinedButton(onClick = {
                     DownloadManager.queueDownloads(
@@ -176,6 +189,8 @@ fun LocalPlaylistScreen(
             }
             CarExportStatus()
             Spacer(Modifier.height(12.dp))
+            PlaylistSearchField(query, { query = it })
+            Spacer(Modifier.height(8.dp))
         }
 
         if (songs.isEmpty()) {
@@ -202,10 +217,17 @@ fun LocalPlaylistScreen(
             }
         } else {
             val playerState by player.state.collectAsState()
+            val searching = query.isNotBlank()
+            val shown = remember(songs, artistNamesMap, query) {
+                songs.indices
+                    .map { it to songs[it].toPlaylistSongInfo(artistNamesMap) }
+                    .filter { (_, song) -> matchesQuery(query, song.title, song.artist, song.album) }
+            }
+            if (searching && shown.isEmpty()) NoMatches(query)
             LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                items(songs.size) { index ->
-                    val dbSong = songs[index]
-                    val song = dbSong.toPlaylistSongInfo(artistNamesMap)
+                // A click plays the whole playlist from that song, filtered or not
+                items(shown.size) { position ->
+                    val (index, song) = shown[position]
                     PlaylistSongRow(
                         song = song,
                         index = index,
@@ -216,14 +238,14 @@ fun LocalPlaylistScreen(
                             val infos = songs.map { it.toPlaylistSongInfo(artistNamesMap) }
                             scope.launch { player.playQueue(infos, index) }
                         },
-                        onMoveUp = if (index > 0) {
+                        onMoveUp = if (index > 0 && !searching) {
                             {
                                 scope.launch(Dispatchers.IO) {
                                     reorderPlaylistSongs(playlistId, songs, index, index - 1)
                                 }
                             }
                         } else null,
-                        onMoveDown = if (index < songs.size - 1) {
+                        onMoveDown = if (index < songs.size - 1 && !searching) {
                             {
                                 scope.launch(Dispatchers.IO) {
                                     reorderPlaylistSongs(playlistId, songs, index, index + 1)
@@ -266,6 +288,7 @@ fun AutoPlaylistScreen(
         }
     }
 
+    var query by remember { mutableStateOf("") }
     val songInfos: List<SongInfo> = when (type) {
         AutoPlaylistType.LIKED -> likedSongs.map { it.toPlaylistSongInfo(artistNamesMap) }
         AutoPlaylistType.DOWNLOADED -> downloadedSongs.map { it.toPlaylistSongInfo(artistNamesMap) }
@@ -314,8 +337,17 @@ fun AutoPlaylistScreen(
                     Spacer(Modifier.width(4.dp))
                     Text("Shuffle")
                 }
+                OutlinedButton(onClick = {
+                    scope.launch { player.smartShuffle(songInfos) }
+                }) {
+                    Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Smart Shuffle")
+                }
             }
             Spacer(Modifier.height(12.dp))
+            PlaylistSearchField(query, { query = it })
+            Spacer(Modifier.height(8.dp))
         }
 
         if (songInfos.isEmpty()) {
@@ -332,9 +364,13 @@ fun AutoPlaylistScreen(
             }
         } else {
             val playerState by player.state.collectAsState()
+            val shown = remember(songInfos, query) {
+                songInfos.withIndex().filter { (_, song) -> matchesQuery(query, song.title, song.artist, song.album) }
+            }
+            if (query.isNotBlank() && shown.isEmpty()) NoMatches(query)
             LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                items(songInfos.size) { index ->
-                    val song = songInfos[index]
+                items(shown.size) { position ->
+                    val (index, song) = shown[position]
                     PlaylistSongRow(
                         song = song,
                         index = index,
@@ -349,6 +385,15 @@ fun AutoPlaylistScreen(
             }
         }
     }
+}
+
+@Composable
+private fun NoMatches(query: String) {
+    Text(
+        "No songs in this playlist match \"${query.trim()}\"",
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(16.dp)
+    )
 }
 
 @Composable

@@ -352,11 +352,22 @@ private fun QueueItem(
             )
         },
         supportingContent = {
-            Text(
-                song.artist,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (song.suggested) {
+                    Icon(
+                        Icons.Default.AutoAwesome,
+                        contentDescription = "Suggested by Smart Shuffle",
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.width(4.dp))
+                }
+                Text(
+                    if (song.suggested) "Suggested · ${song.artist}" else song.artist,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         },
         leadingContent = {
             Row(verticalAlignment = Alignment.CenterVertically) {

@@ -12,7 +12,11 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
+import com.lyrenne.desktop.Platform
+import java.io.File
 import java.io.RandomAccessFile
+import java.net.UnixDomainSocketAddress
+import java.nio.channels.SocketChannel
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -20,7 +24,8 @@ import java.nio.ByteOrder
  * Discord Rich Presence via local IPC (named pipe).
  *
  * Connects to the Discord client running on the same machine using
- * `\\.\pipe\discord-ipc-N` (Windows) or `/tmp/discord-ipc-N` (Unix).
+ * `\\.\pipe\discord-ipc-N` (Windows) or a Unix socket `discord-ipc-N` under `$XDG_RUNTIME_DIR`
+ * (native, Flatpak, Snap), `$TMPDIR` or `/tmp`.
  * No user token required — only the application ID.
  *
  * Protocol:
@@ -52,7 +57,7 @@ object DiscordRPC {
      */
     private const val SMALL_IMAGE_KEY = "lyrenne"
 
-    private var pipe: RandomAccessFile? = null
+    private var pipe: IpcPipe? = null
     private var updateJob: Job? = null
     private var settingsJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -232,27 +237,10 @@ object DiscordRPC {
         // Clean up any stale connection first
         disconnect()
 
-        val os = System.getProperty("os.name").lowercase()
-        val isWindows = os.contains("win")
-
         // Try pipes 0-9
         for (i in 0..9) {
             try {
-                val pipePath = if (isWindows) {
-                    "\\\\.\\pipe\\discord-ipc-$i"
-                } else {
-                    // Linux/macOS: check XDG_RUNTIME_DIR, TMPDIR, /tmp
-                    val dirs = listOfNotNull(
-                        System.getenv("XDG_RUNTIME_DIR"),
-                        System.getenv("TMPDIR"),
-                        "/tmp"
-                    )
-                    val dir = dirs.firstOrNull { java.io.File(it, "discord-ipc-$i").exists() }
-                        ?: dirs.first()
-                    "$dir/discord-ipc-$i"
-                }
-
-                val raf = RandomAccessFile(pipePath, "rw")
+                val raf = IpcPipe.open(i) ?: continue
                 pipe = raf
 
                 // Send handshake
@@ -272,6 +260,8 @@ object DiscordRPC {
                 // No response — close and try next
                 try { raf.close() } catch (_: Exception) {}
                 pipe = null
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // cancellation must propagate, not be treated as a failure
             } catch (_: Exception) {
                 // Try next pipe
                 pipe = null
@@ -394,6 +384,8 @@ object DiscordRPC {
                 withTimeoutOrNull(2000) {
                     withContext(Dispatchers.IO) { readFrame() }
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // cancellation must propagate, not be treated as a failure
             } catch (e: Exception) {
                 Timber.w("Discord presence update failed: ${e.message}")
                 connected = false
@@ -410,11 +402,54 @@ object DiscordRPC {
                 withTimeoutOrNull(2000) {
                     withContext(Dispatchers.IO) { readFrame() }
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // cancellation must propagate, not be treated as a failure
             } catch (_: Exception) {
                 connected = false
                 try { pipe?.close() } catch (_: Exception) {}
                 pipe = null
             }
+    }
+
+    /**
+     * Discord's IPC endpoint: a named pipe on Windows (which RandomAccessFile opens), a Unix domain
+     * socket elsewhere (which it cannot, so that goes through SocketChannel). Raw channel reads and
+     * writes rather than streams: a timed-out read is still blocked on an IO thread when the next
+     * write arrives, and the channel's own read and write locks let both proceed.
+     */
+    private class IpcPipe(
+        val write: (ByteArray) -> Unit,
+        val readFully: (ByteArray) -> Unit,
+        private val onClose: () -> Unit
+    ) : java.io.Closeable {
+        override fun close() = onClose()
+
+        companion object {
+            fun open(i: Int): IpcPipe? {
+                if (Platform.isWindows) {
+                    val raf = RandomAccessFile("\\\\.\\pipe\\discord-ipc-$i", "rw")
+                    return IpcPipe({ raf.write(it) }, { raf.readFully(it) }, { raf.close() })
+                }
+                val runtime = System.getenv("XDG_RUNTIME_DIR")
+                val dirs = listOfNotNull(
+                    runtime,
+                    runtime?.let { "$it/app/com.discordapp.Discord" }, // Flatpak Discord
+                    runtime?.let { "$it/snap.discord" },               // Snap Discord
+                    System.getenv("TMPDIR"),
+                    "/tmp"
+                )
+                val socket = dirs.map { File(it, "discord-ipc-$i") }.firstOrNull { it.exists() } ?: return null
+                val ch = SocketChannel.open(UnixDomainSocketAddress.of(socket.toPath()))
+                return IpcPipe(
+                    { bytes -> val buf = ByteBuffer.wrap(bytes); while (buf.hasRemaining()) ch.write(buf) },
+                    { bytes ->
+                        val buf = ByteBuffer.wrap(bytes)
+                        while (buf.hasRemaining()) if (ch.read(buf) < 0) throw java.io.EOFException()
+                    },
+                    { ch.close() }
+                )
+            }
+        }
     }
 
     private fun escapeJson(s: String): String =

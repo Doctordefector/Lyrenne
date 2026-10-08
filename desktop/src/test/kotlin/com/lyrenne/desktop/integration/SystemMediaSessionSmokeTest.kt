@@ -10,7 +10,7 @@ import org.junit.Test
 import java.io.File
 
 /** Verifies that the bundled native SMTC adapter can create a real Windows media session. */
-class WindowsMediaSessionSmokeTest {
+class SystemMediaSessionSmokeTest {
 
     private val onWindows =
         System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true)
@@ -22,7 +22,7 @@ class WindowsMediaSessionSmokeTest {
         try {
             assertTrue(
                 "The Windows media-session adapter could not be loaded",
-                WindowsMediaSession.initialize(player)
+                SystemMediaSession.initialize(player)
             )
             // Started as a download, so no stream has to be resolved
             player.downloadedFileFor = { File("media-session-smoke-test") }
@@ -39,17 +39,17 @@ class WindowsMediaSessionSmokeTest {
             }
 
             val deadline = System.currentTimeMillis() + 2_000
-            while (!WindowsMediaSession.active && System.currentTimeMillis() < deadline) {
+            while (!SystemMediaSession.active && System.currentTimeMillis() < deadline) {
                 Thread.sleep(10)
             }
 
-            assertTrue("The Windows media session was not enabled", WindowsMediaSession.active)
+            assertTrue("The Windows media session was not enabled", SystemMediaSession.active)
             assertNull(
-                "Publishing Windows media metadata failed: ${WindowsMediaSession.lastFailure}",
-                WindowsMediaSession.lastFailure
+                "Publishing Windows media metadata failed: ${SystemMediaSession.lastFailure}",
+                SystemMediaSession.lastFailure
             )
         } finally {
-            WindowsMediaSession.release()
+            SystemMediaSession.release()
             player.release()
         }
     }

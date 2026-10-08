@@ -1,12 +1,16 @@
 package com.lyrenne.desktop.auth
 
+import com.lyrenne.desktop.Platform
 import timber.log.Timber
 import java.io.File
 import java.nio.file.Files
 import java.sql.DriverManager
 import java.util.Base64
 import javax.crypto.Cipher
+import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.PBEKeySpec
 import javax.crypto.spec.SecretKeySpec
 
 sealed class CookieExtractResult {
@@ -15,12 +19,17 @@ sealed class CookieExtractResult {
 }
 
 /**
- * Reads YouTube cookies out of a Chromium cookie database.
+ * Reads YouTube cookies out of a browser's cookie database: Chromium-family or Firefox.
  *
  * Only ever pointed at the dedicated login profile that [BrowserLoginHelper] creates —
  * importing from an installed browser was removed, because Chrome/Edge 127+ encrypt every
  * cookie with app-bound (v20) keys that are wrapped in SYSTEM-scoped DPAPI and cannot be
  * read from user space. A fresh profile still writes v10 cookies, which decrypt fine.
+ *
+ * Chromium's scheme differs per OS. Windows: AES-256-GCM under a DPAPI-wrapped key in
+ * `Local State`. Linux: AES-128-CBC under a key derived from a fixed password, *when the browser
+ * is launched with `--password-store=basic`* (`v10`); otherwise the key lives in the desktop
+ * keyring (`v11`), which this deliberately does not touch. Firefox stores cookies unencrypted.
  */
 object BrowserCookieExtractor {
 
@@ -30,32 +39,22 @@ object BrowserCookieExtractor {
         browserName: String
     ): CookieExtractResult {
         Timber.i("Extracting cookies from $browserName: db=$cookieDbPath")
-        val masterKey = decryptMasterKey(localStatePath)
-            ?: return CookieExtractResult.Error("Failed to decrypt $browserName's encryption key.")
+        // Linux has no key in Local State: v10 values use the fixed basic-store key instead.
+        val masterKey = if (Platform.isWindows) {
+            decryptMasterKey(localStatePath)
+                ?: return CookieExtractResult.Error("Failed to decrypt $browserName's encryption key.")
+        } else null
 
-        val tempDb = Files.createTempFile("ml_cookies_", ".db").toFile()
-        val tempWal = File(tempDb.absolutePath + "-wal")
-        val tempShm = File(tempDb.absolutePath + "-shm")
-        try {
-            cookieDbPath.copyTo(tempDb, overwrite = true)
-            val walFile = File(cookieDbPath.absolutePath + "-wal")
-            val shmFile = File(cookieDbPath.absolutePath + "-shm")
-            if (walFile.exists()) walFile.copyTo(tempWal, overwrite = true)
-            if (shmFile.exists()) shmFile.copyTo(tempShm, overwrite = true)
-        } catch (_: Exception) {
-            try {
-                copyLockedFile(cookieDbPath, tempDb)
-            } catch (_: Exception) {
-                tempDb.delete(); tempWal.delete(); tempShm.delete()
-                return CookieExtractResult.Error("Can't access $browserName's cookies. Try closing $browserName and retry.")
-            }
-        }
+        val tempDb = copyDatabase(cookieDbPath)
+            ?: return CookieExtractResult.Error("Can't access $browserName's cookies. Try closing $browserName and retry.")
 
         val cookieMap = mutableMapOf<String, String>()
         val cookieDomain = mutableMapOf<String, String>()
         // Set when a v20 (app-bound) cookie can't be decrypted with the Local State key.
         // v20 keys are SYSTEM-DPAPI-scoped, so user-space decryption is impossible by design.
         var appBoundBlocked = false
+        // Linux: a v11 cookie means the keyring was used, i.e. --password-store=basic was dropped.
+        var keyringBlocked = false
         try {
             Class.forName("org.sqlite.JDBC")
             DriverManager.getConnection("jdbc:sqlite:${tempDb.absolutePath}").use { conn ->
@@ -75,15 +74,15 @@ object BrowserCookieExtractor {
 
                     val value = when {
                         encryptedValue != null && encryptedValue.size > 3 ->
-                            decryptCookieValue(encryptedValue, masterKey)
+                            if (masterKey != null) decryptCookieValue(encryptedValue, masterKey)
+                            else decryptLinuxV10(encryptedValue)
                         !plainValue.isNullOrBlank() -> plainValue
                         else -> null
                     }
 
-                    if (value == null && encryptedValue != null && encryptedValue.size >= 3 &&
-                        String(encryptedValue, 0, 3) == "v20") {
-                        appBoundBlocked = true
-                    }
+                    val prefix = if (encryptedValue != null && encryptedValue.size >= 3) String(encryptedValue, 0, 3) else null
+                    if (value == null && prefix == "v20") appBoundBlocked = true
+                    if (value == null && masterKey == null && prefix == "v11") keyringBlocked = true
 
                     if (!value.isNullOrBlank()) {
                         val safe = value.filter { it.code >= 0x20 && it.code != 0x7F }
@@ -97,12 +96,19 @@ object BrowserCookieExtractor {
         } catch (e: Exception) {
             return CookieExtractResult.Error("Failed to read cookie database: ${e.message}")
         } finally {
-            tempDb.delete(); tempWal.delete(); tempShm.delete()
+            deleteCopy(tempDb)
         }
 
         Timber.i("$browserName: found ${cookieMap.size} cookies (keys: ${cookieMap.keys.take(10)})")
 
         val hasAuth = cookieMap.containsKey("SAPISID") || cookieMap.containsKey("__Secure-3PAPISID")
+        if (!hasAuth && keyringBlocked) {
+            return CookieExtractResult.Error(
+                "$browserName saved its cookies in the desktop keyring (it ignored " +
+                    "--password-store=basic, often because a launcher script dropped the flag). " +
+                    "Sign in with Firefox instead, or paste your cookie under Advanced."
+            )
+        }
         if (!hasAuth && appBoundBlocked) {
             return CookieExtractResult.Error(
                 "$browserName wrote app-bound encrypted cookies (v20), which can't be read from " +
@@ -111,6 +117,97 @@ object BrowserCookieExtractor {
         }
 
         return buildCookieResult(cookieMap, browserName)
+    }
+
+    /**
+     * Firefox keeps cookies unencrypted in `cookies.sqlite` on every OS: no key, no keyring, no
+     * DPAPI, no app-bound encryption. That is why it is the first choice on Linux.
+     */
+    fun extractFirefoxCookies(profileDir: File, browserName: String): CookieExtractResult {
+        val cookieDb = File(profileDir, "cookies.sqlite")
+        if (!cookieDb.exists()) {
+            return CookieExtractResult.Error(
+                "No sign-in cookies found. This usually means the browser was closed before " +
+                    "signing in. Sign in to music.youtube.com, then close $browserName."
+            )
+        }
+        val tempDb = copyDatabase(cookieDb)
+            ?: return CookieExtractResult.Error("Can't access $browserName's cookies. Try closing $browserName and retry.")
+        val cookieMap = linkedMapOf<String, String>()
+        try {
+            Class.forName("org.sqlite.JDBC")
+            DriverManager.getConnection("jdbc:sqlite:${tempDb.absolutePath}").use { conn ->
+                // .youtube.com first so it wins over the same name on .google.com.
+                val rs = conn.prepareStatement(
+                    """SELECT name, value, host FROM moz_cookies
+                       WHERE host LIKE '%youtube.com' OR host LIKE '%.google.com'
+                       ORDER BY CASE WHEN host LIKE '%youtube.com' THEN 1 ELSE 2 END"""
+                ).executeQuery()
+                while (rs.next()) {
+                    val name = rs.getString("name")
+                    val value = rs.getString("value")?.filter { it.code >= 0x20 && it.code != 0x7F }
+                    if (name !in cookieMap && !value.isNullOrEmpty()) cookieMap[name] = value
+                }
+            }
+        } catch (e: Exception) {
+            return CookieExtractResult.Error("Failed to read cookie database: ${e.message}")
+        } finally {
+            deleteCopy(tempDb)
+        }
+        Timber.i("$browserName: found ${cookieMap.size} cookies (keys: ${cookieMap.keys.take(10)})")
+        return buildCookieResult(cookieMap, browserName)
+    }
+
+    /**
+     * The paste fallback: a `cookie` request header copied out of the browser's DevTools.
+     * Works on every platform, including Flatpak-only systems where no browser can be launched
+     * against a profile of ours.
+     */
+    fun cookiesFromHeader(header: String): CookieExtractResult {
+        val cleaned = header.trim().removePrefix("cookie:").removePrefix("Cookie:").trim()
+        val map = linkedMapOf<String, String>()
+        cleaned.split(';').forEach { part ->
+            val eq = part.indexOf('=')
+            if (eq > 0) {
+                val name = part.substring(0, eq).trim()
+                val value = part.substring(eq + 1).trim().filter { it.code >= 0x20 && it.code != 0x7F }
+                if (name.isNotEmpty() && value.isNotEmpty() && name !in map) map[name] = value
+            }
+        }
+        if (map.isEmpty()) return CookieExtractResult.Error("That doesn't look like a cookie header.")
+        return buildCookieResult(map, "Pasted cookie")
+    }
+
+    /**
+     * Copies a SQLite DB (and its WAL/SHM, which hold the latest writes) to a temp file, so the
+     * browser's lock on the original never matters. Null when it cannot be read at all.
+     */
+    private fun copyDatabase(db: File): File? {
+        val tempDb = Files.createTempFile("ml_cookies_", ".db").toFile()
+        return try {
+            db.copyTo(tempDb, overwrite = true)
+            val walFile = File(db.absolutePath + "-wal")
+            val shmFile = File(db.absolutePath + "-shm")
+            if (walFile.exists()) walFile.copyTo(File(tempDb.absolutePath + "-wal"), overwrite = true)
+            if (shmFile.exists()) shmFile.copyTo(File(tempDb.absolutePath + "-shm"), overwrite = true)
+            tempDb
+        } catch (_: Exception) {
+            // Linux has no mandatory locks, so only Windows ever needs the robocopy route.
+            try {
+                if (!Platform.isWindows) error("copy failed")
+                copyLockedFile(db, tempDb)
+                tempDb
+            } catch (_: Exception) {
+                deleteCopy(tempDb)
+                null
+            }
+        }
+    }
+
+    private fun deleteCopy(tempDb: File) {
+        tempDb.delete()
+        File(tempDb.absolutePath + "-wal").delete()
+        File(tempDb.absolutePath + "-shm").delete()
     }
 
     private fun copyLockedFile(source: File, dest: File) {
@@ -180,23 +277,15 @@ object BrowserCookieExtractor {
         }
     }
 
+    /**
+     * In-process DPAPI through jna-platform. This used to spawn `powershell.exe` per call: slow
+     * to start, once per legacy cookie, and blocked outright where execution policy or AppLocker
+     * forbids it.
+     */
     private fun decryptWithDPAPI(encrypted: ByteArray): ByteArray? {
         return try {
-            val b64 = Base64.getEncoder().encodeToString(encrypted)
-            val ps = ProcessBuilder(
-                "powershell", "-NoProfile", "-NonInteractive", "-Command",
-                "Add-Type -AssemblyName System.Security; " +
-                "[Convert]::ToBase64String(" +
-                "[System.Security.Cryptography.ProtectedData]::Unprotect(" +
-                "[Convert]::FromBase64String('$b64'),\$null," +
-                "[System.Security.Cryptography.DataProtectionScope]::CurrentUser))"
-            ).redirectErrorStream(true).start()
-
-            val output = ps.inputStream.bufferedReader().readText().trim()
-            val exitCode = ps.waitFor()
-            if (exitCode != 0 || output.isBlank()) return null
-            Base64.getDecoder().decode(output.lines().last().trim())
-        } catch (e: Exception) {
+            com.sun.jna.platform.win32.Crypt32Util.cryptUnprotectData(encrypted)
+        } catch (e: Throwable) {
             Timber.e("DPAPI call failed: ${e.message}")
             null
         }
@@ -231,6 +320,33 @@ object BrowserCookieExtractor {
             null
         }
     }
+
+    /**
+     * Linux Chromium with `--password-store=basic`: AES-128-CBC, IV of 16 spaces, key from
+     * PBKDF2-SHA1("peanuts", "saltysalt", 1 iteration). All fixed in Chromium's source.
+     */
+    private val linuxV10Key: ByteArray by lazy {
+        SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1")
+            .generateSecret(PBEKeySpec("peanuts".toCharArray(), "saltysalt".toByteArray(), 1, 128))
+            .encoded
+    }
+
+    private fun linuxV10Cipher(mode: Int): Cipher = Cipher.getInstance("AES/CBC/PKCS5Padding").apply {
+        init(mode, SecretKeySpec(linuxV10Key, "AES"), IvParameterSpec(ByteArray(16) { ' '.code.toByte() }))
+    }
+
+    internal fun decryptLinuxV10(encrypted: ByteArray): String? {
+        if (encrypted.size <= 3 || String(encrypted, 0, 3) != "v10") return null
+        return try {
+            stripBindingHash(linuxV10Cipher(Cipher.DECRYPT_MODE).doFinal(encrypted, 3, encrypted.size - 3))
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /** What Linux Chromium writes for [plain]; the tests build fixtures with it. */
+    internal fun encryptLinuxV10(plain: ByteArray): ByteArray =
+        "v10".toByteArray() + linuxV10Cipher(Cipher.ENCRYPT_MODE).doFinal(plain)
 
     private fun stripBindingHash(decrypted: ByteArray): String {
         val HASH_LEN = 32

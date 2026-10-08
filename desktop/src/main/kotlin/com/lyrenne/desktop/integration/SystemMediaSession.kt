@@ -1,6 +1,7 @@
 package com.lyrenne.desktop.integration
 
 import com.lyrenne.desktop.AppPaths
+import com.lyrenne.desktop.Platform
 import com.lyrenne.desktop.playback.DesktopPlayer
 import com.lyrenne.desktop.playback.PlaybackState
 import com.lyrenne.desktop.playback.RepeatMode
@@ -28,20 +29,21 @@ import java.io.File
 import java.security.MessageDigest
 
 /**
- * Publishes Lyrenne playback through Windows System Media Transport Controls.
+ * Publishes Lyrenne playback through the OS media session: Windows System Media Transport
+ * Controls, or MPRIS over D-Bus on Linux (GNOME/KDE media widgets, lock screen, `playerctl`,
+ * hardware media keys). mediasession-kt implements both behind one API.
  *
  * Windows and tools such as Taskbar Fluent Media Player consume this session for Now Playing
  * metadata, artwork, playback state, timeline data and transport commands. Native integration is
  * optional: any load or runtime failure is logged and leaves the existing AWT media-key fallback
  * active.
  */
-object WindowsMediaSession {
+object SystemMediaSession {
     private const val TIMELINE_UPDATE_MS = 5_000L
     private const val MAX_CACHED_ARTWORK = 24
     private const val MAX_ARTWORK_BYTES = 10L * 1024 * 1024
 
-    private val onWindows =
-        System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true)
+    private val supported = Platform.isWindows || Platform.isLinux
     private val client = OkHttpClient.Builder().followRedirects(true).build()
     private val lock = Any()
 
@@ -63,10 +65,10 @@ object WindowsMediaSession {
     internal val active: Boolean get() = session?.enabled == true
 
     /**
-     * Start publishing [player] state. Returns true when SMTC replaced the AWT media-key path.
+     * Start publishing [player] state. Returns true when the OS session replaced the AWT media-key path.
      */
     fun initialize(player: DesktopPlayer): Boolean {
-        if (!onWindows || observerJob != null) return session != null
+        if (!supported || observerJob != null) return session != null
         lastFailure = null
 
         return try {
@@ -104,11 +106,11 @@ object WindowsMediaSession {
                     .distinctUntilChanged()
                     .collect { speed -> safely { it.setRate(speed) } }
             }
-            Timber.i("Windows media session initialized")
+            Timber.i("System media session initialized")
             true
         } catch (e: Throwable) {
             lastFailure = e.message ?: e::class.simpleName
-            Timber.w("Windows media session unavailable: ${e.message}")
+            Timber.w("System media session unavailable: ${e.message}")
             release()
             false
         }
@@ -204,7 +206,7 @@ object WindowsMediaSession {
         val directory = artworkDirectory()
         val target = File(directory, "lyrenne.png")
         if (!target.exists()) {
-            WindowsMediaSession::class.java.getResourceAsStream("/icon.png")?.use { input ->
+            SystemMediaSession::class.java.getResourceAsStream("/icon.png")?.use { input ->
                 target.outputStream().use { output -> input.copyTo(output) }
             }
         }
@@ -275,6 +277,8 @@ object WindowsMediaSession {
                 pruneArtworkCache(directory, keep = target)
                 target
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e // cancellation must propagate, not be treated as a failure
         } catch (e: Exception) {
             partial?.delete()
             Timber.w("Could not cache media-session artwork: ${e.message}")

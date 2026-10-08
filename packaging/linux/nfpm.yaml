@@ -1,0 +1,45 @@
+# Linux .deb / .rpm for Lyrenne, built from `./gradlew :desktop:createDistributable` output.
+#
+# nfpm rather than Compose's packageDeb/packageRpm because those cannot declare dependencies,
+# and Lyrenne needs the distro's VLC (it is not bundled on Linux). Run from the repo root:
+#   LYRENNE_VERSION=2.14.0 nfpm package -f packaging/linux/nfpm.yaml -p deb -t dist/
+#   LYRENNE_VERSION=2.14.0 nfpm package -f packaging/linux/nfpm.yaml -p rpm -t dist/
+name: lyrenne
+arch: amd64
+platform: linux
+version: ${LYRENNE_VERSION}
+section: sound
+priority: optional
+maintainer: Lyrenne <noreply@github.com>
+description: |
+  Lyrenne, a YouTube Music player for your desktop.
+  Library sync, downloads, lyrics, Discord and Last.fm, Listen Together.
+homepage: https://github.com/Doctordefector/Lyrenne
+license: GPL-3.0
+
+overrides:
+  deb:
+    depends:
+      - libvlc5
+      - vlc-plugin-base
+    recommends:
+      - ffmpeg
+      - libnotify-bin
+  rpm:
+    depends:
+      - vlc
+    recommends:
+      - (ffmpeg or ffmpeg-free)
+      - libnotify
+
+contents:
+  - src: desktop/build/compose/binaries/main/app/Lyrenne/
+    dst: /opt/lyrenne
+    type: tree
+  - src: /opt/lyrenne/bin/Lyrenne
+    dst: /usr/bin/lyrenne
+    type: symlink
+  - src: packaging/linux/lyrenne.desktop
+    dst: /usr/share/applications/lyrenne.desktop
+  - src: desktop/src/main/resources/icon.png
+    dst: /usr/share/icons/hicolor/512x512/apps/lyrenne.png

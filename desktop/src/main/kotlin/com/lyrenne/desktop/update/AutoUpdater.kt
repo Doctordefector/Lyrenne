@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.update
 
+import com.lyrenne.desktop.Platform
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,7 +27,31 @@ import java.util.zip.ZipInputStream
  * Program Files, it's installed. Otherwise it's portable.
  */
 object AutoUpdater {
-    const val CURRENT_VERSION = "2.14.0"
+    /**
+     * Generated from `lyrenneVersion` in build.gradle.kts (version.properties), so the version is
+     * defined once. A missing resource means a broken build, and "0.0.0" would make every release
+     * look newer, so it fails loudly instead.
+     */
+    val CURRENT_VERSION: String = AutoUpdater::class.java.getResourceAsStream("/version.properties")
+        ?.use { java.util.Properties().apply { load(it) }.getProperty("version") }
+        ?: error("version.properties missing from the build")
+
+    /**
+     * Only the Windows portable build replaces itself. Linux installs belong to a package manager
+     * (and live under a root-owned /opt), so there the check only points at the release page.
+     */
+    val canSelfUpdate: Boolean get() = Platform.isWindows
+
+    /**
+     * Ed25519 public key (base64 X.509) that release ZIPs are signed with. The private half stays
+     * offline, so a compromised GitHub account cannot ship code: HTTPS-to-GitHub alone only proves
+     * the file came from GitHub. Generate the pair with `./gradlew :desktop:generateUpdateSigningKey`
+     * and sign each release with `:desktop:signPortableZip`.
+     *
+     * While this is blank, updates install unverified as before (and say so in the log). Once set,
+     * a release without a valid `<zip>.sig` asset is refused.
+     */
+    internal const val UPDATE_PUBLIC_KEY = "MCowBQYDK2VwAyEASjXI0QXvXSkBn+Op+cHe3fFDxdSS2yRcFfCOoQdCXzI="
     private const val GITHUB_OWNER = "Doctordefector"
     private const val GITHUB_REPO = "Lyrenne"
 
@@ -67,7 +92,8 @@ object AutoUpdater {
             val downloadUrl: String,
             val downloadSize: Long,
             val releaseUrl: String?,
-            val isPortable: Boolean
+            val isPortable: Boolean,
+            val signatureUrl: String? = null
         ) : UpdateState()
         data class Downloading(val progress: Float, val version: String) : UpdateState()
         data class ReadyToInstall(val version: String, val updateFile: File, val isPortable: Boolean) : UpdateState()
@@ -99,6 +125,18 @@ object AutoUpdater {
                     return@launch
                 }
 
+                if (!canSelfUpdate) {
+                    _state.value = UpdateState.UpdateAvailable(
+                        version = latestVersion,
+                        releaseNotes = release.body,
+                        downloadUrl = release.html_url ?: "",
+                        downloadSize = 0,
+                        releaseUrl = release.html_url,
+                        isPortable = false
+                    )
+                    return@launch
+                }
+
                 val portable = isPortableInstall()
                 Timber.i("Install mode: ${if (portable) "portable" else "installed"}")
 
@@ -127,7 +165,8 @@ object AutoUpdater {
                     downloadUrl = asset.browser_download_url,
                     downloadSize = asset.size,
                     releaseUrl = release.html_url,
-                    isPortable = portable
+                    isPortable = portable,
+                    signatureUrl = release.assets.find { it.name == asset.name + ".sig" }?.browser_download_url
                 )
             } catch (e: Exception) {
                 Timber.e("Update check failed: ${e.message}")
@@ -138,7 +177,7 @@ object AutoUpdater {
 
     fun downloadAndInstall() {
         val current = _state.value
-        if (current !is UpdateState.UpdateAvailable) return
+        if (current !is UpdateState.UpdateAvailable || !canSelfUpdate) return
 
         scope.launch {
             try {
@@ -155,6 +194,15 @@ object AutoUpdater {
                     _state.value = UpdateState.Downloading(progress, current.version)
                 }
                 Timber.i("Download complete: ${downloadFile.length()} bytes")
+
+                if (!verifyDownload(downloadFile, current.signatureUrl, updateDir)) {
+                    downloadFile.delete()
+                    _state.value = UpdateState.Error(
+                        "The update's signature is missing or invalid, so it was not installed. " +
+                            "Download it from the release page instead."
+                    )
+                    return@launch
+                }
 
                 if (current.isPortable) {
                     // Extract ZIP to a fresh temp staging dir to avoid leftover locked files
@@ -198,6 +246,58 @@ object AutoUpdater {
                 _state.value = UpdateState.Error("Download failed: ${e.message}")
             }
         }
+    }
+
+    /** False only when a key is configured and the signature is missing or wrong. */
+    private fun verifyDownload(file: File, signatureUrl: String?, dir: File): Boolean {
+        if (UPDATE_PUBLIC_KEY.isBlank()) {
+            Timber.w("No update signing key configured; installing unverified")
+            return true
+        }
+        if (signatureUrl == null) {
+            Timber.e("Release has no signature asset")
+            return false
+        }
+        val sigFile = File(dir, file.name + ".sig")
+        return try {
+            downloadFile(signatureUrl, sigFile, 0) {}
+            verifySignature(file, sigFile.readText().trim(), UPDATE_PUBLIC_KEY)
+        } catch (e: Exception) {
+            Timber.e("Signature check failed: ${e.message}")
+            false
+        } finally {
+            sigFile.delete()
+        }
+    }
+
+    /**
+     * Ed25519 over the file's SHA-256. Pure Ed25519 needs the whole message in memory, and a
+     * release ZIP is ~200 MB against a 512 MB heap; the digest streams.
+     */
+    internal fun verifySignature(file: File, signatureB64: String, publicKeyB64: String): Boolean = try {
+        val key = java.security.KeyFactory.getInstance("Ed25519")
+            .generatePublic(java.security.spec.X509EncodedKeySpec(java.util.Base64.getDecoder().decode(publicKeyB64)))
+        java.security.Signature.getInstance("Ed25519").run {
+            initVerify(key)
+            update(sha256(file))
+            verify(java.util.Base64.getDecoder().decode(signatureB64))
+        }
+    } catch (e: Exception) {
+        Timber.e("Signature verification error: ${e.message}")
+        false
+    }
+
+    internal fun sha256(file: File): ByteArray {
+        val md = java.security.MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buf = ByteArray(64 * 1024)
+            while (true) {
+                val n = input.read(buf)
+                if (n < 0) break
+                md.update(buf, 0, n)
+            }
+        }
+        return md.digest()
     }
 
     fun applyUpdate() {

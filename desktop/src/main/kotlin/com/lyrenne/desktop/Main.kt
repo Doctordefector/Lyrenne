@@ -39,7 +39,7 @@ import com.lyrenne.desktop.integration.DiscordRPC
 import com.lyrenne.desktop.integration.LastFmManager
 import com.lyrenne.desktop.integration.WindowsAppIdentity
 import com.lyrenne.desktop.integration.WindowsStartMenuShortcut
-import com.lyrenne.desktop.integration.WindowsMediaSession
+import com.lyrenne.desktop.integration.SystemMediaSession
 import com.lyrenne.desktop.notification.DesktopNotification
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -154,7 +154,8 @@ private fun defaultWindowSize(): DpSize {
  * Resolved before anything else runs, so it must not depend on app state.
  */
 private fun logFile(): File {
-    val next = File(AppPaths.appDir, "lyrenne.log")
+    // Next to the app when portable; installed (Linux) copies live in a read-only /opt.
+    val next = if (AppPaths.isPortable) File(AppPaths.appDir, "lyrenne.log") else File(AppPaths.dataDir, "lyrenne.log")
     return if (next.parentFile?.canWrite() == true) next
     else File(System.getProperty("java.io.tmpdir"), "lyrenne.log")
 }
@@ -252,6 +253,22 @@ private fun runApp() {
     PreferencesManager.initialize()
     configureImageLoader()
     applyNetworkPreferences()
+    // Seeds the OS light/dark read here, before any window, instead of inside composition.
+    com.lyrenne.desktop.ui.theme.SystemTheme.isDark.value
+
+    // A Windows app folder the user cannot write (e.g. unzipped into Program Files) sends data to
+    // the working directory, which changes with how the app is launched. Say so rather than
+    // letting the library appear to vanish between launches.
+    if (AppPaths.appDirNotWritable) {
+        javax.swing.JOptionPane.showMessageDialog(
+            null,
+            "Lyrenne can't write to its folder:\n${AppPaths.appDir}\n\n" +
+                "Settings and your library are being kept in\n${AppPaths.dataDir}\ninstead. " +
+                "Move Lyrenne to a folder you own (e.g. Documents) to keep everything together.",
+            "Lyrenne",
+            javax.swing.JOptionPane.WARNING_MESSAGE
+        )
+    }
 
     // Sweep the login profile: cookie store and caches out, saved passwords in.
     //
@@ -291,7 +308,7 @@ private fun runApp() {
                 // Keeps the Start Menu shortcut in step with the setting, and repoints it when the
                 // portable folder has moved. Without it Windows has no name for the app id.
                 WindowsStartMenuShortcut.apply(PreferencesManager.preferences.value.windowsMediaAppName)
-                WindowsMediaSession.initialize(player)
+                SystemMediaSession.initialize(player)
             }
             MediaKeyHandler.initialize(player, handleHardwareMediaKeys = !systemMediaSessionAvailable)
             // Auth needs network — run after window is visible
@@ -309,7 +326,7 @@ private fun runApp() {
              * Sync again whenever someone signs in.
              *
              * The launch sync above is a single shot, and on a first run it fires before there are
-             * any credentials, so it bails with "Not logged in". The user then signs in, and
+             * any credentials, so it returns without syncing. The user then signs in, and
              * nothing synced their library until the next restart: an empty app that looks broken.
              * Onboarding made that the path every new user takes, but the gap was always there for
              * anyone signing in from Settings.
@@ -352,7 +369,7 @@ private fun runApp() {
                 DesktopNotification.release()
                 LastFmManager.release()
                 DiscordRPC.release()
-                WindowsMediaSession.release()
+                SystemMediaSession.release()
                 MediaKeyHandler.release()
                 player.release()
                 exitApplication()
@@ -375,7 +392,8 @@ private fun runApp() {
 
         Window(
             onCloseRequest = {
-                if (prefs.minimizeToTray) {
+                // Only hide when a tray icon exists to bring the window back; GNOME has none.
+                if (prefs.minimizeToTray && DesktopNotification.trayActive) {
                     // Minimize to tray instead of exiting
                     windowVisible = false
                 } else {
@@ -383,7 +401,7 @@ private fun runApp() {
                     DesktopNotification.release()
                     LastFmManager.release()
                     DiscordRPC.release()
-                    WindowsMediaSession.release()
+                    SystemMediaSession.release()
                     MediaKeyHandler.release()
                     player.release()
                     exitApplication()
@@ -609,7 +627,7 @@ private fun runApp() {
                             DesktopNotification.release()
                             LastFmManager.release()
                             DiscordRPC.release()
-                            WindowsMediaSession.release()
+                            SystemMediaSession.release()
                             MediaKeyHandler.release()
                             player.release()
                             exitApplication()

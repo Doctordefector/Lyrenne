@@ -5,6 +5,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import timber.log.Timber
 import java.io.File
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.Properties
 
 enum class AudioQuality(val displayName: String, val bitrate: Int) {
@@ -39,7 +42,6 @@ data class AppPreferences(
     val showLyrics: Boolean = true,
     val cacheSize: Long = 500L * 1024 * 1024, // 500 MB default
     val downloadPath: String? = null,
-    val discordToken: String? = null,
     val discordRpcEnabled: Boolean = false,
     // Off by default: enabling it writes the only file Lyrenne puts outside its own folder.
     val windowsMediaAppName: Boolean = true,
@@ -135,7 +137,6 @@ object PreferencesManager {
                     showLyrics = props.getProperty("showLyrics")?.toBoolean() ?: true,
                     cacheSize = props.getProperty("cacheSize")?.toLongOrNull() ?: (500L * 1024 * 1024),
                     downloadPath = props.getProperty("downloadPath"),
-                    discordToken = props.getProperty("discordToken"),
                     discordRpcEnabled = props.getProperty("discordRpcEnabled")?.toBoolean() ?: false,
                     // Read from a new key on purpose. 2.12.0 stored this under "windowsMediaAppName"
                     // with an off default that nearly nobody changed, so that key records the
@@ -210,6 +211,8 @@ object PreferencesManager {
         }
     }
 
+    // Synchronized: setters run on the UI thread and on IO threads (Listen Together, media keys).
+    @Synchronized
     private fun savePreferences() {
         try {
             val props = Properties()
@@ -223,7 +226,6 @@ object PreferencesManager {
             props.setProperty("showLyrics", prefs.showLyrics.toString())
             props.setProperty("cacheSize", prefs.cacheSize.toString())
             prefs.downloadPath?.let { props.setProperty("downloadPath", it) }
-            prefs.discordToken?.let { props.setProperty("discordToken", it) }
             props.setProperty("discordRpcEnabled", prefs.discordRpcEnabled.toString())
             props.setProperty(WINDOWS_MEDIA_NAME_KEY, prefs.windowsMediaAppName.toString())
             props.setProperty("lastFmEnabled", prefs.lastFmEnabled.toString())
@@ -270,8 +272,14 @@ object PreferencesManager {
             props.setProperty("syncPruneBackupDone", prefs.syncPruneBackupDone.toString())
             props.setProperty("onboardingCompleted", prefs.onboardingCompleted.toString())
 
-            prefsFile.outputStream().use {
-                props.store(it, "Lyrenne Preferences")
+            // Write a sibling temp file and rename over the real one, so a crash mid-write
+            // can never leave a truncated file (which would load as all defaults).
+            val tmp = File(prefsFile.parentFile, prefsFile.name + ".tmp")
+            tmp.outputStream().use { props.store(it, "Lyrenne Preferences") }
+            try {
+                Files.move(tmp.toPath(), prefsFile.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(tmp.toPath(), prefsFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
             }
         } catch (e: Exception) {
             Timber.e("Failed to save preferences: ${e.message}")
@@ -333,11 +341,6 @@ object PreferencesManager {
         savePreferences()
     }
 
-    fun setDiscordToken(token: String?) {
-        _preferences.value = _preferences.value.copy(discordToken = token)
-        savePreferences()
-    }
-
     fun setDiscordRpcEnabled(enabled: Boolean) {
         _preferences.value = _preferences.value.copy(discordRpcEnabled = enabled)
         savePreferences()
@@ -384,9 +387,10 @@ object PreferencesManager {
         savePreferences()
     }
 
-    fun setVolume(volume: Float) {
+    /** [persist] = false while a slider is being dragged; the drag end persists once. */
+    fun setVolume(volume: Float, persist: Boolean = true) {
         _preferences.value = _preferences.value.copy(volume = volume.coerceIn(0f, 1f))
-        savePreferences()
+        if (persist) savePreferences()
     }
 
     fun setMuted(muted: Boolean) {
@@ -544,14 +548,11 @@ object PreferencesManager {
             }
         }
 
-        // Default: Downloads folder next to the app
-        val appDir = getAppDirectory()
-        val baseDir = File(appDir, "Downloads")
+        // Default: Downloads next to the app (portable), ~/Music/Lyrenne otherwise
+        val baseDir = com.lyrenne.desktop.AppPaths.defaultDownloadsDir
         baseDir.mkdirs()
         return baseDir
     }
-
-    private fun getAppDirectory(): File = com.lyrenne.desktop.AppPaths.dataDir.parentFile
 
     fun getCacheDirectory(): File {
         val cacheDir = com.lyrenne.desktop.AppPaths.cacheDir

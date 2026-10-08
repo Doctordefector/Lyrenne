@@ -58,7 +58,8 @@ fun LibraryScreen(
     onArtistClick: (String) -> Unit = {},
     onPlaylistClick: (String) -> Unit = {},
     onLocalPlaylistClick: (String) -> Unit = {},
-    onAutoPlaylistClick: (com.lyrenne.desktop.ui.AutoPlaylistType) -> Unit = {}
+    onAutoPlaylistClick: (com.lyrenne.desktop.ui.AutoPlaylistType) -> Unit = {},
+    onSignIn: () -> Unit = {}
 ) {
     var selectedTab by remember { mutableStateOf(LibraryTab.Songs) }
     var searchQuery by remember { mutableStateOf("") }
@@ -176,6 +177,30 @@ fun LibraryScreen(
                     }) {
                         Icon(Icons.Default.Close, "Dismiss")
                     }
+                }
+            }
+        }
+
+        if (!authState.isLoggedIn) {
+            Spacer(Modifier.height(8.dp))
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(32.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Sign in to see your YouTube Music library", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "Downloads and local playlists work without signing in",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Button(onClick = onSignIn) { Text("Sign in") }
                 }
             }
         }

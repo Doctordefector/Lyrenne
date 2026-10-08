@@ -8,9 +8,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
-import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.*
@@ -93,6 +93,19 @@ fun App(player: DesktopPlayer) {
 
     // Navigation stack for detail screens
     val detailStack = remember { mutableStateListOf<DetailScreen>() }
+
+    // Keeps each screen's saveable state (loaded page, scroll position, filters) while another
+    // screen covers it, so Back and tab switches restore instead of refetching from the top.
+    // Detail entries are keyed by depth too, so the same album twice in the stack stays separate.
+    val stateHolder = rememberSaveableStateHolder()
+    val detailKeys = detailStack.mapIndexed { i, d -> "detail:$i:$d" }
+    val liveDetailKeys = remember { mutableSetOf<String>() }
+    SideEffect {
+        // An entry popped off the stack is gone for good; drop its state rather than leak it.
+        (liveDetailKeys - detailKeys.toSet()).forEach(stateHolder::removeState)
+        liveDetailKeys.clear()
+        liveDetailKeys.addAll(detailKeys)
+    }
 
     fun navigateToAlbum(browseId: String) {
         detailStack.add(DetailScreen.Album(browseId))
@@ -292,6 +305,9 @@ fun App(player: DesktopPlayer) {
 
                     Spacer(Modifier.weight(1f))
 
+                    // Separates destinations above from tools below, which otherwise look identical.
+                    HorizontalDivider(Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+
                     // Equalizer
                     NavigationRailItem(
                         icon = { Icon(Icons.Default.Equalizer, "Equalizer") },
@@ -340,15 +356,7 @@ fun App(player: DesktopPlayer) {
                         }
                     )
 
-                    if (!authState.isLoggedIn) {
-                        NavigationRailItem(
-                            icon = { Icon(Icons.AutoMirrored.Filled.Login, "Sign In") },
-                            label = { Text("Sign In") },
-                            selected = false,
-                            colors = navigationColors,
-                            onClick = { currentAppScreen = AppScreen.Login }
-                        )
-                    }
+                    // Signing in lives in one place: the account button in the rail header.
 
                     Spacer(Modifier.height(16.dp))
                             }
@@ -368,6 +376,7 @@ fun App(player: DesktopPlayer) {
                         // Screen content
                         Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                             val currentDetail = detailStack.lastOrNull()
+                            stateHolder.SaveableStateProvider(detailKeys.lastOrNull() ?: "screen:${currentScreen.name}") {
                             if (currentDetail != null) {
                                 when (currentDetail) {
                                     is DetailScreen.Album -> AlbumScreen(
@@ -469,7 +478,8 @@ fun App(player: DesktopPlayer) {
                                         },
                                         onAutoPlaylistClick = { type ->
                                             detailStack.add(DetailScreen.AutoPlaylist(type))
-                                        }
+                                        },
+                                        onSignIn = { currentAppScreen = AppScreen.Login }
                                     )
                                     Screen.Settings -> SettingsScreen(
                                         onLoginClick = { currentAppScreen = AppScreen.Login },
@@ -478,6 +488,7 @@ fun App(player: DesktopPlayer) {
                                         onSectionScrolled = { settingsScrollTarget = null }
                                     )
                                 }
+                            }
                             }
 
                             // Overlays the screen rather than sitting in the layout, so no screen

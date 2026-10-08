@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.auth
 
+import com.lyrenne.desktop.AppPaths
 import com.metrolist.innertube.YouTube
 import com.metrolist.innertube.utils.parseCookieString
 import com.metrolist.innertube.utils.sha1
@@ -183,7 +184,7 @@ object AuthManager {
                 return
             }
             runCatching {
-                credentialsFile.writeText(json.encodeToString(refreshed))
+                AppPaths.writeAtomic(credentialsFile, json.encodeToString(refreshed))
                 applyCredentials(refreshed)
                 Timber.i("Refreshed the stored YouTube session")
             }.onFailure { Timber.e("Could not save the refreshed session: ${it.message}") }
@@ -213,7 +214,7 @@ object AuthManager {
             filesLock.withLock {
                 // Switched to, or removed, while the page was loading.
                 if (!file.isFile || readAccountFile(file) != saved) return@withLock
-                runCatching { file.writeText(json.encodeToString(updated)) }
+                runCatching { AppPaths.writeAtomic(file, json.encodeToString(updated)) }
                     .onFailure { Timber.w("Could not save a refreshed saved account: ${it.message}") }
             }
         }
@@ -332,7 +333,7 @@ object AuthManager {
                 // keep it, so it never changes under a refresh.
                 val credentials = stored.withId()
                 if (credentials != stored) {
-                    runCatching { credentialsFile.writeText(json.encodeToString(credentials)) }
+                    runCatching { AppPaths.writeAtomic(credentialsFile, json.encodeToString(credentials)) }
                 }
                 applyCredentials(credentials)
                 _authState.value = AuthState(
@@ -402,6 +403,8 @@ object AuthManager {
                     channelHandle = ytAccountInfo.channelHandle ?: "",
                     avatarUrl = ytAccountInfo.thumbnailUrl
                 )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // cancellation must propagate, not be treated as a failure
             } catch (e: Exception) {
                 // Fallback: try extracting from ytcfg page
                 val pageName = ytcfg["ACCOUNT_NAME"]
@@ -427,7 +430,7 @@ object AuthManager {
                 // replaces it, and drops any saved copy of it.
                 stashActive(except = credentials)
                 dropSavedCopiesOf(credentials)
-                credentialsFile.writeText(json.encodeToString(credentials))
+                AppPaths.writeAtomic(credentialsFile, json.encodeToString(credentials))
                 // Inside the lock, so memory and disk can never name different accounts.
                 applyCredentials(credentials)
                 _authState.value = AuthState(
@@ -439,6 +442,8 @@ object AuthManager {
             loadSavedAccounts()
 
             Result.success(accountInfo)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e // cancellation must propagate, not be treated as a failure
         } catch (e: Exception) {
             _authState.value = _authState.value.copy(
                 isLoading = false,
@@ -456,10 +461,12 @@ object AuthManager {
         val active = readCredentials()?.withId() ?: return
         if (except != null && sameAccount(active, except)) return
         accountsDir.mkdirs()
-        File(accountsDir, "${active.accountId}.json")
-            // An active account YouTube already signed out is kept, but marked, so it is not offered
-            // as a one-click switch into an anonymous session.
-            .writeText(json.encodeToString(active.copy(sessionExpired = !_authState.value.isLoggedIn)))
+        // An active account YouTube already signed out is kept, but marked, so it is not offered
+        // as a one-click switch into an anonymous session.
+        AppPaths.writeAtomic(
+            File(accountsDir, "${active.accountId}.json"),
+            json.encodeToString(active.copy(sessionExpired = !_authState.value.isLoggedIn))
+        )
         Timber.i("Kept ${active.accountInfo?.name ?: "the previous account"} for switching back")
     }
 
@@ -478,7 +485,7 @@ object AuthManager {
                 error("This account's session expired. Sign in to it again to use it.")
             }
             stashActive(except = target)
-            credentialsFile.writeText(json.encodeToString(target))
+            AppPaths.writeAtomic(credentialsFile, json.encodeToString(target))
             file.delete()
             // Inside the lock: two switches in quick succession otherwise interleaved here, and
             // the app could end up playing as one account while credentials.json held another.

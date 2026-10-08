@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.notification
 
+import com.lyrenne.desktop.Platform
 import com.lyrenne.desktop.playback.DesktopPlayer
 import com.lyrenne.desktop.playback.SongInfo
 import com.lyrenne.desktop.settings.PreferencesManager
@@ -15,6 +16,12 @@ import java.awt.TrayIcon
  */
 object DesktopNotification {
     private var trayIcon: TrayIcon? = null
+
+    /**
+     * True only once a tray icon was actually added. GNOME (Ubuntu, Fedora) has no AWT tray, and
+     * hiding the window there leaves no way to bring it back, so minimize-to-tray checks this.
+     */
+    val trayActive: Boolean get() = trayIcon != null
     private var observeJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
@@ -28,11 +35,27 @@ object DesktopNotification {
     var onTrayMenu: ((x: Int, y: Int) -> Unit)? = null
 
     fun initialize(player: DesktopPlayer) {
-        if (!SystemTray.isSupported()) {
-            Timber.w("System tray not supported — notifications and tray minimize disabled")
-            return
-        }
+        if (SystemTray.isSupported()) addTrayIcon()
+        else Timber.w("System tray not supported — tray minimize disabled")
+        // Without a tray, Linux still gets notifications through notify-send.
+        if (trayIcon == null && !Platform.isLinux) return
 
+        // Watch for song changes to show notifications
+        observeJob = scope.launch {
+            var previousSongId: String? = null
+            player.state.collectLatest { state ->
+                val currentSong = state.currentSong
+                if (currentSong != null && currentSong.id != previousSongId && state.isPlaying) {
+                    previousSongId = currentSong.id
+                    if (PreferencesManager.preferences.value.notificationsEnabled) {
+                        showNowPlaying(currentSong)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun addTrayIcon() {
         try {
             // icon-small.png, not icon.png: the tray renders at 16px, where the full mark's gold
             // ring is most of the pixels and the icon reads as a gold box instead of a lyre.
@@ -67,43 +90,38 @@ object DesktopNotification {
             SystemTray.getSystemTray().add(trayIcon)
         } catch (e: Exception) {
             Timber.w("Failed to create tray icon: ${e.message}")
-            return
-        }
-
-        // Watch for song changes to show notifications
-        observeJob = scope.launch {
-            var previousSongId: String? = null
-            player.state.collectLatest { state ->
-                val currentSong = state.currentSong
-                if (currentSong != null && currentSong.id != previousSongId && state.isPlaying) {
-                    previousSongId = currentSong.id
-                    if (PreferencesManager.preferences.value.notificationsEnabled) {
-                        showNowPlaying(currentSong)
-                    }
-                }
-            }
+            trayIcon = null
         }
     }
 
     private fun showNowPlaying(song: SongInfo) {
         try {
-            trayIcon?.displayMessage(
-                song.title,
-                song.artist,
-                TrayIcon.MessageType.NONE
-            )
+            val icon = trayIcon
+            if (icon != null) icon.displayMessage(song.title, song.artist, TrayIcon.MessageType.NONE)
+            else notifySend(song.title, song.artist)
         } catch (e: Exception) {
             Timber.w("Failed to show notification: ${e.message}")
         }
     }
 
+    /** Linux without a tray: notify-send ships with libnotify on virtually every desktop. */
+    private fun notifySend(title: String, message: String) {
+        if (!Platform.isLinux) return
+        runCatching {
+            ProcessBuilder("notify-send", "--app-name=Lyrenne", "--icon=lyrenne", title, message)
+                .redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start()
+        }.onFailure { Timber.w("notify-send unavailable: ${it.message}") }
+    }
+
     /**
-     * Show a tray balloon. Silently does nothing when there is no tray icon, which is the case
-     * on a desktop without a system tray, so callers do not have to care.
+     * Show a tray balloon, or notify-send on Linux without a tray. Silently does nothing
+     * otherwise, so callers do not have to care.
      */
     fun notify(title: String, message: String) {
         try {
-            trayIcon?.displayMessage(title, message, TrayIcon.MessageType.INFO)
+            val icon = trayIcon
+            if (icon != null) icon.displayMessage(title, message, TrayIcon.MessageType.INFO)
+            else notifySend(title, message)
         } catch (e: Exception) {
             Timber.w("Failed to show notification: ${e.message}")
         }

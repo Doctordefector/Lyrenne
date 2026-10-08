@@ -8,7 +8,8 @@ Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop 
   - kizzy module: upstream deleted it; our copy remains in repo but is NO LONGER compiled into desktop (was never referenced — desktop Discord RPC is the named-pipe DiscordRPC.kt)
 - **Desktop module**: `desktop/` folder
 - **Shared modules**: `innertube/`, `lrclib/`, `betterlyrics/`, `kugou/`, `kizzy/`, `lastfm/`, `shazamkit/` (sources included directly via `kotlin.srcDir()`, not as project dependencies)
-- **Codebase**: ~12,000 lines of Kotlin across 34 files + 1 protobuf file
+- **Codebase**: ~27,000 lines of Kotlin across ~70 files in `desktop/` + 1 protobuf file
+- **Platforms**: Windows (portable ZIP) and Linux (.deb/.rpm via nfpm). See Linux port
 
 ## Architecture
 
@@ -30,7 +31,7 @@ Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop 
 ## Desktop Port Status
 
 ### Fully Working
-- Authentication via browser cookie extraction (Opera, Chrome, Edge, Brave, Vivaldi, Firefox)
+- Authentication via a temp-profile browser sign-in (Windows: Edge, Chrome, Brave, Firefox; Linux: Firefox incl. snap, LibreWolf, Chrome/Chromium/Edge/Brave/Vivaldi) plus a paste-cookie fallback
 - One login path: "Sign in with browser" (temp profile). Import-from-installed was removed in 2.5.1, see Authentication System
 - Personalized home feed with continuations (up to 5 pages)
 - YouTube Music library sync (songs, albums, artists, playlists)
@@ -41,7 +42,7 @@ Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop 
 - Media key shortcuts (space, Ctrl+P, Ctrl+Right/Left, Ctrl+S, Ctrl+R, hardware media keys)
 - Text field focus detection — keyboard shortcuts suppressed while typing
 - Settings UI with persistence (properties file)
-- Material3 theme with system dark/light detection (Windows registry, macOS defaults, Linux GTK)
+- Material3 theme with system dark/light detection (Windows registry, macOS defaults, GNOME color-scheme/gtk-theme, KDE kdeglobals), polled off the UI thread every 30 s
 - Detail screens: Album, Artist, Playlist (with full navigation stack)
 - Seekable progress bar in MiniPlayer
 - Lyrics display (synced + plain) with auto-scroll, word-by-word highlighting when the provider sends word timing, and manual search. See Lyrics parsing
@@ -89,6 +90,9 @@ Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop 
 - Backup & restore (ZIP of preferences.properties + lyrenne.db + credentials.json, BackupManager, restore needs restart)
 - Library grid/list view toggle (albums + artists tabs, LibraryViewMode pref)
 - Play All / Shuffle All buttons (library songs tab, local/auto playlists)
+- Search within one playlist (YouTube, local and auto playlists; issue #14). A YouTube playlist loads its remaining pages once a search starts, so it searches all of it. Move Up/Down is hidden while filtering
+- Smart Shuffle on every playlist (issue #15). See Smart Shuffle
+- Mouse wheel steps any slider (issue #13): volume 5%, seek 5 s, EQ 1 dB, lyrics size 2 pt. `ui/components/WheelStep.kt`. The tray icon itself cannot: AWT's `TrayIcon` delivers no wheel events
 - Car / USB export (`CarExport.kt`): "Export to Folder" button on Album/Playlist/LocalPlaylist writes loudness-normalized 320k MP3s named `01 - Artist - Title.mp3`; Settings → Storage → "Normalize Folder for Car / USB" runs the same pass over an existing folder into `<folder>/Normalized/`. Needs ffmpeg (bundled next to the exe or on PATH); "Force Dual Mono on Export" setting folds L+R for one-sided tracks
 
 ### Partially Implemented
@@ -112,8 +116,8 @@ Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop 
 | File | Purpose |
 |------|---------|
 | auth/AuthManager.kt | YouTube auth, credentials persistence, ytcfg/SESSION_INDEX/DATASYNC_ID, SAPISIDHASH |
-| auth/BrowserCookieExtractor.kt | Chromium + Firefox cookie DB detection & decryption (AES-256-GCM + DPAPI) |
-| auth/BrowserLoginHelper.kt | Browser launching with temp profile, cookie polling after browser close |
+| auth/BrowserCookieExtractor.kt | Chromium (Windows AES-256-GCM + DPAPI via JNA; Linux AES-128-CBC basic-store key) and Firefox (plaintext) cookie readers, pasted-header parser |
+| auth/BrowserLoginHelper.kt | OS-aware browser discovery (`LoginBrowser`), launch with temp profile, cookie polling after browser close |
 
 #### Data & Playback
 | File | Purpose |
@@ -224,8 +228,8 @@ Edge 46/46 YouTube cookies were `v20`, zero `v10`. Do not re-add an import-from-
 feature without solving SYSTEM DPAPI first.
 
 ### How it works
-1. **BrowserLoginHelper** launches Edge/Chrome/Brave with a dedicated profile at
-   `<app-dir>/data/login-profile`, waits for the user to sign in and close the browser
+1. **BrowserLoginHelper** launches the first browser `findLoginBrowser()` finds with a dedicated profile at
+   `<data>/login-profile` (snap browsers: `~/snap/<name>/common/lyrenne-login-profile`), waits for the user to sign in and close the browser
 2. A fresh profile still writes old-style `v10` cookies, which decrypt normally
 3. **BrowserCookieExtractor.extractChromiumCookies()** reads that profile's cookie DB:
    Windows DPAPI (master key from Local State) + AES-256-GCM (individual cookies)
@@ -237,6 +241,11 @@ feature without solving SYSTEM DPAPI first.
    - `visitorData` — anonymous visitor tracking ID
 7. `X-Goog-AuthUser` header must match SESSION_INDEX in all authenticated API requests
 8. Locked browser cookie DBs are handled via robocopy fallback on Windows
+9. Firefox: `cookies.sqlite` is plaintext on every OS. Linux Chromium is launched with
+   `--password-store=basic` so cookies are `v10` under the fixed "peanuts" key; a `v11` cookie means
+   the flag was dropped and the keyring was used, which is reported rather than attempted
+10. The handoff poll's lock check uses `NOFOLLOW_LINKS`: on Linux `SingletonLock`/`lock` are
+   dangling symlinks and `File.exists()` always said the browser had closed
 
 ### Key gotchas
 - Opera stores cookies in `%APPDATA%` (Roaming), other browsers use `%LOCALAPPDATA%`
@@ -312,9 +321,15 @@ against the current URL first, so a schemeless hop cannot skip the check. Withou
 answering with `http://` turned the updater into a cleartext delivery channel for code that runs as
 the user.
 
-Still missing, deliberately: no checksum or signature. A published hash would only defend against a
-swapped asset, not a compromised account, since both come from the same origin. Real fix is code
-signing.
+A published hash would only defend against a swapped asset, not a compromised account, since both
+come from the same origin. So releases are **signed**: Ed25519 over the ZIP's SHA-256 (pure Ed25519
+would need the 200 MB ZIP in a 512 MB heap). The private key lives offline
+(`./gradlew :desktop:generateUpdateSigningKey`, default `~/.lyrenne/update-signing.key`), the public key
+is `AutoUpdater.UPDATE_PUBLIC_KEY` (set since the Linux port). **Every release from then on must ship a
+`.sig`**, or builds carrying that key refuse the update. Releasing from another PC: copy
+`~/.lyrenne/update-signing.key` there (or point `LYRENNE_SIGNING_KEY` / `-PupdateSigningKey` at it).
+Never generate a second pair: it would not match the key already shipped. `UpdateSignatureTest` checks
+the local private key against the embedded public key.
 
 ## The update script is generated, so paths must be single-quoted
 
@@ -664,10 +679,8 @@ Regenerate with `desktop/src/main/resources` as the working directory if the art
 Keep every entry uncompressed BMP: the 256px entry has always been BMP rather than PNG-in-ICO and
 there is no reason to find out which loaders in the chain disagree about that.
 
-`patchPortableIcon` is **dead code**. It looks for Resource Hacker at a path that does not exist, so
-it warns and skips every build. Its comment claiming Compose only applies `iconFile` to MSI is
-outdated: jpackage embeds the `.ico` into the app-image exe fine, verified by enumerating the
-exe's RT_GROUP_ICON after a build (all 10 entries present).
+`patchPortableIcon` was removed: jpackage embeds the `.ico` into the app-image exe itself, verified by
+enumerating the exe's RT_GROUP_ICON after a build (all 10 entries present).
 
 ## Discord Rich Presence
 
@@ -974,6 +987,21 @@ one song where the list should carry on, which is the follow-up report on #11.
 `AutoplayTest` pins the queue rules offline with a stubbed radio (`DesktopPlayer.radioFor`).
 `AutoplaySmokeTest` runs the real player against YouTube without VLC, which it tolerates.
 
+## Smart Shuffle
+
+`DesktopPlayer.smartShuffle` (issue #15). The playlist starts shuffled at once; YouTube's radio for three
+of its songs is then fetched in parallel (`radioFor`, up to about 4 s), merged round robin, stripped of
+anything already queued and of explicit songs when those are hidden, and woven in one after every three
+songs still to play (`interleaveSuggestions`). Leftovers are dropped, so a very long playlist only gets
+suggestions as far as the radios reach.
+
+- Suggestions carry `SongInfo.suggested` (not persisted) and the queue panel labels them. They are
+  not `fromAutoplay`: songs the user adds do not jump them, and switching autoplay off keeps them.
+- The same `queueGeneration` check as autoplay drops the suggestions if the queue was replaced while
+  the radios loaded, and they go into `originalQueue` under the same rule.
+
+`SmartShuffleTest` pins it offline.
+
 ## Downloads play from disk
 
 Through 2.13.0 every path that starts a song resolved a YouTube stream, downloaded or not: the
@@ -1000,13 +1028,11 @@ the stream (`DesktopPlayer.streamFor`) both stubbed.
 
 ## Version Management
 - **Current version**: v2.14.0
-- **Version must be updated in TWO places** when releasing:
-  1. `desktop/build.gradle.kts` → `lyrenneVersion = "X.Y.Z"`
-  2. `desktop/.../update/AutoUpdater.kt` → `CURRENT_VERSION = "X.Y.Z"`
-- Both MUST match — `lyrenneVersion` controls the ZIP filename, `CURRENT_VERSION` is shown in Settings and used for update comparison
+- **One place**: `desktop/build.gradle.kts` → `lyrenneVersion = "X.Y.Z"`. `processResources` expands it into
+  `version.properties`, which `AutoUpdater.CURRENT_VERSION` reads. `UpdateSignatureTest` pins that they agree
 
 ## Release Process (Step by Step)
-1. **Bump version** in both places (build.gradle.kts `lyrenneVersion` + AutoUpdater.kt `CURRENT_VERSION`)
+1. **Bump version**: `lyrenneVersion` in build.gradle.kts
 2. **Build the portable distributable**:
    ```
    ./gradlew :desktop:createDistributable
@@ -1018,6 +1044,9 @@ the stream (`DesktopPlayer.streamFor`) both stubbed.
    ```
    Purges runtime data, zips with 7z, and refuses to produce an archive containing
    credentials/DB/prefs or backslash entries. Output: `desktop/build/compose/binaries/main/app/Lyrenne-X.Y.Z-portable.zip`
+   **Sign it** (required: a public key is set): `./gradlew :desktop:signPortableZip` writes
+   `Lyrenne-X.Y.Z-portable.zip.sig`; upload it alongside the ZIP. With a key configured the updater
+   refuses any release without a valid `.sig`
 4. **Push code**: `git push origin main`
 5. **Create GitHub release** with portable ZIP only:
    ```
@@ -1034,7 +1063,7 @@ the stream (`DesktopPlayer.streamFor`) both stubbed.
 - Each release has exactly ONE artifact: `Lyrenne-X.Y.Z-portable.zip`
 - Users extract and run — no installation needed
 - Downloads, updates, preferences, and database all live next to the app (not in %APPDATA%/Roaming)
-- Do NOT build `packageExe` or `packageMsi` — only `createDistributable`
+- Do NOT build `packageExe` or `packageMsi` — only `createDistributable`. No installer formats are configured, on purpose
 
 ## File Storage Paths
 All data is fully portable — stored next to the executable via centralized `AppPaths.kt`:
@@ -1044,7 +1073,8 @@ All data is fully portable — stored next to the executable via centralized `Ap
 - **Cache**: `<app-dir>/data/cache/`
 - **Downloads**: `<app-dir>/Downloads/` (configurable via Settings folder picker)
 - **Updates staging**: `<app-dir>/updates/` (with fallbacks to user.dir then temp)
-- **Migration**: On first run, `AppPaths` auto-migrates files from old `%APPDATA%/Lyrenne` to `data/` if the data dir is empty
+- **No migration** from old `%APPDATA%` paths (removed in 2.9.4, see the rename section)
+- **Linux**: data in `$XDG_DATA_HOME/lyrenne` (`~/.local/share/lyrenne`), downloads in `~/Music/Lyrenne`, unless a `portable` marker file sits next to the app
 - **CRITICAL**: nothing goes to %APPDATA% or %LOCALAPPDATA% except the Start Menu shortcut
   described under Windows media identity. Everything else lives next to the app for full portability.
 
@@ -1063,19 +1093,16 @@ v2.6.0 and was public for ~12 minutes.
 `data/`, `Downloads/`, `updates/`, zips with 7z, then scans the archive and *fails the build*
 (deleting the zip) if any credential/DB/prefs entry or backslash entry is present. Do not
 hand-roll the 7z command.
-- Local copy has `nul` file that breaks git — use temp dir copy for pushing
-- Push workflow: robocopy to temp dir (excluding .gradle/.kotlin/build/.claude/nul), git init, commit, force push
 - `gh` CLI at `C:\Program Files\GitHub CLI\gh.exe` (not in bash PATH, use full path), authenticated as Doctordefector
 - **ALWAYS pass `--repo Doctordefector/Lyrenne` to every `gh release` command.** This repo has two
   remotes and bare `gh release list` resolves to `upstream` (MetrolistGroup/Metrolist), silently showing
   v13.x Android releases instead of our v2.x desktop ones
-- Robocopy for push: Must use PowerShell `robocopy` (bash `robocopy` has path issues with /E flag)
 - Upload ONLY the portable ZIP to each GitHub release
 
 ## Auto-Updater System
 
 ### How it works (end to end)
-1. **Check**: `AutoUpdater.checkForUpdate()` hits GitHub API (`/repos/.../releases/latest`), compares `CURRENT_VERSION` against the latest tag using semver
+1. **Check**: `AutoUpdater.checkForUpdates()` hits GitHub API (`/repos/.../releases/latest`), compares `CURRENT_VERSION` against the latest tag using semver
 2. **Detect portable**: Looks for `Lyrenne-*-portable.zip` in release assets — if found, uses portable update path
 3. **Download**: Streams the ZIP to `<app-dir>/updates/` with progress callbacks, shown in Settings UI
 4. **Extract**: `extractZip()` extracts to a timestamped staging dir (`updates/staging-<timestamp>/`), cleans up old staging dirs first
@@ -1142,6 +1169,29 @@ Start-Process "$exePath"
 Remove-Item "$stagingRoot" -Recurse -Force
 ```
 
-## Priority Work Items
-1. **Context menus** — Play Next, Add to Queue, Add to Playlist on MiniPlayer / search results
-2. **Play All / Shuffle All** — buttons in Library songs tab
+## Linux port
+
+Plan and rationale: `AUDIT_AND_LINUX_PLAN.md`. What is in place:
+
+- **One OS check**: `Platform.isWindows/isLinux/isMac` in `AppPaths.kt`. Do not read `os.name` elsewhere.
+- **Data**: XDG dirs (see File Storage Paths). Credentials and preferences are written atomically
+  (temp file + rename); on POSIX `AppPaths.writeAtomic` makes them `rw-------`. A permission, not
+  encryption: the plaintext rule stands.
+- **VLC**: never bundled on Linux; vlcj `NativeDiscovery` finds the distro `libvlc`. Snap/Flatpak VLC
+  cannot be used. Streaming prefers Opus there (Fedora's stock VLC may lack AAC).
+- **Sign-in**: Firefox first (plaintext cookies), then the Chromium family with `--password-store=basic`,
+  then "Advanced: paste a cookie" (`PasteCookieSection`). Flatpak browsers are skipped.
+- **Tray**: GNOME has none. Minimize-to-tray only hides the window when `DesktopNotification.trayActive`,
+  and the switch is hidden otherwise. Without a tray, notifications go through `notify-send`.
+- **Media**: `SystemMediaSession` (was WindowsMediaSession) publishes MPRIS via mediasession-kt.
+  dbus-java is excluded only from Windows-host builds; `jdk.security.auth` is in the runtime for it.
+- **Discord**: Unix sockets go through `SocketChannel` (RandomAccessFile cannot open them), searching
+  `$XDG_RUNTIME_DIR` incl. Flatpak/Snap Discord subdirs.
+- **Updater**: Linux only reports a new version and links the release page.
+- **Packaging**: `packaging/linux/nfpm.yaml` builds .deb/.rpm from `createDistributable` with VLC as a
+  dependency. CI: `.github/workflows/linux.yml` (`-Pci` skips the network smoke tests).
+  `fetchFfmpeg` and `packagePortableZip` only run on a Windows host.
+- **Verified in CI** (every push): unit tests on Ubuntu; the .deb installs on Ubuntu and the .rpm on
+  Fedora with their VLC dependencies, the app starts under Xvfb, loads the distro libvlc, and writes
+  its DB to `~/.local/share/lyrenne`. **Not verifiable in CI**, needs a real desktop: browser sign-in,
+  streamed playback (needs a session), MPRIS widgets, tray behaviour per desktop.

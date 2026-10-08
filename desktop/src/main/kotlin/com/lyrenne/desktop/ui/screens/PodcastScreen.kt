@@ -12,6 +12,7 @@ import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,13 +35,16 @@ fun PodcastScreen(
     onBack: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
-    var podcastPage by remember { mutableStateOf<PodcastPage?>(null) }
-    var allEpisodes by remember { mutableStateOf<List<EpisodeItem>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
-    var error by remember { mutableStateOf<String?>(null) }
+    // rememberSaveable: App keeps this screen's state while it is under another on the back
+    // stack, so going back restores the page and scroll position instead of refetching.
+    var podcastPage by rememberSaveable { mutableStateOf<PodcastPage?>(null) }
+    var allEpisodes by rememberSaveable { mutableStateOf<List<EpisodeItem>>(emptyList()) }
+    var isLoading by rememberSaveable { mutableStateOf(true) }
+    var error by rememberSaveable { mutableStateOf<String?>(null) }
     val playerState by player.state.collectAsState()
 
     LaunchedEffect(podcastId) {
+        if (podcastPage != null) return@LaunchedEffect // restored from the back stack
         isLoading = true
         error = null
         YouTube.podcast(podcastId).onSuccess { page ->

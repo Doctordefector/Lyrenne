@@ -37,7 +37,8 @@ fun LoginScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var statusMessage by remember { mutableStateOf("") }
 
-    val hasBrowser = remember { BrowserLoginHelper.findBrowserExecutable() != null }
+    val browser = remember { BrowserLoginHelper.findLoginBrowser() }
+    val hasBrowser = browser != null
 
     fun handleCookieResult(result: CookieExtractResult) {
         when (result) {
@@ -152,7 +153,7 @@ fun LoginScreen(
                                             color = MaterialTheme.colorScheme.onPrimaryContainer
                                         )
                                         Text(
-                                            "Opens a browser window. Sign in, then close it.",
+                                            "Opens ${browser?.name ?: "a browser"}. Sign in, then close it.",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                                         )
@@ -164,7 +165,15 @@ fun LoginScreen(
                                     )
                                 }
                             }
+                        } else {
+                            Text(
+                                "No supported browser found. Lyrenne looks for " +
+                                    "${BrowserLoginHelper.supportedBrowserNames}. You can paste a cookie instead.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error
+                            )
                         }
+                        com.lyrenne.desktop.ui.components.PasteCookieSection { handleCookieResult(it) }
                     }
                 }
 

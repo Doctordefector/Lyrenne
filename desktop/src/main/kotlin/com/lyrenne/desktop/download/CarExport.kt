@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.download
 
+import com.lyrenne.desktop.Platform
 import com.lyrenne.desktop.AppPaths
 import com.lyrenne.desktop.playback.SongInfo
 import com.lyrenne.desktop.settings.PreferencesManager
@@ -62,7 +63,7 @@ object CarExport {
     )
 
     private val ffmpegExe =
-        if ("win" in System.getProperty("os.name").orEmpty().lowercase()) "ffmpeg.exe" else "ffmpeg"
+        if (Platform.isWindows) "ffmpeg.exe" else "ffmpeg"
 
     /**
      * Locate ffmpeg. The packaged app ships its own copy under the Compose resources dir, the
@@ -91,9 +92,10 @@ object CarExport {
             ?.firstOrNull { it.isFile }
     }
 
-    private const val FFMPEG_MISSING =
-        "ffmpeg not found. It ships with Lyrenne, so this build may be incomplete. " +
+    private val FFMPEG_MISSING =
+        if (Platform.isWindows) "ffmpeg not found. It ships with Lyrenne, so this build may be incomplete. " +
             "Reinstall, or put ffmpeg.exe next to Lyrenne.exe."
+        else "ffmpeg not found. Install it with your package manager, e.g. sudo apt install ffmpeg."
 
     /**
      * Loudness-normalize to a consistent level and guarantee a real two-channel stereo file,

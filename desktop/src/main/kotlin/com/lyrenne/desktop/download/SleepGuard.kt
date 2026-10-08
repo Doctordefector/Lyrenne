@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.download
 
+import com.lyrenne.desktop.Platform
 import com.sun.jna.Library
 import com.sun.jna.Native
 import kotlinx.coroutines.delay
@@ -54,8 +55,7 @@ internal object SleepGuard {
         fun SetThreadExecutionState(esFlags: Int): Int
     }
 
-    private val isWindows =
-        System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true)
+    private val isWindows = Platform.isWindows
 
     private val kernel32: Kernel32? by lazy {
         if (!isWindows) return@lazy null

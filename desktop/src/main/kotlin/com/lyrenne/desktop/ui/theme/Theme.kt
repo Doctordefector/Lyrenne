@@ -2,6 +2,7 @@ package com.lyrenne.desktop.ui.theme
 
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
@@ -9,7 +10,17 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lyrenne.desktop.Platform
 import com.lyrenne.desktop.settings.ThemeMode
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import java.io.File
 
 /**
  * Dark theme, built from the same tokens as the website and the app mark: near-black surfaces,
@@ -234,12 +245,34 @@ private val LightColorScheme = lightColorScheme(
     scrim = Color(0xFF000000),
 )
 
+/**
+ * The OS light/dark preference, read off the UI thread. Every check spawns a process (`reg`,
+ * `gsettings`, `defaults`), which used to run synchronously inside composition, once per window,
+ * and never again — so switching the OS theme did nothing until restart. Now one poller serves
+ * every window and picks the change up within [POLL_MS].
+ */
+object SystemTheme {
+    private const val POLL_MS = 30_000L
+    // One blocking read seeds it, so the first frame is not painted in the wrong scheme. Main
+    // touches this object before any window exists, so that read happens off composition.
+    private val _isDark = MutableStateFlow(isSystemDarkTheme())
+    val isDark: StateFlow<Boolean> = _isDark.asStateFlow()
+
+    init {
+        CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+            while (true) {
+                delay(POLL_MS)
+                _isDark.value = isSystemDarkTheme()
+            }
+        }
+    }
+}
+
 fun isSystemDarkTheme(): Boolean {
     return try {
-        val osName = System.getProperty("os.name")?.lowercase() ?: ""
         when {
-            osName.contains("win") -> isWindowsDarkTheme()
-            osName.contains("mac") -> isMacDarkTheme()
+            Platform.isWindows -> isWindowsDarkTheme()
+            Platform.isMac -> isMacDarkTheme()
             else -> isLinuxDarkTheme()
         }
     } catch (_: Exception) {
@@ -247,41 +280,47 @@ fun isSystemDarkTheme(): Boolean {
     }
 }
 
+private fun runForOutput(vararg cmd: String): String? = try {
+    val process = ProcessBuilder(*cmd).redirectErrorStream(true).start()
+    val output = process.inputStream.bufferedReader().readText()
+    if (process.waitFor() == 0) output.trim() else null
+} catch (_: Exception) {
+    null
+}
+
 private fun isWindowsDarkTheme(): Boolean {
-    return try {
-        val process = ProcessBuilder(
-            "reg", "query",
-            "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-            "/v", "AppsUseLightTheme"
-        ).start()
-        val output = process.inputStream.bufferedReader().readText()
-        process.waitFor()
-        output.contains("0x0")
-    } catch (_: Exception) {
-        true
-    }
+    val output = runForOutput(
+        "reg", "query",
+        "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+        "/v", "AppsUseLightTheme"
+    ) ?: return true
+    return output.contains("0x0")
 }
 
-private fun isMacDarkTheme(): Boolean {
-    return try {
-        val process = ProcessBuilder("defaults", "read", "-g", "AppleInterfaceStyle").start()
-        val output = process.inputStream.bufferedReader().readText().trim()
-        process.waitFor()
-        output.equals("Dark", ignoreCase = true)
-    } catch (_: Exception) {
-        false
-    }
-}
+private fun isMacDarkTheme(): Boolean =
+    runForOutput("defaults", "read", "-g", "AppleInterfaceStyle").equals("Dark", ignoreCase = true)
 
+/**
+ * GNOME 42+ keeps the preference in `color-scheme` ('prefer-dark'); the GTK theme name is often
+ * plain `Adwaita` either way, so it is only the fallback. KDE writes its scheme to kdeglobals.
+ */
 private fun isLinuxDarkTheme(): Boolean {
-    return try {
-        val process = ProcessBuilder("gsettings", "get", "org.gnome.desktop.interface", "gtk-theme").start()
-        val output = process.inputStream.bufferedReader().readText().trim().lowercase()
-        process.waitFor()
-        output.contains("dark")
-    } catch (_: Exception) {
-        true
+    runForOutput("gsettings", "get", "org.gnome.desktop.interface", "color-scheme")?.lowercase()?.let {
+        if ("dark" in it) return true
+        if ("light" in it) return false
+        // 'default': GNOME's "no preference", which is light unless the GTK theme says otherwise.
     }
+    runForOutput("gsettings", "get", "org.gnome.desktop.interface", "gtk-theme")?.let {
+        if ("dark" in it.lowercase()) return true
+    }
+    val kdeglobals = File(
+        System.getenv("XDG_CONFIG_HOME") ?: "${System.getProperty("user.home")}/.config", "kdeglobals"
+    )
+    if (kdeglobals.isFile) {
+        val scheme = kdeglobals.readLines().firstOrNull { it.startsWith("ColorScheme=") }
+        if (scheme != null) return "dark" in scheme.lowercase()
+    }
+    return false
 }
 
 @Composable
@@ -292,7 +331,7 @@ fun LyrenneTheme(
     val darkTheme = when (themeMode) {
         ThemeMode.DARK -> true
         ThemeMode.LIGHT -> false
-        ThemeMode.SYSTEM -> isSystemDarkTheme()
+        ThemeMode.SYSTEM -> SystemTheme.isDark.collectAsState().value
     }
 
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme

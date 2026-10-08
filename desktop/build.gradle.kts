@@ -1,6 +1,11 @@
 import com.google.protobuf.gradle.*
-import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import java.net.URI
+import java.security.KeyFactory
+import java.security.KeyPairGenerator
+import java.security.MessageDigest
+import java.security.Signature
+import java.security.spec.PKCS8EncodedKeySpec
+import java.util.Base64
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
@@ -18,8 +23,12 @@ kotlin {
     jvmToolchain(21)
 }
 
-// Must match AutoUpdater.CURRENT_VERSION — both are checked on every release
+// The one version number. AutoUpdater reads it from the generated version.properties.
 val lyrenneVersion = "2.14.0"
+
+// Compose packages for the OS it runs on, so per-OS build steps key off the host.
+val hostOs = System.getProperty("os.name").orEmpty()
+val isWindowsHost = hostOs.startsWith("Windows")
 
 // Include shared module sources directly (they are Android library modules but pure Kotlin/JVM code)
 sourceSets {
@@ -45,6 +54,10 @@ protobuf {
 // Exclude proto files from resources (protobuf plugin already handles them)
 tasks.named<ProcessResources>("processResources") {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    // version.properties carries lyrenneVersion into the app, so it is defined exactly once.
+    val version = lyrenneVersion
+    inputs.property("version", version)
+    filesMatching("version.properties") { expand("version" to version) }
 }
 
 dependencies {
@@ -80,10 +93,11 @@ dependencies {
     implementation("net.java.dev.jna:jna:5.17.0")
     implementation("net.java.dev.jna:jna-platform:5.17.0")
 
-    // Windows System Media Transport Controls (Now Playing, media buttons, timeline)
+    // OS media session: Windows SMTC, Linux MPRIS (Now Playing, media buttons, timeline)
     implementation("dev.toastbits:mediasession:0.1.1") {
-        // Lyrenne is Windows-only. Do not ship mediasession-kt's Linux D-Bus runtime.
-        exclude(group = "com.github.hypfvieh")
+        // The D-Bus runtime (dbus-java + jnr) is only used for MPRIS. Compose packages for the
+        // host OS, so a Windows build has no use for it and the portable ZIP stays lean.
+        if (isWindowsHost) exclude(group = "com.github.hypfvieh")
     }
 
     // JSON
@@ -115,26 +129,30 @@ compose.desktop {
         jvmArgs += listOf("-Xmx512m")
 
         nativeDistributions {
-            targetFormats(TargetFormat.Msi, TargetFormat.Exe)
+            // No installer formats on purpose. Windows ships the portable ZIP built from
+            // createDistributable (packagePortableZip); Linux .deb/.rpm are built from the same
+            // distributable by nfpm (packaging/linux/nfpm.yaml), because Compose's own packages
+            // cannot declare the VLC dependency. Do not add Msi/Exe here.
 
-            // Bundle VLC libraries with the app
+            // Bundled VLC/ffmpeg: Compose picks resources/<os>-<arch>/ for the host, and
+            // resources/linux-x64/ is empty — Linux uses the distro's VLC and ffmpeg.
             appResourcesRootDir.set(project.layout.projectDirectory.dir("resources"))
 
-            // Include required JVM modules in the custom runtime
-            modules("java.sql", "java.naming", "java.net.http", "jdk.unsupported")
+            // Include required JVM modules in the custom runtime. jdk.security.auth: dbus-java
+            // (MPRIS on Linux) reads the Unix uid through it for D-Bus authentication.
+            modules("java.sql", "java.naming", "java.net.http", "jdk.unsupported", "jdk.security.auth")
 
             packageName = "Lyrenne"
             packageVersion = lyrenneVersion
-            description = "Lyrenne, a YouTube Music player for Windows"
+            description = "Lyrenne, a YouTube Music player for your desktop"
             vendor = "Lyrenne"
 
             windows {
-                menuGroup = "Lyrenne"
-                upgradeUuid = "b5e74c38-1c2d-4e8f-9a7b-6d5e4f3c2a1b"
+                // jpackage embeds this into Lyrenne.exe (verified via RT_GROUP_ICON).
                 iconFile.set(project.file("src/main/resources/icon.ico"))
-                dirChooser = true
-                shortcut = true
-                menu = true
+            }
+            linux {
+                iconFile.set(project.file("src/main/resources/icon.png"))
             }
         }
 
@@ -162,7 +180,9 @@ tasks.register("fetchFfmpeg") {
     val downloadUrl =
         "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl.zip"
     outputs.file(target)
-    onlyIf { !target.exists() }
+    // Windows only: Linux uses ffmpeg from PATH (a recommended package dependency).
+    val windowsHost = isWindowsHost
+    onlyIf { windowsHost && !target.exists() }
 
     doLast {
         logger.lifecycle("Downloading ffmpeg (~147 MB) — one time, cached at ${target.absolutePath}")
@@ -191,42 +211,6 @@ tasks.register("fetchFfmpeg") {
 tasks.matching { it.name == "createDistributable" || it.name == "prepareAppResources" }
     .configureEach { dependsOn("fetchFfmpeg") }
 
-// Post-build task: patch icon into portable exe using Resource Hacker
-// (Compose Desktop's iconFile only works for MSI, not createDistributable)
-tasks.register("patchPortableIcon") {
-    dependsOn("createDistributable")
-    doLast {
-        val exeFile = file("build/compose/binaries/main/app/Lyrenne/Lyrenne.exe")
-        val iconFile = file("src/main/resources/icon.ico")
-        val resourceHacker = file("C:/Temp/ResourceHacker/ResourceHacker.exe")
-
-        if (!resourceHacker.exists()) {
-            logger.warn("Resource Hacker not found at ${resourceHacker.absolutePath} — skipping icon patch")
-            return@doLast
-        }
-        if (!exeFile.exists() || !iconFile.exists()) {
-            logger.warn("Exe or icon not found — skipping icon patch")
-            return@doLast
-        }
-
-        val patched = file("build/compose/binaries/main/app/Lyrenne/Lyrenne-patched.exe")
-        val result = ProcessBuilder(
-            resourceHacker.absolutePath,
-            "-open", exeFile.absolutePath,
-            "-save", patched.absolutePath,
-            "-action", "addoverwrite",
-            "-res", iconFile.absolutePath,
-            "-mask", "ICONGROUP,MAINICON,"
-        ).start().waitFor()
-        logger.lifecycle("Resource Hacker exited with code $result")
-        if (patched.exists()) {
-            patched.copyTo(exeFile, overwrite = true)
-            patched.delete()
-            logger.lifecycle("Icon patched into portable exe successfully")
-        }
-    }
-}
-
 /**
  * Build the release ZIP safely.
  *
@@ -247,6 +231,9 @@ tasks.register("packagePortableZip") {
         File("C:/Program Files/7-Zip/7z.exe"),
         File("C:/Program Files (x86)/7-Zip/7z.exe")
     )
+    // The portable ZIP is the Windows release. Linux packages come from nfpm instead.
+    val windowsHost = isWindowsHost
+    onlyIf { windowsHost }
 
     doLast {
         // 1. Purge anything the app generated while it was run from this folder
@@ -329,6 +316,61 @@ tasks.register("packagePortableZip") {
 
         logger.lifecycle("Portable zip verified clean: ${zipFile.absolutePath} (${zipFile.length() / 1024 / 1024} MB)")
     }
+}
+
+/**
+ * Update signing. The private key never goes in the repo or on GitHub: a compromised account
+ * must not be able to ship code, and that only holds while the key is somewhere else (offline).
+ * Location: -PupdateSigningKey=<path>, else $LYRENNE_SIGNING_KEY, else ~/.lyrenne/update-signing.key.
+ */
+fun signingKeyPath(): String =
+    (findProperty("updateSigningKey") as String?)
+        ?: System.getenv("LYRENNE_SIGNING_KEY")
+        ?: "${System.getProperty("user.home")}/.lyrenne/update-signing.key"
+
+/** One-time: creates the Ed25519 pair and prints the public key for AutoUpdater.UPDATE_PUBLIC_KEY. */
+tasks.register("generateUpdateSigningKey") {
+    val keyFile = File(signingKeyPath())
+    doLast {
+        if (keyFile.exists()) throw GradleException("Refusing to overwrite ${keyFile.absolutePath}")
+        val pair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair()
+        keyFile.parentFile.mkdirs()
+        keyFile.writeText(Base64.getEncoder().encodeToString(pair.private.encoded))
+        logger.lifecycle("Private key written to ${keyFile.absolutePath}. Back it up offline.")
+        logger.lifecycle("Paste into AutoUpdater.UPDATE_PUBLIC_KEY:")
+        logger.lifecycle(Base64.getEncoder().encodeToString(pair.public.encoded))
+    }
+}
+
+/**
+ * Writes Lyrenne-X.Y.Z-portable.zip.sig: Ed25519 over the ZIP's SHA-256, base64. Upload it to
+ * the release next to the ZIP. AutoUpdater.verifySignature is the other half.
+ */
+tasks.register("signPortableZip") {
+    dependsOn("packagePortableZip")
+    val zipFile = layout.buildDirectory.file("compose/binaries/main/app/Lyrenne-$lyrenneVersion-portable.zip").get().asFile
+    val keyFile = File(signingKeyPath())
+    doLast {
+        if (!keyFile.exists()) throw GradleException("No signing key at ${keyFile.absolutePath}")
+        val key = KeyFactory.getInstance("Ed25519").generatePrivate(
+            PKCS8EncodedKeySpec(Base64.getDecoder().decode(keyFile.readText().trim()))
+        )
+        val md = MessageDigest.getInstance("SHA-256")
+        zipFile.inputStream().use { input ->
+            val buf = ByteArray(64 * 1024)
+            while (true) { val n = input.read(buf); if (n < 0) break; md.update(buf, 0, n) }
+        }
+        val sig = Signature.getInstance("Ed25519").run { initSign(key); update(md.digest()); sign() }
+        val sigFile = File(zipFile.absolutePath + ".sig")
+        sigFile.writeText(Base64.getEncoder().encodeToString(sig))
+        logger.lifecycle("Signed: ${sigFile.absolutePath}")
+    }
+}
+
+// CI (-Pci) skips the smoke tests: they call real YouTube or real OS APIs, and a runner's network
+// being blocked is not a Lyrenne failure. Run them locally before a release.
+tasks.withType<Test>().configureEach {
+    if (project.hasProperty("ci")) exclude("**/*SmokeTest*")
 }
 
 sqldelight {

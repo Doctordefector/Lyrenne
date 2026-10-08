@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Lyrenne
+GenericName=Music Player
+Comment=YouTube Music player for your desktop
+Exec=lyrenne
+Icon=lyrenne
+Terminal=false
+Categories=AudioVideo;Audio;Player;
+Keywords=music;youtube;player;
+# AWT names the X11 window class after the main class, so the dock groups the window with this launcher.
+StartupWMClass=com-lyrenne-desktop-MainKt

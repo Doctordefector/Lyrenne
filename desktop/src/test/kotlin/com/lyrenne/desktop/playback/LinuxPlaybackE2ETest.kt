@@ -31,6 +31,7 @@ class LinuxPlaybackE2ETest {
         val wav = File.createTempFile("lyrenne-e2e", ".wav").apply { deleteOnExit() }
         writeTone(wav, seconds = 20)
 
+        com.lyrenne.desktop.db.DatabaseHelper.initialize()
         PreferencesManager.initialize()
         PreferencesManager.setNormalizeAudio(true)
         PreferencesManager.setSkipSilence(true)
@@ -53,7 +54,10 @@ class LinuxPlaybackE2ETest {
             player.setPlaybackSpeed(1.5f)
             assertNull("player reported an error", player.state.value.error)
 
-            waitFor("playerctl to see the title") { playerctl("metadata", "title") == "Lyrenne E2E Tone" }
+            waitFor("playerctl to see the title", diagnose = {
+                "players=[${playerctl("-l")}] metadata=[${playerctl("metadata")}] status=[${playerctl("status")}] " +
+                    "busNames=[${run("dbus-send", "--session", "--print-reply", "--dest=org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus.ListNames")}]"
+            }) { playerctl("metadata", "title") == "Lyrenne E2E Tone" }
             assertEquals("Playing", playerctl("status"))
             playerctl("pause")
             waitFor("MPRIS pause to reach the player") { !player.state.value.isPlaying }
@@ -63,17 +67,19 @@ class LinuxPlaybackE2ETest {
         }
     }
 
-    private fun playerctl(vararg args: String): String {
-        val p = ProcessBuilder(listOf("playerctl") + args).redirectErrorStream(true).start()
+    private fun playerctl(vararg args: String): String = run("playerctl", *args)
+
+    private fun run(vararg cmd: String): String {
+        val p = ProcessBuilder(*cmd).redirectErrorStream(true).start()
         val out = p.inputStream.bufferedReader().readText().trim()
         p.waitFor()
         return out
     }
 
-    private fun waitFor(what: String, timeoutMs: Long = 15_000, check: () -> Boolean) {
+    private fun waitFor(what: String, timeoutMs: Long = 15_000, diagnose: () -> String = { "" }, check: () -> Boolean) {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (!check()) {
-            assertTrue("timed out waiting for $what", System.currentTimeMillis() < deadline)
+            if (System.currentTimeMillis() >= deadline) throw AssertionError("timed out waiting for $what. ${diagnose()}")
             Thread.sleep(100)
         }
     }

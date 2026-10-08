@@ -870,7 +870,13 @@ Verified automatically on every push (`.github/workflows/linux.yml`):
 | Local file plays through system VLC; EQ, speed, normalize, skip-silence apply without error | `e2e` job, `LinuxPlaybackE2ETest` |
 | MPRIS visible to and controllable from `playerctl` | `e2e` job |
 | Distro VLC has every plugin a YouTube stream needs (HTTPS, adaptive, MP4/MKV, Opus, avcodec) | `e2e` job |
+| Sign-in plumbing with real **Firefox**: found first on Linux, launched with Lyrenne's arguments and profile, lock seen while running and cleared after, cookies read from `cookies.sqlite` | `e2e` job, `LinuxBrowserE2ETest` |
+| Same with real **Chrome** + `--password-store=basic`: cookies decrypt as `v10` (AES-128-CBC), not sent to the keyring | `e2e` job, `LinuxBrowserE2ETest` |
 
-Not automatable, needs a person on a Linux desktop: browser sign-in (needs a real Google account),
+The browser runs are signed out (CI has no Google account), so they prove everything except that the
+cookies carry a live session. That last step is the same code path as Windows (`buildCookieResult`,
+`AuthManager.saveCredentials`).
+
+Not automatable, needs a person on a Linux desktop: signing in with a real Google account,
 streamed playback (needs that session), tray and media widgets on specific desktops (GNOME, KDE,
 Cinnamon), HiDPI scaling.

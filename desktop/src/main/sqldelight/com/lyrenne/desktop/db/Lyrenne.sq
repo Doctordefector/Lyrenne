@@ -189,17 +189,25 @@ insertSong:
 INSERT OR IGNORE INTO Song(id, title, duration, thumbnailUrl, albumId, albumName, explicit, year, liked, likedDate, totalPlayTime, inLibrary, dateDownload, isLocal, isDownloaded, localPath)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
+-- Callers that don't know a field (playlist picker, MiniPlayer like) pass -1 / null for it,
+-- which must not wipe what the database already knows.
 updateSongMetadata:
 UPDATE Song SET
-    title = ?,
-    duration = ?,
-    thumbnailUrl = COALESCE(?, thumbnailUrl),
-    albumId = COALESCE(?, albumId),
-    albumName = COALESCE(?, albumName),
-    explicit = ?,
-    year = ?,
-    inLibrary = COALESCE(?, inLibrary)
-WHERE id = ?;
+    title = :title,
+    duration = CASE WHEN :duration > 0 THEN :duration ELSE duration END,
+    thumbnailUrl = COALESCE(:thumbnailUrl, thumbnailUrl),
+    albumId = COALESCE(:albumId, albumId),
+    albumName = COALESCE(:albumName, albumName),
+    explicit = :explicit,
+    year = COALESCE(:year, year),
+    inLibrary = COALESCE(:inLibrary, inLibrary)
+WHERE id = :id;
+
+-- Sync: liked on YouTube. insertSong is INSERT OR IGNORE, so a song already in the database
+-- (played, downloaded, or unliked by an earlier sync) needs this to pick the like up.
+-- Already-liked rows keep their likedDate so the order stays stable across syncs.
+markSongLiked:
+UPDATE Song SET liked = 1, likedDate = ? WHERE id = ? AND liked = 0;
 
 updateSongLiked:
 UPDATE Song SET liked = ?, likedDate = ? WHERE id = ?;
@@ -243,6 +251,11 @@ SELECT * FROM Artist WHERE id = ?;
 insertArtist:
 INSERT OR REPLACE INTO Artist(id, name, thumbnailUrl, channelId, lastUpdateTime, bookmarkedAt)
 VALUES (?, ?, ?, ?, ?, ?);
+
+-- A song's artist credit. Must not REPLACE: that wiped a subscribed artist's bookmark and
+-- thumbnail whenever the artists fetch failed and so did not write them back.
+insertArtistIfMissing:
+INSERT OR IGNORE INTO Artist(id, name, lastUpdateTime) VALUES (?, ?, ?);
 
 updateArtistBookmarked:
 UPDATE Artist SET bookmarkedAt = ? WHERE id = ?;

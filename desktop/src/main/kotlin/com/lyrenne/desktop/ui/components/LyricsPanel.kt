@@ -112,7 +112,8 @@ fun LyricsPanel(
                     if (stateIsForThisSong) {
                         lyricsState.source?.let { source ->
                             Text(
-                                if (lyricsState.isManual) "$source (chosen)" else source,
+                                // The provider's name alone ("LrcLib") explained nothing.
+                                if (lyricsState.isManual) "via $source (chosen)" else "via $source",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
@@ -122,31 +123,37 @@ fun LyricsPanel(
                         }
                     }
                     if (stateIsForThisSong && lyricsState.isManual && currentSong != null) {
-                        IconButton(
-                            onClick = {
-                                LyricsManager.resetToAutomatic(
-                                    songId = currentSong.id,
-                                    title = currentSong.title,
-                                    artist = currentSong.artist,
-                                    durationSec = ((playerState.duration.takeIf { it > 0 }
-                                        ?: currentSong.knownDurationMs()) / 1000).toInt(),
-                                    album = currentSong.album
-                                )
-                            },
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(Icons.Default.RestartAlt, "Go back to automatic lyrics", modifier = Modifier.size(20.dp))
+                        Tip("Go back to automatic lyrics") {
+                            IconButton(
+                                onClick = {
+                                    LyricsManager.resetToAutomatic(
+                                        songId = currentSong.id,
+                                        title = currentSong.title,
+                                        artist = currentSong.artist,
+                                        durationSec = ((playerState.duration.takeIf { it > 0 }
+                                            ?: currentSong.knownDurationMs()) / 1000).toInt(),
+                                        album = currentSong.album
+                                    )
+                                },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(Icons.Default.RestartAlt, "Go back to automatic lyrics", modifier = Modifier.size(20.dp))
+                            }
                         }
                     }
-                    IconButton(
-                        onClick = { searchFor = currentSong },
-                        enabled = currentSong != null,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(Icons.Default.Search, "Search for lyrics", modifier = Modifier.size(20.dp))
+                    Tip("Search for lyrics") {
+                        IconButton(
+                            onClick = { searchFor = currentSong },
+                            enabled = currentSong != null,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(Icons.Default.Search, "Search for lyrics", modifier = Modifier.size(20.dp))
+                        }
                     }
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Default.Close, "Close", modifier = Modifier.size(20.dp))
+                    Tip("Close") {
+                        IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Close, "Close", modifier = Modifier.size(20.dp))
+                        }
                     }
                 }
 

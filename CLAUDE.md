@@ -186,7 +186,7 @@ Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop 
 | File | Purpose |
 |------|---------|
 | ui/components/MiniPlayer.kt | Player bar with seek, controls, volume, queue/lyrics buttons |
-| ui/components/UpdateBadge.kt | Floating top-right "update waiting" pill, navigates to Settings |
+| ui/components/UpdateBadge.kt | Floating "update waiting" pill below the title row, navigates to Settings |
 | ui/components/LyricsPanel.kt | Synced/plain lyrics sidebar with auto-scroll, word highlight, search dialog |
 | ui/components/AccountSwitcher.kt | Saved accounts under the Settings account card: switch, remove, add |
 | ui/components/FloatingPlayer.kt | The floating mini player disc; its window is created in Main.kt |

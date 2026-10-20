@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.ui
 
+import com.lyrenne.desktop.ui.components.Tip
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -489,14 +490,16 @@ fun App(player: DesktopPlayer) {
                                 onClick = {
                                     detailStack.clear()
                                     currentScreen = Screen.Settings
-                                    // Landing at the top of a 16-section list is barely better
-                                    // than not navigating: the update controls are second from
-                                    // the bottom and people were not finding them.
+                                    // Landing at the top of a long list is barely better than
+                                    // not navigating: the update controls are near the bottom
+                                    // and people were not finding them.
                                     settingsScrollTarget = SETTINGS_SECTION_UPDATES
                                 },
+                                // Below the title row: at the top corner it sat exactly where
+                                // every screen keeps its title actions (Sync, view toggle).
                                 modifier = Modifier
                                     .align(Alignment.TopEnd)
-                                    .padding(LyrenneTokens.contentPadding)
+                                    .padding(top = 64.dp, end = LyrenneTokens.contentPadding)
                             )
 
                             // Playback failures used to be silent in the UI: the VLC error event
@@ -670,10 +673,17 @@ private fun PlaybackErrorBanner(
         Surface(
             color = MaterialTheme.colorScheme.errorContainer,
             contentColor = MaterialTheme.colorScheme.onErrorContainer,
-            shape = MaterialTheme.shapes.medium,
-            modifier = modifier
+            shape = MaterialTheme.shapes.extraLarge,
+            modifier = modifier.widthIn(max = 640.dp)
         ) {
-            Text(error, modifier = Modifier.padding(12.dp))
+            Row(Modifier.padding(start = 14.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.ErrorOutline, null, Modifier.size(20.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
+                Tip("Dismiss") {
+                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, "Dismiss", Modifier.size(18.dp)) }
+                }
+            }
         }
     }
 }

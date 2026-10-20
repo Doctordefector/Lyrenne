@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.ui.screens
 
+import com.lyrenne.desktop.ui.components.Tip
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -317,10 +318,12 @@ fun SettingsScreen(
                                 }
 
                                 // Logout button
-                                FilledTonalIconButton(
-                                    onClick = { showLogoutDialog = true }
-                                ) {
-                                    Icon(Icons.AutoMirrored.Filled.Logout, "Sign Out")
+                                Tip("Sign Out") {
+                                    FilledTonalIconButton(
+                                        onClick = { showLogoutDialog = true }
+                                    ) {
+                                        Icon(Icons.AutoMirrored.Filled.Logout, "Sign Out")
+                                    }
                                 }
                             }
                         }
@@ -1067,13 +1070,15 @@ fun SettingsScreen(
                             }
                         },
                         trailing = {
-                            IconButton(onClick = {
-                                try {
-                                    val dir = PreferencesManager.getDownloadDirectory()
-                                    if (dir.exists()) Desktop.getDesktop().open(dir)
-                                } catch (_: Exception) {}
-                            }) {
-                                Icon(Icons.Default.FolderOpen, "Open folder")
+                            Tip("Open folder") {
+                                IconButton(onClick = {
+                                    try {
+                                        val dir = PreferencesManager.getDownloadDirectory()
+                                        if (dir.exists()) Desktop.getDesktop().open(dir)
+                                    } catch (_: Exception) {}
+                                }) {
+                                    Icon(Icons.Default.FolderOpen, "Open folder")
+                                }
                             }
                         }
                     )
@@ -1110,12 +1115,14 @@ fun SettingsScreen(
                             } else {
                                 val done = exportState as? CarExport.ExportState.Finished
                                 if (done != null) {
-                                    IconButton(onClick = {
-                                        try {
-                                            if (done.outDir.exists()) Desktop.getDesktop().open(done.outDir)
-                                        } catch (_: Exception) {}
-                                    }) {
-                                        Icon(Icons.Default.FolderOpen, "Open folder")
+                                    Tip("Open folder") {
+                                        IconButton(onClick = {
+                                            try {
+                                                if (done.outDir.exists()) Desktop.getDesktop().open(done.outDir)
+                                            } catch (_: Exception) {}
+                                        }) {
+                                            Icon(Icons.Default.FolderOpen, "Open folder")
+                                        }
                                     }
                                 }
                             }

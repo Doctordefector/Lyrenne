@@ -437,31 +437,6 @@ internal fun formatTime(ms: Long): String {
     else "%d:%02d".format(minutes, seconds)
 }
 
-/** Hover tooltip for the icon-only player controls: the action, and its shortcut if it has one. */
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
-@Composable
-internal fun Tip(text: String, content: @Composable () -> Unit) {
-    androidx.compose.foundation.TooltipArea(
-        tooltip = {
-            Surface(
-                color = MaterialTheme.colorScheme.inverseSurface,
-                shape = MaterialTheme.shapes.extraSmall
-            ) {
-                Text(
-                    text,
-                    color = MaterialTheme.colorScheme.inverseOnSurface,
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                )
-            }
-        },
-        delayMillis = 500,
-        tooltipPlacement = androidx.compose.foundation.TooltipPlacement.CursorPoint(
-            offset = androidx.compose.ui.unit.DpOffset(0.dp, (-32).dp)
-        ),
-        content = content
-    )
-}
 
 /**
  * Music videos carry an i.ytimg.com frame, and `hqdefault` is 4:3 with the 16:9 picture

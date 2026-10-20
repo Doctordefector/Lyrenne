@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.ui.screens
 
+import com.lyrenne.desktop.ui.components.select
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -43,8 +44,8 @@ fun LocalPlaylistScreen(
     onBack: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
-    val playlist by DatabaseHelper.getPlaylistById(playlistId).collectAsState(initial = null)
-    val songs by DatabaseHelper.getSongsForPlaylist(playlistId).collectAsState(initial = emptyList())
+    val playlist by remember(playlistId) { DatabaseHelper.getPlaylistById(playlistId) }.collectAsState(initial = null)
+    val songs by remember(playlistId) { DatabaseHelper.getSongsForPlaylist(playlistId) }.collectAsState(initial = emptyList())
     val artistNamesMap = remember(songs) { DatabaseHelper.getAllSongArtistNames() }
 
     var showRenameDialog by remember { mutableStateOf(false) }
@@ -216,7 +217,7 @@ fun LocalPlaylistScreen(
                 }
             }
         } else {
-            val playerState by player.state.collectAsState()
+            val playingId by player.select { it.currentSong?.id }
             val searching = query.isNotBlank()
             val shown = remember(songs, artistNamesMap, query) {
                 songs.indices
@@ -232,7 +233,7 @@ fun LocalPlaylistScreen(
                         song = song,
                         index = index,
                         total = songs.size,
-                        isPlaying = playerState.currentSong?.id == song.id,
+                        isPlaying = playingId == song.id,
                         player = player,
                         onClick = {
                             val infos = songs.map { it.toPlaylistSongInfo(artistNamesMap) }
@@ -276,8 +277,8 @@ fun AutoPlaylistScreen(
     val artistNamesMap = remember { DatabaseHelper.getAllSongArtistNames() }
 
     // Liked + Downloaded are reactive flows; Most Played is a one-shot stats query
-    val likedSongs by DatabaseHelper.getLikedSongs().collectAsState(initial = emptyList())
-    val downloadedSongs by DatabaseHelper.getDownloadedSongs().collectAsState(initial = emptyList())
+    val likedSongs by remember { DatabaseHelper.getLikedSongs() }.collectAsState(initial = emptyList())
+    val downloadedSongs by remember { DatabaseHelper.getDownloadedSongs() }.collectAsState(initial = emptyList())
     var mostPlayed by remember { mutableStateOf<List<DatabaseHelper.SongStats>>(emptyList()) }
 
     LaunchedEffect(type) {
@@ -363,7 +364,7 @@ fun AutoPlaylistScreen(
                 )
             }
         } else {
-            val playerState by player.state.collectAsState()
+            val playingId by player.select { it.currentSong?.id }
             val shown = remember(songInfos, query) {
                 songInfos.withIndex().filter { (_, song) -> matchesQuery(query, song.title, song.artist, song.album) }
             }
@@ -375,7 +376,7 @@ fun AutoPlaylistScreen(
                         song = song,
                         index = index,
                         total = songInfos.size,
-                        isPlaying = playerState.currentSong?.id == song.id,
+                        isPlaying = playingId == song.id,
                         player = player,
                         onClick = {
                             scope.launch { player.playQueue(songInfos, index) }

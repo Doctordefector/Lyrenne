@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.ui.screens
 
+import com.lyrenne.desktop.ui.components.select
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -33,7 +34,8 @@ fun QueueScreen(
     player: DesktopPlayer,
     onDismiss: () -> Unit
 ) {
-    val state by player.state.collectAsState()
+    // No position: nothing here draws it, and it ticks five times a second.
+    val state by player.select { it.copy(position = 0L) }
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 

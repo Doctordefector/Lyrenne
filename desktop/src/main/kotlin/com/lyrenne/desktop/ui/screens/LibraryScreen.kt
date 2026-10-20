@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.ui.screens
 
+import com.lyrenne.desktop.ui.components.select
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -67,12 +68,12 @@ fun LibraryScreen(
     var sortAscending by remember { mutableStateOf(false) }
 
     // Collect from database
-    val librarySongs by DatabaseHelper.getAllSongs().collectAsState(initial = emptyList())
-    val likedSongs by DatabaseHelper.getLikedSongs().collectAsState(initial = emptyList())
-    val downloadedSongs by DatabaseHelper.getDownloadedSongs().collectAsState(initial = emptyList())
-    val albums by DatabaseHelper.getAllAlbums().collectAsState(initial = emptyList())
-    val artists by DatabaseHelper.getAllArtists().collectAsState(initial = emptyList())
-    val playlists by DatabaseHelper.getAllPlaylists().collectAsState(initial = emptyList())
+    val librarySongs by remember { DatabaseHelper.getAllSongs() }.collectAsState(initial = emptyList())
+    val likedSongs by remember { DatabaseHelper.getLikedSongs() }.collectAsState(initial = emptyList())
+    val downloadedSongs by remember { DatabaseHelper.getDownloadedSongs() }.collectAsState(initial = emptyList())
+    val albums by remember { DatabaseHelper.getAllAlbums() }.collectAsState(initial = emptyList())
+    val artists by remember { DatabaseHelper.getAllArtists() }.collectAsState(initial = emptyList())
+    val playlists by remember { DatabaseHelper.getAllPlaylists() }.collectAsState(initial = emptyList())
 
     // Load artist names map (batch load for efficiency)
     var artistNamesMap by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
@@ -323,10 +324,10 @@ private fun SongsTab(
     playlists: List<Playlist> = emptyList()
 ) {
     val scope = rememberCoroutineScope()
-    val playerState by player.state.collectAsState()
+    val playingId by player.select { it.currentSong?.id }
     // What actually played, newest first. This was the head of the live queue, which only looked
     // like history while every click here replaced the queue with a single song.
-    val recentSongs = playerState.recentlyPlayed
+    val recentSongs = player.select { it.recentlyPlayed }.value
 
     var showLikedOnly by remember { mutableStateOf(false) }
     val baseSongs = if (showLikedOnly) likedSongs else songs
@@ -430,7 +431,7 @@ private fun SongsTab(
                     items(recentSongs) { song ->
                         SongListItem(
                             song = song,
-                            isPlaying = playerState.currentSong?.id == song.id,
+                            isPlaying = playingId == song.id,
                             isDownloaded = DownloadManager.isDownloaded(song.id),
                             playlists = playlists,
                             onClick = {
@@ -459,7 +460,7 @@ private fun SongsTab(
                         val song = dbSong.toSongInfo(artistNamesMap)
                         SongListItem(
                             song = song,
-                            isPlaying = playerState.currentSong?.id == song.id,
+                            isPlaying = playingId == song.id,
                             isDownloaded = dbSong.isDownloaded == 1L,
                             isLiked = dbSong.liked == 1L,
                             playlists = playlists,
@@ -1081,7 +1082,7 @@ private fun DownloadsTab(
     playlists: List<Playlist> = emptyList()
 ) {
     val scope = rememberCoroutineScope()
-    val playerState by player.state.collectAsState()
+    val playingId by player.select { it.currentSong?.id }
     var showDeleteAllDialog by remember { mutableStateOf(false) }
 
     val filteredDownloaded = remember(downloadedSongs, searchQuery, artistNamesMap) {
@@ -1280,7 +1281,7 @@ private fun DownloadsTab(
                 val song = dbSong.toSongInfo(artistNamesMap)
                 SongListItem(
                     song = song,
-                    isPlaying = playerState.currentSong?.id == song.id,
+                    isPlaying = playingId == song.id,
                     isDownloaded = true,
                     playlists = playlists,
                     onClick = {

@@ -249,7 +249,7 @@ fun SearchScreen(
                 }
                 else -> {
                     // Search history (when idle)
-                    val searchHistory by DatabaseHelper.getSearchHistory()
+                    val searchHistory by remember { DatabaseHelper.getSearchHistory() }
                         .collectAsState(initial = emptyList())
 
                     if (searchHistory.isNotEmpty()) {
@@ -439,7 +439,7 @@ private fun SearchResultItem(
                     }
                 }
                 if (showPlaylistPicker) {
-                    val playlists by DatabaseHelper.getAllPlaylists().collectAsState(initial = emptyList())
+                    val playlists by remember { DatabaseHelper.getAllPlaylists() }.collectAsState(initial = emptyList())
                     PlaylistPickerDialog(
                         song = songInfo,
                         playlists = playlists,

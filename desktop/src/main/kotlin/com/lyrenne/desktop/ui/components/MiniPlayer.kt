@@ -42,14 +42,16 @@ fun MiniPlayer(
     onLyricsClick: () -> Unit = {},
     lyricsActive: Boolean = false
 ) {
-    val state by player.state.collectAsState()
+    // Position is left out: it ticks five times a second, and only the seek bar and the time
+    // readout draw it. They collect it themselves, so the rest of the bar stays still.
+    val state by player.select { it.copy(position = 0L) }
     val scope = rememberCoroutineScope()
     var showSongMenu by remember { mutableStateOf(false) }
     var showPlaylistPicker by remember { mutableStateOf(false) }
     var showSleepMenu by remember { mutableStateOf(false) }
     var showSpeedMenu by remember { mutableStateOf(false) }
     var showMoreMenu by remember { mutableStateOf(false) }
-    val playlists by DatabaseHelper.getAllPlaylists().collectAsState(initial = emptyList())
+    val playlists by remember { DatabaseHelper.getAllPlaylists() }.collectAsState(initial = emptyList())
     val sleepTimer by player.sleepTimer.collectAsState()
     val prefs by PreferencesManager.preferences.collectAsState()
 
@@ -91,20 +93,7 @@ fun MiniPlayer(
     ) {
         Column {
             // Seekable progress bar
-            PlayerSlider(
-                value = if (state.duration > 0) state.position.toFloat() / state.duration else 0f,
-                onValueChange = { fraction ->
-                    val seekPos = (fraction * state.duration).toLong()
-                    player.seekTo(seekPos)
-                },
-                modifier = Modifier.fillMaxWidth().height(12.dp).padding(horizontal = 0.dp)
-                    .wheelStep(
-                        value = { player.state.value.position.toFloat() },
-                        step = 5_000f,
-                        range = 0f..state.duration.toFloat(),
-                        enabled = state.duration > 0
-                    ) { player.seekTo(it.toLong()) }
-            )
+            SeekBar(player, state.duration)
 
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val responsiveLayout = miniPlayerResponsiveLayout(maxWidth)
@@ -210,11 +199,7 @@ fun MiniPlayer(
                         Spacer(Modifier.width(8.dp))
 
                         // Time display
-                        Text(
-                            text = "${formatTime(state.position)} / ${formatTime(state.duration)}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        TimeReadout(player, state.duration)
 
                         Spacer(Modifier.width(12.dp))
                     }
@@ -685,4 +670,31 @@ private fun Tip(text: String, content: @Composable () -> Unit) {
 internal fun squareCropFriendly(url: String?): String? {
     if (url == null || "ytimg.com" !in url) return url
     return url.substringBefore('?').replace(Regex("/(hq|sd|maxres)default"), "/mqdefault")
+}
+
+/** The seek bar. Reads the position itself so a tick recomposes only this. */
+@Composable
+private fun SeekBar(player: DesktopPlayer, duration: Long) {
+    val position by player.select { it.position }
+    PlayerSlider(
+        value = if (duration > 0) position.toFloat() / duration else 0f,
+        onValueChange = { fraction -> player.seekTo((fraction * duration).toLong()) },
+        modifier = Modifier.fillMaxWidth().height(12.dp)
+            .wheelStep(
+                value = { player.state.value.position.toFloat() },
+                step = 5_000f,
+                range = 0f..duration.toFloat(),
+                enabled = duration > 0
+            ) { player.seekTo(it.toLong()) }
+    )
+}
+
+@Composable
+private fun TimeReadout(player: DesktopPlayer, duration: Long) {
+    val position by player.select { it.position }
+    Text(
+        text = "${formatTime(position)} / ${formatTime(duration)}",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
 }

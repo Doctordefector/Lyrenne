@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.ui.screens
 
+import com.lyrenne.desktop.ui.components.select
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -50,7 +51,7 @@ fun PlaylistScreen(
     var isLoadingMore by remember { mutableStateOf(false) }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     var continuation by rememberSaveable { mutableStateOf<String?>(null) }
-    val playerState by player.state.collectAsState()
+    val playingId by player.select { it.currentSong?.id }
     var query by remember { mutableStateOf("") }
     // One page fetch at a time: scrolling, searching and Download All each page through the
     // playlist, and two of them reading the same continuation appended that page twice
@@ -303,7 +304,7 @@ fun PlaylistScreen(
                     items(shownSongs) { (index, song) ->
                         PlaylistSongItem(
                             song = song,
-                            isPlaying = playerState.currentSong?.id == song.id,
+                            isPlaying = playingId == song.id,
                             onClick = {
                                 scope.launch {
                                     val songInfos = allSongs.map { it.toDesktopSongInfo() }

@@ -86,7 +86,7 @@ fun RecognitionScreen(
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
             }
             Text(
-                "Music Recognition",
+                "Identify song",
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(start = 8.dp)
             )
@@ -167,7 +167,7 @@ private fun ReadyState(
         )
 
         Text(
-            "Tap to identify a song",
+            "Click to identify a song",
             style = MaterialTheme.typography.headlineSmall
         )
 

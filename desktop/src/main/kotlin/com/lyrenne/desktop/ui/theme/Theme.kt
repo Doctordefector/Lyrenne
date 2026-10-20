@@ -39,7 +39,7 @@ import java.io.File
 private val LyrenneGoldLight = Color(0xFFE3C089)
 
 object LyrenneTokens {
-    // Icon-only rail: labels moved into hover tooltips.
+    // Labelled rail: icon over a one-line label.
     val navigationRailWidth = 76.dp
     val playerHeight = 80.dp
     // The player and tray panel are floating, rounded docks rather than edge-to-edge bars.

@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.ui.screens
 
+import com.lyrenne.desktop.ui.theme.LyrenneTokens
 import com.lyrenne.desktop.ui.components.Tip
 import com.metrolist.innertube.pages.SearchSummary
 import com.lyrenne.desktop.ui.components.select
@@ -155,7 +156,7 @@ fun SearchScreen(
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp)
+        modifier = Modifier.fillMaxSize().padding(LyrenneTokens.contentPadding)
     ) {
         // Search bar
         OutlinedTextField(
@@ -191,6 +192,13 @@ fun SearchScreen(
                 }
             },
             singleLine = true,
+            // A filled pill, the one search-field style (Library, playlists, Settings)
+            shape = RoundedCornerShape(50),
+            colors = OutlinedTextFieldDefaults.colors(
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                unfocusedBorderColor = androidx.compose.ui.graphics.Color.Transparent
+            ),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { performSearch() })
         )
@@ -478,7 +486,7 @@ private fun SearchSummaryView(
                     Modifier.fillMaxWidth().padding(top = if (index == 0) 0.dp else 16.dp, bottom = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(summary.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                    Text(summary.title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
                     seeAllFilter(summary.title)?.let { filter ->
                         TextButton(onClick = { onSeeAll(filter) }) { Text("See all") }
                     }

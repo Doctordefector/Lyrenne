@@ -447,7 +447,7 @@ private fun SongsTab(
 private fun SectionHeader(text: String) {
     Text(
         text,
-        style = MaterialTheme.typography.titleMedium,
+        style = MaterialTheme.typography.titleLarge,
         modifier = Modifier.padding(top = 12.dp, bottom = 4.dp, start = 8.dp)
     )
 }

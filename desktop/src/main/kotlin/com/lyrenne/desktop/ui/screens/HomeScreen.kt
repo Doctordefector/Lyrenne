@@ -265,7 +265,7 @@ private fun HomeSection(
     Column {
         Text(
             text = title,
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleLarge,
             modifier = Modifier.padding(bottom = 10.dp)
         )
 

@@ -619,6 +619,37 @@ Every text pairing in both schemes measures at or above 4.5:1. When changing a c
 rather than eyeballing it. Note also that in a **dark** scheme `primaryContainer` is a *dark* tone
 carrying light text: setting it to the mid-tone brand colour made cards render as flat brown slabs.
 
+## UI kit: one component per role
+
+`ui/components/` holds the shared pieces every screen uses. Use them rather than hand-rolling a row,
+tile or header; five hand-written copies of the song menu had drifted apart before this existed.
+
+| Piece | Role |
+|---|---|
+| `TrackRow` | Every song row (Library, Search, Album, playlists, Downloads, Queue, Artist, Podcast). 56 dp, album column from 900 dp, song menu built in |
+| `SongMenu` / `MenuAnchor` / `Modifier.contextMenu` | The one song menu, opened by ⋮ or right-click at the cursor. `menuExtra` adds screen-specific entries |
+| `MediaTile` | Every tile in a shelf or grid; songs carry the song menu on right-click |
+| `DetailHeader` / `DetailTopBar` | Album/playlist/artist/podcast header (big round Play, icon actions, ⋮) and the top bar that shows the name once the header scrolls away |
+| `ScreenTitle`, `ToolHeader`, `PrimaryAction`, `SecondaryAction`, `PillTab`, `SkeletonShelf/Rows` | Titles, buttons, tabs and loading placeholders (`Kit.kt`) |
+| `CollapsibleSearchField`, `PlaylistSortMenu` | Search that opens from an icon, and one sort dropdown |
+| `Tip` | Tooltip; every icon-only button is wrapped in one |
+| `selectedChipColors()` (Theme.kt) | Selected = the primaryContainer family everywhere, never Material's default secondaryContainer |
+
+### Checking UI without a screen: UiSnapshot
+
+`desktop/src/test/.../ui/UiSnapshot.kt` renders the real App headless (ImageComposeScene) to
+`desktop/build/snapshots/*.png`, driven by `desktop/build/snapshots/steps.txt`
+(`size W H`, `theme dark|light`, `tray`, `wait MS`, `click X Y`, `rclick X Y`, `move X Y`,
+`scroll X Y DY`, `type TEXT`, `shot NAME`). It copies `build/data/lyrenne.db` (never credentials) so
+it renders signed out with the dev library. Skipped unless asked for:
+
+```
+./gradlew :desktop:test --tests '*UiSnapshot*' -Psnapshots
+```
+
+`size` and `theme` rebuild the scene, so put them before navigation. There is no window, so the
+window-level shortcuts (AppShortcuts) and the floating disc are not exercised.
+
 ## Sync must be triggered by signing in, not only by launching
 
 `syncLibrary()` no-ops when not signed in. The launch sync in `Main.kt` fires roughly a second

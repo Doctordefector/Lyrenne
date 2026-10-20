@@ -1,5 +1,13 @@
 package com.lyrenne.desktop.ui.screens
 
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.material.icons.automirrored.filled.Sort
+import com.lyrenne.desktop.ui.theme.LyrenneTokens
+import com.lyrenne.desktop.ui.components.ScreenTitle
+import com.lyrenne.desktop.ui.components.SecondaryAction
+import com.lyrenne.desktop.ui.components.PrimaryAction
+import com.lyrenne.desktop.ui.components.TrackRow
 import com.lyrenne.desktop.ui.components.Tip
 import com.lyrenne.desktop.ui.components.ConfirmDialog
 import com.lyrenne.desktop.ui.theme.selectedChipColors
@@ -55,10 +63,25 @@ enum class LibraryTab {
     Songs, Albums, Artists, Playlists, Downloads
 }
 
-enum class SortMode(val label: String) {
-    DATE_ADDED("Date Added"),
-    NAME("Name"),
-    PLAY_TIME("Play Time")
+/**
+ * Each mode sorts one way by default ([natural]); the direction toggle reverses it, in every mode.
+ * Tabs offer only the modes they can honour: Albums used to "sort by play time" by year, and
+ * Artists by reversing whatever order the database returned.
+ */
+enum class SortMode(val label: String, val natural: String, val reversed: String) {
+    DATE_ADDED("Date added", "Newest first", "Oldest first"),
+    NAME("Name", "A to Z", "Z to A"),
+    PLAY_TIME("Play time", "Most played first", "Least played first"),
+    YEAR("Year", "Newest first", "Oldest first");
+
+    companion object {
+        fun forTab(tab: LibraryTab): List<SortMode> = when (tab) {
+            LibraryTab.Songs -> listOf(DATE_ADDED, NAME, PLAY_TIME)
+            LibraryTab.Albums -> listOf(DATE_ADDED, NAME, YEAR)
+            LibraryTab.Artists -> listOf(DATE_ADDED, NAME)
+            else -> emptyList()
+        }
+    }
 }
 
 @Composable
@@ -74,7 +97,8 @@ fun LibraryScreen(
     var selectedTab by remember { mutableStateOf(LibraryTab.Songs) }
     var searchQuery by remember { mutableStateOf("") }
     var sortMode by remember { mutableStateOf(SortMode.DATE_ADDED) }
-    var sortAscending by remember { mutableStateOf(false) }
+    var sortReversed by remember { mutableStateOf(false) }
+    var showLikedOnly by remember { mutableStateOf(false) }
 
     // Collect from database
     val librarySongs by remember { DatabaseHelper.getAllSongs() }.collectAsState(initial = emptyList())
@@ -99,58 +123,38 @@ fun LibraryScreen(
     // Download state
     val activeDownloads by DownloadManager.activeDownloads.collectAsState()
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        // Header with sync button
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                "Your Library",
-                style = MaterialTheme.typography.headlineMedium
-            )
+    val sortModes = SortMode.forTab(selectedTab)
+    val sort = if (sortMode in sortModes) sortMode else SortMode.DATE_ADDED
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                // Grid/list view toggle: only shown on the tabs it affects (Albums, Artists)
-                val prefs by com.lyrenne.desktop.settings.PreferencesManager.preferences.collectAsState()
-                val isList = prefs.libraryViewMode == com.lyrenne.desktop.settings.LibraryViewMode.LIST
-                if (selectedTab == LibraryTab.Albums || selectedTab == LibraryTab.Artists) Tip(if (isList) "Grid view" else "List view") { IconButton(onClick = {
-                    com.lyrenne.desktop.settings.PreferencesManager.setLibraryViewMode(
-                        if (prefs.libraryViewMode == com.lyrenne.desktop.settings.LibraryViewMode.LIST)
-                            com.lyrenne.desktop.settings.LibraryViewMode.GRID
-                        else
-                            com.lyrenne.desktop.settings.LibraryViewMode.LIST
-                    )
-                }) {
-                    Icon(
-                        if (prefs.libraryViewMode == com.lyrenne.desktop.settings.LibraryViewMode.LIST)
-                            Icons.Default.GridView
-                        else
-                            Icons.Default.ViewList,
-                        contentDescription = if (isList) "Grid view" else "List view"
-                    )
-                } }
-                // Sync button
-                if (authState.isLoggedIn) {
-                    if (syncState.isSyncing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            strokeWidth = 2.dp
+    Column(modifier = Modifier.fillMaxSize().padding(horizontal = LyrenneTokens.contentPadding, vertical = 16.dp)) {
+        ScreenTitle("Your Library") {
+            // Grid/list view toggle: only shown on the tabs it affects (Albums, Artists)
+            val prefs by com.lyrenne.desktop.settings.PreferencesManager.preferences.collectAsState()
+            val isList = prefs.libraryViewMode == com.lyrenne.desktop.settings.LibraryViewMode.LIST
+            if (selectedTab == LibraryTab.Albums || selectedTab == LibraryTab.Artists) {
+                Tip(if (isList) "Grid view" else "List view") {
+                    IconButton(onClick = {
+                        com.lyrenne.desktop.settings.PreferencesManager.setLibraryViewMode(
+                            if (isList) com.lyrenne.desktop.settings.LibraryViewMode.GRID
+                            else com.lyrenne.desktop.settings.LibraryViewMode.LIST
                         )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            syncState.progress,
-                            style = MaterialTheme.typography.bodySmall
+                    }) {
+                        Icon(
+                            if (isList) Icons.Default.GridView else Icons.Default.ViewList,
+                            contentDescription = if (isList) "Grid view" else "List view"
                         )
-                    } else {
-                        TextButton(
-                            onClick = { LibrarySync.syncLibrary(full = true) }
-                        ) {
-                            Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Sync")
-                        }
+                    }
+                }
+            }
+            if (authState.isLoggedIn) {
+                if (syncState.isSyncing) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Text(syncState.progress, style = MaterialTheme.typography.bodySmall)
+                } else {
+                    TextButton(onClick = { LibrarySync.syncLibrary(full = true) }) {
+                        Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Sync")
                     }
                 }
             }
@@ -218,75 +222,73 @@ fun LibraryScreen(
 
         Spacer(Modifier.height(12.dp))
 
-        // Search bar
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            modifier = Modifier.fillMaxWidth().suppressMediaKeys(),
-            placeholder = { Text("Search library") },
-            leadingIcon = { Icon(Icons.Default.Search, null) },
-            trailingIcon = {
-                if (searchQuery.isNotEmpty()) {
-                    IconButton(onClick = { searchQuery = "" }) {
-                        Icon(Icons.Default.Clear, "Clear")
+        // One toolbar: tabs on the left; search, the liked filter and sort on the right. These
+        // were five stacked rows, which left room for one song at the minimum window size.
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            // Tabs as pills: the selected one filled, the rest outlined.
+            Row(
+                Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                LibraryTab.entries.forEach { tab ->
+                    val count = when (tab) {
+                        LibraryTab.Songs -> librarySongs.size
+                        LibraryTab.Albums -> albums.size
+                        LibraryTab.Artists -> artists.size
+                        LibraryTab.Playlists -> playlists.size
+                        LibraryTab.Downloads -> downloadedSongs.size + activeDownloads.size
                     }
+                    PillTab(
+                        label = tab.name,
+                        count = count,
+                        selected = selectedTab == tab,
+                        onClick = { selectedTab = tab }
+                    )
                 }
-            },
-            singleLine = true,
-            // A filled pill: the outline only appears on focus.
-            shape = RoundedCornerShape(50),
-            colors = OutlinedTextFieldDefaults.colors(
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                unfocusedBorderColor = Color.Transparent
-            )
-        )
-
-        Spacer(Modifier.height(12.dp))
-
-        // Tabs as pills: the selected one filled gold, the rest outlined.
-        Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            LibraryTab.entries.forEach { tab ->
-                val count = when (tab) {
-                    LibraryTab.Songs -> librarySongs.size
-                    LibraryTab.Albums -> albums.size
-                    LibraryTab.Artists -> artists.size
-                    LibraryTab.Playlists -> playlists.size
-                    LibraryTab.Downloads -> downloadedSongs.size + activeDownloads.size
-                }
-                PillTab(
-                    label = tab.name,
-                    count = count,
-                    selected = selectedTab == tab,
-                    onClick = { selectedTab = tab }
+            }
+            Spacer(Modifier.width(8.dp))
+            LibrarySearchField(searchQuery, onQueryChange = { searchQuery = it })
+            if (selectedTab == LibraryTab.Songs) {
+                Spacer(Modifier.width(4.dp))
+                FilterChip(
+                    colors = selectedChipColors(),
+                    shape = RoundedCornerShape(50),
+                    selected = showLikedOnly,
+                    onClick = { showLikedOnly = !showLikedOnly },
+                    label = { Text("Liked") },
+                    leadingIcon = {
+                        Icon(
+                            if (showLikedOnly) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            null, Modifier.size(18.dp)
+                        )
+                    }
                 )
+            }
+            if (sortModes.isNotEmpty()) {
+                Spacer(Modifier.width(4.dp))
+                SortMenu(sort, sortReversed, sortModes, onSort = { sortMode = it }, onReverse = { sortReversed = it })
             }
         }
 
-        Spacer(Modifier.height(12.dp))
-
-        // Sort controls (for tabs that support sorting)
-        if (selectedTab in listOf(LibraryTab.Songs, LibraryTab.Albums, LibraryTab.Artists)) {
-            SortControls(sortMode, sortAscending, onSortModeChange = { sortMode = it }, onToggleDirection = { sortAscending = !sortAscending })
-            Spacer(Modifier.height(8.dp))
-        }
+        Spacer(Modifier.height(8.dp))
 
         // Content
         when (selectedTab) {
-            LibraryTab.Songs -> SongsTab(librarySongs, likedSongs, player, artistNamesMap, searchQuery, sortMode, sortAscending, playlists)
-            LibraryTab.Albums -> AlbumsTab(albums, onAlbumClick, searchQuery, sortMode, sortAscending)
-            LibraryTab.Artists -> ArtistsTab(artists, onArtistClick, searchQuery, sortMode, sortAscending)
+            LibraryTab.Songs -> SongsTab(librarySongs, likedSongs, showLikedOnly, player, artistNamesMap, searchQuery, sort, sortReversed)
+            LibraryTab.Albums -> AlbumsTab(albums, onAlbumClick, searchQuery, sort, sortReversed)
+            LibraryTab.Artists -> ArtistsTab(artists, onArtistClick, searchQuery, sort, sortReversed)
             LibraryTab.Playlists -> PlaylistsTab(
                 playlists = playlists,
                 onPlaylistClick = onPlaylistClick,
                 onLocalPlaylistClick = onLocalPlaylistClick,
                 onAutoPlaylistClick = onAutoPlaylistClick,
-                searchQuery = searchQuery
+                searchQuery = searchQuery,
+                autoCounts = mapOf(
+                    com.lyrenne.desktop.ui.AutoPlaylistType.LIKED to likedSongs.size,
+                    com.lyrenne.desktop.ui.AutoPlaylistType.DOWNLOADED to downloadedSongs.size
+                )
             )
-            LibraryTab.Downloads -> DownloadsTab(downloadedSongs, activeDownloads, player, artistNamesMap, searchQuery, playlists)
+            LibraryTab.Downloads -> DownloadsTab(downloadedSongs, activeDownloads, player, artistNamesMap, searchQuery)
         }
     }
 }
@@ -319,34 +321,75 @@ private fun PillTab(label: String, count: Int, selected: Boolean, onClick: () ->
     }
 }
 
+/** One sort button ("Date added ▾"); the modes and the direction live in its menu. */
 @Composable
-private fun SortControls(
-    sortMode: SortMode,
-    sortAscending: Boolean,
-    onSortModeChange: (SortMode) -> Unit,
-    onToggleDirection: () -> Unit
+private fun SortMenu(
+    sort: SortMode,
+    reversed: Boolean,
+    modes: List<SortMode>,
+    onSort: (SortMode) -> Unit,
+    onReverse: (Boolean) -> Unit
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Text("Sort:", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        SortMode.entries.forEach { mode ->
-            FilterChip(
-                colors = selectedChipColors(),
-                shape = RoundedCornerShape(50),
-                selected = sortMode == mode,
-                onClick = { onSortModeChange(mode) },
-                label = { Text(mode.label, style = MaterialTheme.typography.labelSmall) },
-                modifier = Modifier.height(32.dp)
-            )
+    var open by remember { mutableStateOf(false) }
+    Box {
+        TextButton(onClick = { open = true }) {
+            Icon(Icons.AutoMirrored.Filled.Sort, null, Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(sort.label)
+            Icon(Icons.Default.ArrowDropDown, null, Modifier.size(18.dp))
         }
-        IconButton(onClick = onToggleDirection, modifier = Modifier.size(32.dp)) {
-            Icon(
-                if (sortAscending) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
-                contentDescription = if (sortAscending) "Ascending" else "Descending",
-                modifier = Modifier.size(18.dp)
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            modes.forEach { mode ->
+                DropdownMenuItem(
+                    text = { Text(mode.label) },
+                    onClick = { onSort(mode); open = false },
+                    trailingIcon = { if (mode == sort) Icon(Icons.Default.Check, null) }
+                )
+            }
+            HorizontalDivider()
+            listOf(false to sort.natural, true to sort.reversed).forEach { (rev, label) ->
+                DropdownMenuItem(
+                    text = { Text(label) },
+                    onClick = { onReverse(rev); open = false },
+                    trailingIcon = { if (rev == reversed) Icon(Icons.Default.Check, null) }
+                )
+            }
+        }
+    }
+}
+
+/** A search icon that opens into a field, and stays open while it holds a query. */
+@Composable
+private fun LibrarySearchField(query: String, onQueryChange: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    if (open || query.isNotEmpty()) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            modifier = Modifier.width(220.dp).focusRequester(focus).suppressMediaKeys()
+                .onFocusChanged { if (!it.isFocused && query.isEmpty()) open = false },
+            placeholder = { Text("Search library") },
+            leadingIcon = { Icon(Icons.Default.Search, null) },
+            trailingIcon = {
+                if (query.isNotEmpty()) {
+                    IconButton(onClick = { onQueryChange("") }) { Icon(Icons.Default.Clear, "Clear") }
+                }
+            },
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyMedium,
+            // A filled pill: the outline only appears on focus.
+            shape = RoundedCornerShape(50),
+            colors = OutlinedTextFieldDefaults.colors(
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                unfocusedBorderColor = Color.Transparent
             )
+        )
+        LaunchedEffect(open) { if (open) runCatching { focus.requestFocus() } }
+    } else {
+        Tip("Search library") {
+            IconButton(onClick = { open = true }) { Icon(Icons.Default.Search, "Search library") }
         }
     }
 }
@@ -355,12 +398,12 @@ private fun SortControls(
 private fun SongsTab(
     songs: List<Song>,
     likedSongs: List<Song>,
+    showLikedOnly: Boolean,
     player: DesktopPlayer,
     artistNamesMap: Map<String, String>,
     searchQuery: String,
     sortMode: SortMode,
-    sortAscending: Boolean,
-    playlists: List<Playlist> = emptyList()
+    sortReversed: Boolean
 ) {
     val scope = rememberCoroutineScope()
     val playingId by player.select { it.currentSong?.id }
@@ -368,7 +411,6 @@ private fun SongsTab(
     // like history while every click here replaced the queue with a single song.
     val recentSongs = player.select { it.recentlyPlayed }.value
 
-    var showLikedOnly by remember { mutableStateOf(false) }
     val baseSongs = if (showLikedOnly) likedSongs else songs
 
     // Filter by search query
@@ -384,331 +426,88 @@ private fun SongsTab(
         }
     }
 
-    // Sort — DATE_ADDED defaults newest-first (descending), others default ascending
-    val displaySongs = remember(filteredSongs, sortMode, sortAscending) {
+    val displaySongs = remember(filteredSongs, sortMode, sortReversed) {
         val sorted = when (sortMode) {
-            SortMode.DATE_ADDED -> filteredSongs.sortedByDescending { it.inLibrary ?: it.likedDate ?: "" }
             SortMode.NAME -> filteredSongs.sortedBy { it.title.lowercase() }
             SortMode.PLAY_TIME -> filteredSongs.sortedByDescending { it.totalPlayTime }
+            else -> filteredSongs.sortedByDescending { it.inLibrary ?: it.likedDate ?: "" }
         }
-        if (sortAscending) sorted.reversed() else sorted
+        if (sortReversed) sorted.reversed() else sorted
+    }
+    val songInfos = remember(displaySongs, artistNamesMap) { displaySongs.map { it.toSongInfo(artistNamesMap) } }
+    val showRecent = recentSongs.isNotEmpty() && !showLikedOnly && searchQuery.isBlank()
+
+    if (displaySongs.isEmpty() && !showRecent) {
+        EmptyLibraryMessage(
+            icon = Icons.Default.MusicNote,
+            message = if (searchQuery.isNotBlank()) "No matching songs"
+                     else if (showLikedOnly) "No liked songs"
+                     else "No songs in your library",
+            subMessage = if (searchQuery.isNotBlank()) "Try a different search term"
+                        else if (showLikedOnly) "Like songs to see them here"
+                        else "Sync your library or play songs to add them"
+        )
+        return
     }
 
-    Column {
-        // Filter chips + Play All / Shuffle All
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            FilterChip(
-                colors = selectedChipColors(),
-                shape = RoundedCornerShape(50),
-                selected = !showLikedOnly,
-                onClick = { showLikedOnly = false },
-                label = { Text("All") }
-            )
-            FilterChip(
-                colors = selectedChipColors(),
-                shape = RoundedCornerShape(50),
-                selected = showLikedOnly,
-                onClick = { showLikedOnly = true },
-                label = { Text("Liked") },
-                leadingIcon = if (showLikedOnly) {
-                    { Icon(Icons.Default.Favorite, null, Modifier.size(18.dp)) }
-                } else null
-            )
-
-            Spacer(Modifier.weight(1f))
-
-            if (displaySongs.isNotEmpty()) {
-                FilledTonalButton(
-                    onClick = {
-                        val allSongInfos = displaySongs.map { it.toSongInfo(artistNamesMap) }
-                        scope.launch { player.playQueue(allSongInfos) }
-                    }
+    LazyColumn {
+        if (displaySongs.isNotEmpty()) {
+            item(key = "actions") {
+                Row(
+                    Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Play All")
-                }
-                Spacer(Modifier.width(4.dp))
-                OutlinedButton(
-                    onClick = {
-                        val allSongInfos = displaySongs.map { it.toSongInfo(artistNamesMap) }.shuffled()
-                        scope.launch { player.playQueue(allSongInfos) }
-                    }
-                ) {
-                    Icon(Icons.Default.Shuffle, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Shuffle")
+                    PrimaryAction("Play", Icons.Default.PlayArrow, onClick = { scope.launch { player.playQueue(songInfos) } })
+                    SecondaryAction("Shuffle", Icons.Default.Shuffle, onClick = { scope.launch { player.playQueue(songInfos.shuffled()) } })
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        "${displaySongs.size} songs",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
 
-        Spacer(Modifier.height(8.dp))
-
-        if (displaySongs.isEmpty() && recentSongs.isEmpty()) {
-            EmptyLibraryMessage(
-                icon = Icons.Default.MusicNote,
-                message = if (searchQuery.isNotBlank()) "No matching songs"
-                         else if (showLikedOnly) "No liked songs"
-                         else "No songs in your library",
-                subMessage = if (searchQuery.isNotBlank()) "Try a different search term"
-                            else if (showLikedOnly) "Like songs to see them here"
-                            else "Sync your library or play songs to add them"
-            )
-        } else {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                // Recently Played (only when not searching)
-                if (recentSongs.isNotEmpty() && !showLikedOnly && searchQuery.isBlank()) {
-                    item {
-                        Text(
-                            "Recently Played",
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-                    }
-                    items(recentSongs) { song ->
-                        SongListItem(
-                            song = song,
-                            isPlaying = playingId == song.id,
-                            isDownloaded = DownloadManager.isDownloaded(song.id),
-                            playlists = playlists,
-                            onClick = {
-                                scope.launch {
-                                    player.playSong(song)
-                                }
-                            },
-                            onDownload = {
-                                DownloadManager.queueDownload(song)
-                            },
-                            onPlayNext = { player.addToQueueNext(song) },
-                            onAddToQueue = { player.addToQueue(song) }
-                        )
-                    }
-                }
-
-                if (displaySongs.isNotEmpty()) {
-                    item {
-                        Text(
-                            if (showLikedOnly) "Liked Songs" else "Library",
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-                    }
-                    itemsIndexed(displaySongs, key = { _, s -> s.id }) { index, dbSong ->
-                        val song = dbSong.toSongInfo(artistNamesMap)
-                        SongListItem(
-                            song = song,
-                            isPlaying = playingId == song.id,
-                            isDownloaded = dbSong.isDownloaded == 1L,
-                            isLiked = dbSong.liked == 1L,
-                            playlists = playlists,
-                            onClick = {
-                                // The list plays on from here, as it does from an album or a
-                                // playlist. This played the one song and stopped (issue #11).
-                                val songInfos = displaySongs.map { it.toSongInfo(artistNamesMap) }
-                                scope.launch { player.playQueue(songInfos, index) }
-                            },
-                            onDownload = {
-                                DownloadManager.queueDownload(song)
-                            },
-                            onToggleLike = {
-                                val nowLiked = dbSong.liked != 1L
-                                DatabaseHelper.updateSongLiked(dbSong.id, nowLiked)
-                                YouTubeWrites.likeSong(dbSong.id, nowLiked)
-                                // Auto-download on like (optional setting)
-                                if (nowLiked && dbSong.isDownloaded != 1L &&
-                                    com.lyrenne.desktop.settings.PreferencesManager.preferences.value.autoDownloadOnLike
-                                ) {
-                                    DownloadManager.queueDownload(song)
-                                }
-                            },
-                            onPlayNext = { player.addToQueueNext(song) },
-                            onAddToQueue = { player.addToQueue(song) },
-                            onStartRadio = { scope.launch { player.startRadio(song) } }
-                        )
-                    }
-                }
+        // Recently Played, then the library under its own header. Without recents there is
+        // nothing to tell apart, so no header (it only repeated the tab's name).
+        if (showRecent) {
+            item(key = "recent-header") { SectionHeader("Recently played") }
+            items(recentSongs) { song ->
+                TrackRow(
+                    song = song,
+                    player = player,
+                    isPlaying = playingId == song.id,
+                    onClick = { scope.launch { player.playSong(song) } }
+                )
             }
+            if (displaySongs.isNotEmpty()) item(key = "library-header") { SectionHeader("All songs") }
+        }
+
+        itemsIndexed(displaySongs, key = { _, s -> s.id }) { index, dbSong ->
+            TrackRow(
+                song = songInfos[index],
+                player = player,
+                isPlaying = playingId == dbSong.id,
+                // In the Liked filter every heart would be filled: noise, so none.
+                liked = if (showLikedOnly) null else dbSong.liked == 1L,
+                downloaded = dbSong.isDownloaded == 1L,
+                // The list plays on from here, as it does from an album or a playlist. This
+                // played the one song and stopped (issue #11).
+                onClick = { scope.launch { player.playQueue(songInfos, index) } }
+            )
         }
     }
 }
 
 @Composable
-private fun SongListItem(
-    song: SongInfo,
-    isPlaying: Boolean,
-    isDownloaded: Boolean = false,
-    isLiked: Boolean = false,
-    playlists: List<Playlist> = emptyList(),
-    onClick: () -> Unit,
-    onDownload: () -> Unit = {},
-    onToggleLike: () -> Unit = {},
-    onPlayNext: () -> Unit = {},
-    onAddToQueue: () -> Unit = {},
-    onStartRadio: (() -> Unit)? = null
-) {
-    var showMenu by remember { mutableStateOf(false) }
-    var showPlaylistPicker by remember { mutableStateOf(false) }
-
-    ListItem(
-        headlineContent = {
-            Text(
-                song.title,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                color = if (isPlaying) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.onSurface
-            )
-        },
-        supportingContent = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    song.artist,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false)
-                )
-                if (isDownloaded) {
-                    Spacer(Modifier.width(4.dp))
-                    Icon(
-                        Icons.Default.DownloadDone,
-                        contentDescription = "Downloaded",
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-        },
-        leadingContent = {
-            Box {
-                AsyncImage(
-                    model = song.thumbnailUrl,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(8.dp)),
-                    contentScale = ContentScale.Crop
-                )
-                if (isPlaying) {
-                    Icon(
-                        Icons.Default.GraphicEq,
-                        contentDescription = "Playing",
-                        modifier = Modifier
-                            .size(44.dp)
-                            .padding(11.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-        },
-        trailingContent = {
-            Row {
-                if (isLiked) {
-                    Icon(
-                        Icons.Default.Favorite,
-                        contentDescription = "Liked",
-                        modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(Modifier.width(4.dp))
-                }
-                Box {
-                    IconButton(onClick = { showMenu = true }) {
-                        Icon(Icons.Default.MoreVert, "More options")
-                    }
-                    DropdownMenu(
-                        expanded = showMenu,
-                        onDismissRequest = { showMenu = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Play Next") },
-                            onClick = {
-                                onPlayNext()
-                                showMenu = false
-                            },
-                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistPlay, null) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Add to Queue") },
-                            onClick = {
-                                onAddToQueue()
-                                showMenu = false
-                            },
-                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, null) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Add to Playlist") },
-                            onClick = {
-                                showMenu = false
-                                showPlaylistPicker = true
-                            },
-                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null) }
-                        )
-                        if (onStartRadio != null) {
-                            DropdownMenuItem(
-                                text = { Text("Start Radio") },
-                                onClick = {
-                                    onStartRadio()
-                                    showMenu = false
-                                },
-                                leadingIcon = { Icon(Icons.Default.Radio, null) }
-                            )
-                        }
-                        HorizontalDivider()
-                        DropdownMenuItem(
-                            text = { Text(if (isLiked) "Unlike" else "Like") },
-                            onClick = {
-                                onToggleLike()
-                                showMenu = false
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    if (isLiked) Icons.Default.HeartBroken else Icons.Default.Favorite,
-                                    null
-                                )
-                            }
-                        )
-                        if (!isDownloaded) {
-                            DropdownMenuItem(
-                                text = { Text("Download") },
-                                onClick = {
-                                    onDownload()
-                                    showMenu = false
-                                },
-                                leadingIcon = { Icon(Icons.Default.Download, null) }
-                            )
-                        } else {
-                            DropdownMenuItem(
-                                text = { Text("Remove Download") },
-                                onClick = {
-                                    DownloadManager.deleteDownload(song.id)
-                                    showMenu = false
-                                },
-                                leadingIcon = { Icon(Icons.Default.DeleteOutline, null) }
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        // Flat rows rather than a stack of cards: the hover highlight is the only fill, and the
-        // row shows the art-tinted wash behind it instead of hiding it.
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-        modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick)
+private fun SectionHeader(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier.padding(top = 12.dp, bottom = 4.dp, start = 8.dp)
     )
-
-    if (showPlaylistPicker) {
-        PlaylistPickerDialog(
-            song = song,
-            playlists = playlists,
-            onDismiss = { showPlaylistPicker = false }
-        )
-    }
 }
 
 @Composable
@@ -717,20 +516,20 @@ private fun AlbumsTab(
     onAlbumClick: (String) -> Unit,
     searchQuery: String,
     sortMode: SortMode,
-    sortAscending: Boolean
+    sortReversed: Boolean
 ) {
     val filteredAlbums = remember(albums, searchQuery) {
         if (searchQuery.isBlank()) albums
         else albums.filter { it.title.lowercase().contains(searchQuery.lowercase()) }
     }
 
-    val displayAlbums = remember(filteredAlbums, sortMode, sortAscending) {
+    val displayAlbums = remember(filteredAlbums, sortMode, sortReversed) {
         val sorted = when (sortMode) {
-            SortMode.DATE_ADDED -> filteredAlbums // already sorted by date from DB
             SortMode.NAME -> filteredAlbums.sortedBy { it.title.lowercase() }
-            SortMode.PLAY_TIME -> filteredAlbums.sortedByDescending { it.year ?: 0 } // sort by year as proxy
+            SortMode.YEAR -> filteredAlbums.sortedByDescending { it.year ?: 0 }
+            else -> filteredAlbums // newest first, as the database returns them
         }
-        if (sortAscending && sortMode != SortMode.DATE_ADDED) sorted else if (sortMode == SortMode.DATE_ADDED) sorted else sorted.reversed()
+        if (sortReversed) sorted.reversed() else sorted
     }
 
     val viewMode = com.lyrenne.desktop.settings.PreferencesManager.preferences
@@ -788,7 +587,8 @@ private fun AlbumsTab(
                             )
                         }
                     },
-                    modifier = Modifier.clickable { onAlbumClick(album.id) }
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable { onAlbumClick(album.id) }
                 )
             }
         }
@@ -860,20 +660,19 @@ private fun ArtistsTab(
     onArtistClick: (String) -> Unit,
     searchQuery: String,
     sortMode: SortMode,
-    sortAscending: Boolean
+    sortReversed: Boolean
 ) {
     val filteredArtists = remember(artists, searchQuery) {
         if (searchQuery.isBlank()) artists
         else artists.filter { it.name.lowercase().contains(searchQuery.lowercase()) }
     }
 
-    val displayArtists = remember(filteredArtists, sortMode, sortAscending) {
+    val displayArtists = remember(filteredArtists, sortMode, sortReversed) {
         val sorted = when (sortMode) {
-            SortMode.DATE_ADDED -> filteredArtists // already sorted by date from DB
             SortMode.NAME -> filteredArtists.sortedBy { it.name.lowercase() }
-            SortMode.PLAY_TIME -> filteredArtists // no play time for artists, keep order
+            else -> filteredArtists // newest first, as the database returns them
         }
-        if (sortAscending && sortMode == SortMode.NAME) sorted else if (sortMode == SortMode.DATE_ADDED) sorted else sorted.reversed()
+        if (sortReversed) sorted.reversed() else sorted
     }
 
     val viewMode = com.lyrenne.desktop.settings.PreferencesManager.preferences
@@ -926,7 +725,8 @@ private fun ArtistsTab(
                             )
                         }
                     },
-                    modifier = Modifier.clickable { onArtistClick(artist.id) }
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable { onArtistClick(artist.id) }
                 )
             }
         }
@@ -939,15 +739,18 @@ private fun PlaylistsTab(
     onPlaylistClick: (String) -> Unit,
     onLocalPlaylistClick: (String) -> Unit,
     onAutoPlaylistClick: (com.lyrenne.desktop.ui.AutoPlaylistType) -> Unit,
-    searchQuery: String
+    searchQuery: String,
+    autoCounts: Map<com.lyrenne.desktop.ui.AutoPlaylistType, Int> = emptyMap()
 ) {
     val scope = rememberCoroutineScope()
     var showCreateDialog by remember { mutableStateOf(false) }
     var newPlaylistName by remember { mutableStateOf("") }
 
     val filteredPlaylists = remember(playlists, searchQuery) {
-        if (searchQuery.isBlank()) playlists
-        else playlists.filter { it.name.lowercase().contains(searchQuery.lowercase()) }
+        // YouTube's own Liked Music (LM) duplicates the local Liked Songs auto playlist above.
+        val shown = playlists.filterNot { it.id in YOUTUBE_LIKED_IDS || it.browseId in YOUTUBE_LIKED_IDS }
+        if (searchQuery.isBlank()) shown
+        else shown.filter { it.name.lowercase().contains(searchQuery.lowercase()) }
     }
 
     if (showCreateDialog) {
@@ -1003,7 +806,8 @@ private fun PlaylistsTab(
                         )
                     }
                 },
-                modifier = Modifier.clickable { showCreateDialog = true }
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable { showCreateDialog = true }
             )
         }
 
@@ -1012,10 +816,14 @@ private fun PlaylistsTab(
             items(com.lyrenne.desktop.ui.AutoPlaylistType.entries) { type ->
                 ListItem(
                     headlineContent = { Text(type.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                    supportingContent = { Text("Auto playlist") },
+                    supportingContent = {
+                        Text(autoCounts[type]?.let { "$it songs" } ?: "Your most played songs")
+                    },
                     leadingContent = {
+                        // A tile, like the playlists' artwork, so the icon does not float.
                         Box(
-                            modifier = Modifier.size(56.dp).clip(RoundedCornerShape(4.dp)),
+                            modifier = Modifier.size(56.dp).clip(RoundedCornerShape(4.dp))
+                                .background(MaterialTheme.colorScheme.secondaryContainer),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
@@ -1025,12 +833,13 @@ private fun PlaylistsTab(
                                     com.lyrenne.desktop.ui.AutoPlaylistType.MOST_PLAYED -> Icons.Default.TrendingUp
                                 },
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer,
                                 modifier = Modifier.size(28.dp)
                             )
                         }
                     },
-                    modifier = Modifier.clickable { onAutoPlaylistClick(type) }
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable { onAutoPlaylistClick(type) }
                 )
             }
         }
@@ -1123,7 +932,8 @@ private fun PlaylistsTab(
                         }
                     }
                 },
-                modifier = Modifier.clickable {
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable {
                     if (isLocal) onLocalPlaylistClick(playlist.id) else onPlaylistClick(playlist.id)
                 }
             )
@@ -1137,8 +947,7 @@ private fun DownloadsTab(
     activeDownloads: Map<String, com.lyrenne.desktop.download.DownloadProgress>,
     player: DesktopPlayer,
     artistNamesMap: Map<String, String>,
-    searchQuery: String,
-    playlists: List<Playlist> = emptyList()
+    searchQuery: String
 ) {
     val scope = rememberCoroutineScope()
     val playingId by player.select { it.currentSong?.id }
@@ -1325,20 +1134,19 @@ private fun DownloadsTab(
 
             itemsIndexed(filteredDownloaded, key = { _, s -> s.id }) { index, dbSong ->
                 val song = dbSong.toSongInfo(artistNamesMap)
-                SongListItem(
+                TrackRow(
                     song = song,
+                    player = player,
                     isPlaying = playingId == song.id,
-                    isDownloaded = true,
-                    playlists = playlists,
+                    liked = dbSong.liked == 1L,
+                    downloaded = true,
                     onClick = {
                         // The list plays on from here, like the Songs tab. This used to play the
                         // one file on its own. The player finds each song's download itself, so
                         // the songs after it play from disk too.
                         val songInfos = filteredDownloaded.map { it.toSongInfo(artistNamesMap) }
                         scope.launch { player.playQueue(songInfos, index) }
-                    },
-                    onPlayNext = { player.addToQueueNext(song) },
-                    onAddToQueue = { player.addToQueue(song) }
+                    }
                 )
             }
         }
@@ -1380,6 +1188,8 @@ private fun EmptyLibraryMessage(
 }
 
 // Extension function to convert database Song to SongInfo — uses artist names map
+private val YOUTUBE_LIKED_IDS = setOf("LM", "VLLM")
+
 private fun Song.toSongInfo(artistNamesMap: Map<String, String>): SongInfo {
     return SongInfo(
         id = id,

@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.ui.screens
 
+import com.lyrenne.desktop.ui.components.Tip
 import com.lyrenne.desktop.ui.components.ConfirmDialog
 import com.lyrenne.desktop.ui.theme.selectedChipColors
 import com.lyrenne.desktop.ui.components.select
@@ -111,9 +112,10 @@ fun LibraryScreen(
             )
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                // Grid/list view toggle (affects Albums + Artists tabs)
+                // Grid/list view toggle: only shown on the tabs it affects (Albums, Artists)
                 val prefs by com.lyrenne.desktop.settings.PreferencesManager.preferences.collectAsState()
-                IconButton(onClick = {
+                val isList = prefs.libraryViewMode == com.lyrenne.desktop.settings.LibraryViewMode.LIST
+                if (selectedTab == LibraryTab.Albums || selectedTab == LibraryTab.Artists) Tip(if (isList) "Grid view" else "List view") { IconButton(onClick = {
                     com.lyrenne.desktop.settings.PreferencesManager.setLibraryViewMode(
                         if (prefs.libraryViewMode == com.lyrenne.desktop.settings.LibraryViewMode.LIST)
                             com.lyrenne.desktop.settings.LibraryViewMode.GRID
@@ -126,9 +128,9 @@ fun LibraryScreen(
                             Icons.Default.GridView
                         else
                             Icons.Default.ViewList,
-                        contentDescription = "Toggle view mode"
+                        contentDescription = if (isList) "Grid view" else "List view"
                     )
-                }
+                } }
                 // Sync button
                 if (authState.isLoggedIn) {
                     if (syncState.isSyncing) {
@@ -404,14 +406,14 @@ private fun SongsTab(
                 shape = RoundedCornerShape(50),
                 selected = !showLikedOnly,
                 onClick = { showLikedOnly = false },
-                label = { Text("All (${songs.size})") }
+                label = { Text("All") }
             )
             FilterChip(
                 colors = selectedChipColors(),
                 shape = RoundedCornerShape(50),
                 selected = showLikedOnly,
                 onClick = { showLikedOnly = true },
-                label = { Text("Liked (${likedSongs.size})") },
+                label = { Text("Liked") },
                 leadingIcon = if (showLikedOnly) {
                     { Icon(Icons.Default.Favorite, null, Modifier.size(18.dp)) }
                 } else null

@@ -1,5 +1,7 @@
 package com.lyrenne.desktop.ui.screens
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import com.lyrenne.desktop.ui.components.ConfirmDialog
 import com.lyrenne.desktop.ui.components.squareCropFriendly
 import com.lyrenne.desktop.ui.theme.selectedChipColors
@@ -152,13 +154,15 @@ fun SearchScreen(
 
         Spacer(Modifier.height(12.dp))
 
-        // Filter chips
+        // Filter chips. Scrolls rather than clipping at the minimum window width.
         Row(
+            Modifier.horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             SearchFilter.entries.forEach { filter ->
                 FilterChip(
                     colors = selectedChipColors(),
+                    shape = RoundedCornerShape(50),
                     selected = selectedFilter == filter,
                     onClick = {
                         selectedFilter = filter

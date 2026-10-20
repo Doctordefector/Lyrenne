@@ -370,7 +370,8 @@ fun App(player: DesktopPlayer) {
                                         browseId = currentDetail.browseId,
                                         player = player,
                                         onBack = ::navigateBack,
-                                        onArtistClick = ::navigateToArtist
+                                        onArtistClick = ::navigateToArtist,
+                                        onAlbumClick = ::navigateToAlbum
                                     )
                                     is DetailScreen.Artist -> ArtistScreen(
                                         browseId = currentDetail.browseId,
@@ -535,6 +536,7 @@ fun App(player: DesktopPlayer) {
                         onQueueClick = { showQueueScreen = !showQueueScreen; if (showQueueScreen) showLyricsPanel = false },
                         onLyricsClick = { showLyricsPanel = !showLyricsPanel; if (showLyricsPanel) showQueueScreen = false },
                         lyricsActive = showLyricsPanel && !showQueueScreen,
+                        queueActive = showQueueScreen,
                         artTint = artTint
                     )
                 }

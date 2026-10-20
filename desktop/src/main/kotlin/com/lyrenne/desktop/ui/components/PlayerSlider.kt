@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 private val SLOT = 14.dp
@@ -42,12 +43,14 @@ fun PlayerSlider(
     modifier: Modifier = Modifier,
     valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
     onValueChangeFinished: (() -> Unit)? = null,
+    /** Thumb size while idle; 0 hides it until hover or drag. */
+    idleThumb: Dp = 10.dp,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     val dragged by interaction.collectIsDraggedAsState()
     val pressed by interaction.collectIsPressedAsState()
-    val thumbSize by animateDpAsState(if (hovered || dragged || pressed) 14.dp else 10.dp)
+    val thumbSize by animateDpAsState(if (hovered || dragged || pressed) 14.dp else idleThumb)
     val active = MaterialTheme.colorScheme.primary
     val inactive = MaterialTheme.colorScheme.outline
     val colors = SliderDefaults.colors(

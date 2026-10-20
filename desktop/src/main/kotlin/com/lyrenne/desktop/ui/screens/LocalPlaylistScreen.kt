@@ -1,5 +1,12 @@
 package com.lyrenne.desktop.ui.screens
 
+import androidx.compose.foundation.lazy.rememberLazyListState
+import com.lyrenne.desktop.ui.theme.LyrenneTokens
+import com.lyrenne.desktop.ui.components.ConfirmDialog
+import com.lyrenne.desktop.ui.components.DetailTopBar
+import com.lyrenne.desktop.ui.components.headerScrolledAway
+import com.lyrenne.desktop.ui.components.DetailHeader
+import com.lyrenne.desktop.ui.components.TrackRow
 import com.lyrenne.desktop.ui.components.select
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -29,8 +36,8 @@ import com.lyrenne.desktop.playback.SongInfo
 import com.lyrenne.desktop.sync.YouTubeWrites
 import com.lyrenne.desktop.ui.AutoPlaylistType
 import com.lyrenne.desktop.ui.components.CarExportStatus
-import com.lyrenne.desktop.ui.components.PlaylistSearchField
-import com.lyrenne.desktop.ui.components.PlaylistSortBar
+import com.lyrenne.desktop.ui.components.CollapsibleSearchField
+import com.lyrenne.desktop.ui.components.PlaylistSortMenu
 import com.lyrenne.desktop.ui.components.rememberPlaylistSortState
 import com.lyrenne.desktop.ui.components.matchesQuery
 import com.lyrenne.desktop.ui.components.chooseExportFolder
@@ -93,171 +100,116 @@ fun LocalPlaylistScreen(
     }
 
     if (showDeleteDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Delete playlist?") },
-            text = { Text("\"${playlist?.name}\" will be permanently deleted. Songs themselves are not removed from your library.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showDeleteDialog = false
-                    scope.launch(Dispatchers.IO) {
-                        DatabaseHelper.deletePlaylist(playlistId)
-                        YouTubeWrites.deletePlaylist(playlistId)
-                    }
-                    onBack()
-                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+        ConfirmDialog(
+            title = "Delete playlist?",
+            text = "\"${playlist?.name}\" is deleted here and on YouTube. The songs stay in your library.",
+            confirmLabel = "Delete",
+            onConfirm = {
+                scope.launch(Dispatchers.IO) {
+                    DatabaseHelper.deletePlaylist(playlistId)
+                    YouTubeWrites.deletePlaylist(playlistId)
+                }
+                onBack()
             },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") }
-            }
+            onDismiss = { showDeleteDialog = false }
         )
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        // Header
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-            }
-            Column(Modifier.weight(1f)) {
-                Text(
-                    playlist?.name ?: "Playlist",
-                    style = MaterialTheme.typography.headlineMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    "${songs.size} songs",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            IconButton(onClick = {
-                renameText = playlist?.name ?: ""
-                showRenameDialog = true
-            }) {
-                Icon(Icons.Default.Edit, "Rename")
-            }
-            IconButton(onClick = { showDeleteDialog = true }) {
-                Icon(Icons.Default.Delete, "Delete", tint = MaterialTheme.colorScheme.error)
-            }
-        }
+    val listState = rememberLazyListState()
+    val collapsed by remember { derivedStateOf { listState.headerScrolledAway() } }
+    val playAll = { scope.launch { player.playQueue(ordered) }; Unit }
+    val name = playlist?.name ?: "Playlist"
+    val playingId by player.select { it.currentSong?.id }
+    val searching = query.isNotBlank()
+    // Moving a song only means something in the playlist's own order
+    val canMove = !searching && sortState.isDefault
+    val shown = remember(ordered, query) {
+        ordered.withIndex().filter { (_, song) -> matchesQuery(query, song.title, song.artist, song.album) }
+    }
 
-        Spacer(Modifier.height(12.dp))
-
-        // Play controls
-        if (songs.isNotEmpty()) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                FilledTonalButton(onClick = {
-                    scope.launch { player.playQueue(ordered) }
-                }) {
-                    Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Play All")
-                }
-                OutlinedButton(onClick = {
-                    val infos = songs.map { it.toPlaylistSongInfo(artistNamesMap) }.shuffled()
-                    scope.launch { player.playQueue(infos) }
-                }) {
-                    Icon(Icons.Default.Shuffle, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Shuffle")
-                }
-                OutlinedButton(onClick = {
-                    scope.launch { player.smartShuffle(songs.map { it.toPlaylistSongInfo(artistNamesMap) }) }
-                }) {
-                    Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Smart Shuffle")
-                }
-                OutlinedButton(onClick = {
-                    DownloadManager.queueDownloads(
-                        songs.map { it.toPlaylistSongInfo(artistNamesMap) },
-                        subfolder = playlist?.name
-                    )
-                }) {
-                    Icon(Icons.Default.Download, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Download All")
-                }
-                OutlinedButton(onClick = {
-                    val targetDir = chooseExportFolder(playlist?.name ?: "Playlist")
-                    if (targetDir != null) {
-                        CarExport.exportSongs(songs.map { it.toPlaylistSongInfo(artistNamesMap) }, targetDir)
+    Column(modifier = Modifier.fillMaxSize()) {
+        DetailTopBar(onBack, name, collapsed, onPlay = if (songs.isNotEmpty()) playAll else null)
+        LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(horizontal = LyrenneTokens.contentPadding)) {
+            item {
+                DetailHeader(
+                    thumbnail = playlist?.thumbnailUrl ?: ordered.firstOrNull()?.thumbnailUrl,
+                    kind = "Playlist",
+                    title = name,
+                    meta = "${songs.size} songs",
+                    onPlay = playAll,
+                    onShuffle = { scope.launch { player.playQueue(ordered.shuffled()) } },
+                    onDownload = { DownloadManager.queueDownloads(ordered, subfolder = playlist?.name) },
+                    below = { CarExportStatus() },
+                    more = { close ->
+                        DropdownMenuItem(
+                            text = { Text("Smart shuffle") },
+                            leadingIcon = { Icon(Icons.Default.AutoAwesome, null) },
+                            onClick = { close(); scope.launch { player.smartShuffle(ordered) } }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Export to folder") },
+                            leadingIcon = { Icon(Icons.Default.DirectionsCar, null) },
+                            onClick = {
+                                close()
+                                chooseExportFolder(name)?.let { CarExport.exportSongs(ordered, it) }
+                            }
+                        )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text("Rename") },
+                            leadingIcon = { Icon(Icons.Default.Edit, null) },
+                            onClick = { close(); renameText = playlist?.name ?: ""; showRenameDialog = true }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Delete playlist", color = MaterialTheme.colorScheme.error) },
+                            leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
+                            onClick = { close(); showDeleteDialog = true }
+                        )
                     }
-                }) {
-                    Icon(Icons.Default.DirectionsCar, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Export to Folder")
-                }
+                )
             }
-            CarExportStatus()
-            Spacer(Modifier.height(12.dp))
-            PlaylistSearchField(query, { query = it })
-            PlaylistSortBar(sortState)
-            Spacer(Modifier.height(8.dp))
-        }
 
-        if (songs.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.QueueMusic,
-                        contentDescription = null,
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    Text(
-                        "This playlist is empty",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        "Add songs via the context menu on any track",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+            if (songs.isEmpty()) {
+                item {
+                    Column(
+                        Modifier.fillMaxWidth().padding(top = 48.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.QueueMusic,
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Text(
+                            "This playlist is empty",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            "Add songs from any song's menu: ⋮ or right-click",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
-            }
-        } else {
-            val playingId by player.select { it.currentSong?.id }
-            val searching = query.isNotBlank()
-            // Moving a song only means something in the playlist's own order
-            val canMove = !searching && sortState.isDefault
-            val shown = remember(ordered, query) {
-                ordered.withIndex().filter { (_, song) -> matchesQuery(query, song.title, song.artist, song.album) }
-            }
-            if (searching && shown.isEmpty()) NoMatches(query)
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            } else {
+                item { ListToolbar(query, { query = it }) { PlaylistSortMenu(sortState) } }
+                if (searching && shown.isEmpty()) item { NoMatches(query) }
                 // A click plays the whole playlist from that song, filtered or not
                 items(shown.size) { position ->
                     val (index, song) = shown[position]
                     PlaylistSongRow(
                         song = song,
-                        index = index,
-                        total = songs.size,
                         isPlaying = playingId == song.id,
                         player = player,
-                        onClick = {
-                            scope.launch { player.playQueue(ordered, index) }
-                        },
+                        onClick = { scope.launch { player.playQueue(ordered, index) } },
                         onMoveUp = if (index > 0 && canMove) {
-                            {
-                                scope.launch(Dispatchers.IO) {
-                                    reorderPlaylistSongs(playlistId, songs, index, index - 1)
-                                }
-                            }
+                            { scope.launch(Dispatchers.IO) { reorderPlaylistSongs(playlistId, songs, index, index - 1) } }
                         } else null,
                         onMoveDown = if (index < songs.size - 1 && canMove) {
-                            {
-                                scope.launch(Dispatchers.IO) {
-                                    reorderPlaylistSongs(playlistId, songs, index, index + 1)
-                                }
-                            }
+                            { scope.launch(Dispatchers.IO) { reorderPlaylistSongs(playlistId, songs, index, index + 1) } }
                         } else null,
                         onRemove = {
                             scope.launch(Dispatchers.IO) {
@@ -267,8 +219,22 @@ fun LocalPlaylistScreen(
                         }
                     )
                 }
+                item { Spacer(Modifier.height(16.dp)) }
             }
         }
+    }
+}
+
+/** Search and sort in one row at the head of a song list. */
+@Composable
+private fun ListToolbar(query: String, onQueryChange: (String) -> Unit, sort: @Composable () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.End
+    ) {
+        CollapsibleSearchField(query, onQueryChange, placeholder = "Search this playlist")
+        sort()
     }
 }
 
@@ -315,88 +281,70 @@ fun AutoPlaylistScreen(
         sortState.apply(unsorted, { it.title }, { it.artist }, { it.album })
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-            }
-            Column(Modifier.weight(1f)) {
-                Text(type.title, style = MaterialTheme.typography.headlineMedium)
-                Text(
-                    "${songInfos.size} songs",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
+    val listState = rememberLazyListState()
+    val collapsed by remember { derivedStateOf { listState.headerScrolledAway() } }
+    val playAll = { scope.launch { player.playQueue(songInfos) }; Unit }
+    val playingId by player.select { it.currentSong?.id }
+    val shown = remember(songInfos, query) {
+        songInfos.withIndex().filter { (_, song) -> matchesQuery(query, song.title, song.artist, song.album) }
+    }
 
-        Spacer(Modifier.height(12.dp))
-
-        if (songInfos.isNotEmpty()) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalButton(onClick = {
-                    scope.launch { player.playQueue(songInfos) }
-                }) {
-                    Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Play All")
-                }
-                OutlinedButton(onClick = {
-                    scope.launch { player.playQueue(songInfos.shuffled()) }
-                }) {
-                    Icon(Icons.Default.Shuffle, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Shuffle")
-                }
-                OutlinedButton(onClick = {
-                    scope.launch { player.smartShuffle(songInfos) }
-                }) {
-                    Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Smart Shuffle")
-                }
-            }
-            Spacer(Modifier.height(12.dp))
-            PlaylistSearchField(query, { query = it })
-            when (type) {
-                AutoPlaylistType.MOST_PLAYED -> PlaylistSortBar(sortState, "Play count", "Most played" to "Least played")
-                else -> PlaylistSortBar(sortState, type.dateLabel, "Newest first" to "Oldest first")
-            }
-            Spacer(Modifier.height(8.dp))
-        }
-
-        if (songInfos.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    when (type) {
-                        AutoPlaylistType.LIKED -> "No liked songs yet"
-                        AutoPlaylistType.DOWNLOADED -> "No downloads yet"
-                        AutoPlaylistType.MOST_PLAYED -> "Play some music to build this playlist"
+    Column(modifier = Modifier.fillMaxSize()) {
+        DetailTopBar(onBack, type.title, collapsed, onPlay = if (songInfos.isNotEmpty()) playAll else null)
+        LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(horizontal = LyrenneTokens.contentPadding)) {
+            item {
+                DetailHeader(
+                    thumbnail = songInfos.firstOrNull()?.thumbnailUrl,
+                    kind = "Auto playlist",
+                    title = type.title,
+                    meta = "${songInfos.size} songs",
+                    onPlay = playAll,
+                    onShuffle = { scope.launch { player.playQueue(songInfos.shuffled()) } },
+                    onDownload = if (type == AutoPlaylistType.DOWNLOADED) null else {
+                        { DownloadManager.queueDownloads(songInfos, subfolder = type.title) }
                     },
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    more = { close ->
+                        DropdownMenuItem(
+                            text = { Text("Smart shuffle") },
+                            leadingIcon = { Icon(Icons.Default.AutoAwesome, null) },
+                            onClick = { close(); scope.launch { player.smartShuffle(songInfos) } }
+                        )
+                    }
                 )
             }
-        } else {
-            val playingId by player.select { it.currentSong?.id }
-            val shown = remember(songInfos, query) {
-                songInfos.withIndex().filter { (_, song) -> matchesQuery(query, song.title, song.artist, song.album) }
-            }
-            if (query.isNotBlank() && shown.isEmpty()) NoMatches(query)
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            if (songInfos.isEmpty()) {
+                item {
+                    Text(
+                        when (type) {
+                            AutoPlaylistType.LIKED -> "No liked songs yet"
+                            AutoPlaylistType.DOWNLOADED -> "No downloads yet"
+                            AutoPlaylistType.MOST_PLAYED -> "Play some music to build this playlist"
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 48.dp)
+                    )
+                }
+            } else {
+                item {
+                    ListToolbar(query, { query = it }) {
+                        when (type) {
+                            AutoPlaylistType.MOST_PLAYED -> PlaylistSortMenu(sortState, "Play count", "Most played" to "Least played")
+                            else -> PlaylistSortMenu(sortState, type.dateLabel, "Newest first" to "Oldest first")
+                        }
+                    }
+                }
+                if (query.isNotBlank() && shown.isEmpty()) item { NoMatches(query) }
                 items(shown.size) { position ->
                     val (index, song) = shown[position]
                     PlaylistSongRow(
                         song = song,
-                        index = index,
-                        total = songInfos.size,
                         isPlaying = playingId == song.id,
                         player = player,
-                        onClick = {
-                            scope.launch { player.playQueue(songInfos, index) }
-                        }
+                        onClick = { scope.launch { player.playQueue(songInfos, index) } }
                     )
                 }
+                item { Spacer(Modifier.height(16.dp)) }
             }
         }
     }
@@ -416,8 +364,6 @@ private fun NoMatches(query: String) {
 @Composable
 private fun PlaylistSongRow(
     song: SongInfo,
-    index: Int,
-    total: Int,
     isPlaying: Boolean,
     player: DesktopPlayer,
     onClick: () -> Unit,
@@ -425,107 +371,30 @@ private fun PlaylistSongRow(
     onMoveDown: (() -> Unit)? = null,
     onRemove: (() -> Unit)? = null
 ) {
-    var showMenu by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-
-    ListItem(
-        headlineContent = {
-            Text(
-                song.title,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                color = if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+    TrackRow(song = song, player = player, isPlaying = isPlaying, onClick = onClick) { close ->
+        if (onMoveUp != null || onMoveDown != null || onRemove != null) HorizontalDivider()
+        if (onMoveUp != null) {
+            DropdownMenuItem(
+                text = { Text("Move up") },
+                onClick = { onMoveUp(); close() },
+                leadingIcon = { Icon(Icons.Default.KeyboardArrowUp, null) }
             )
-        },
-        supportingContent = {
-            Text(song.artist, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        },
-        leadingContent = {
-            AsyncImage(
-                model = song.thumbnailUrl,
-                contentDescription = null,
-                modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)),
-                contentScale = ContentScale.Crop
+        }
+        if (onMoveDown != null) {
+            DropdownMenuItem(
+                text = { Text("Move down") },
+                onClick = { onMoveDown(); close() },
+                leadingIcon = { Icon(Icons.Default.KeyboardArrowDown, null) }
             )
-        },
-        trailingContent = {
-            Box {
-                IconButton(onClick = { showMenu = true }) {
-                    Icon(Icons.Default.MoreVert, "More options")
-                }
-                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                    DropdownMenuItem(
-                        text = { Text("Play Next") },
-                        onClick = {
-                            player.addToQueueNext(song)
-                            showMenu = false
-                        },
-                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistPlay, null) }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Add to Queue") },
-                        onClick = {
-                            player.addToQueue(song)
-                            showMenu = false
-                        },
-                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, null) }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Start Radio") },
-                        onClick = {
-                            showMenu = false
-                            scope.launch { player.startRadio(song) }
-                        },
-                        leadingIcon = { Icon(Icons.Default.Radio, null) }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Download") },
-                        onClick = {
-                            DownloadManager.queueDownload(song)
-                            showMenu = false
-                        },
-                        leadingIcon = { Icon(Icons.Default.Download, null) }
-                    )
-                    if (onMoveUp != null || onMoveDown != null || onRemove != null) {
-                        HorizontalDivider()
-                    }
-                    if (onMoveUp != null) {
-                        DropdownMenuItem(
-                            text = { Text("Move Up") },
-                            onClick = {
-                                onMoveUp()
-                                showMenu = false
-                            },
-                            leadingIcon = { Icon(Icons.Default.KeyboardArrowUp, null) }
-                        )
-                    }
-                    if (onMoveDown != null) {
-                        DropdownMenuItem(
-                            text = { Text("Move Down") },
-                            onClick = {
-                                onMoveDown()
-                                showMenu = false
-                            },
-                            leadingIcon = { Icon(Icons.Default.KeyboardArrowDown, null) }
-                        )
-                    }
-                    if (onRemove != null) {
-                        DropdownMenuItem(
-                            text = { Text("Remove from Playlist", color = MaterialTheme.colorScheme.error) },
-                            onClick = {
-                                onRemove()
-                                showMenu = false
-                            },
-                            leadingIcon = {
-                                Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error)
-                            }
-                        )
-                    }
-                }
-            }
-        },
-        modifier = Modifier.clickable(onClick = onClick)
-    )
+        }
+        if (onRemove != null) {
+            DropdownMenuItem(
+                text = { Text("Remove from playlist", color = MaterialTheme.colorScheme.error) },
+                onClick = { onRemove(); close() },
+                leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) }
+            )
+        }
+    }
 }
 
 /** Swap positions of two songs in a local playlist, then rewrite all positions sequentially. */

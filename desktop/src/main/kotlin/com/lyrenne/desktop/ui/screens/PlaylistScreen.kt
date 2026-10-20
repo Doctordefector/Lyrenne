@@ -1,5 +1,11 @@
 package com.lyrenne.desktop.ui.screens
 
+import androidx.compose.foundation.lazy.rememberLazyListState
+import com.lyrenne.desktop.ui.theme.LyrenneTokens
+import com.lyrenne.desktop.ui.components.DetailTopBar
+import com.lyrenne.desktop.ui.components.headerScrolledAway
+import com.lyrenne.desktop.ui.components.DetailHeader
+import com.lyrenne.desktop.ui.components.TrackRow
 import com.lyrenne.desktop.ui.components.select
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -28,8 +34,8 @@ import com.lyrenne.desktop.download.CarExport
 import com.lyrenne.desktop.download.DownloadManager
 import com.lyrenne.desktop.playback.DesktopPlayer
 import com.lyrenne.desktop.ui.components.CarExportStatus
-import com.lyrenne.desktop.ui.components.PlaylistSearchField
-import com.lyrenne.desktop.ui.components.PlaylistSortBar
+import com.lyrenne.desktop.ui.components.CollapsibleSearchField
+import com.lyrenne.desktop.ui.components.PlaylistSortMenu
 import com.lyrenne.desktop.ui.components.rememberPlaylistSortState
 import com.lyrenne.desktop.ui.components.matchesQuery
 import com.lyrenne.desktop.ui.components.chooseExportFolder
@@ -120,21 +126,13 @@ fun PlaylistScreen(
         }
     }
 
+    val listState = rememberLazyListState()
+    val collapsed by remember { derivedStateOf { listState.headerScrolledAway() } }
+    val orderedInfos = remember(orderedSongs) { orderedSongs.map { it.toDesktopSongInfo() } }
+    val playAll = { scope.launch { player.playQueue(orderedInfos, 0) }; Unit }
+
     Column(modifier = Modifier.fillMaxSize()) {
-        // Top bar
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-            }
-            Text(
-                "Playlist",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(start = 8.dp)
-            )
-        }
+        DetailTopBar(onBack, playlistPage?.playlist?.title.orEmpty(), collapsed, onPlay = if (playlistPage != null) playAll else null)
 
         when {
             isLoading -> {
@@ -166,137 +164,63 @@ fun PlaylistScreen(
                 val page = playlistPage!!
 
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    state = listState,
+                    modifier = Modifier.fillMaxSize().padding(horizontal = LyrenneTokens.contentPadding)
                 ) {
-                    // Playlist header
+                    item {
+                        DetailHeader(
+                            thumbnail = page.playlist.thumbnail,
+                            kind = "Playlist",
+                            title = page.playlist.title,
+                            meta = listOfNotNull(page.playlist.author?.name, page.playlist.songCountText).joinToString(" • "),
+                            onPlay = playAll,
+                            onShuffle = { scope.launch { player.playQueue(allSongs.map { it.toDesktopSongInfo() }.shuffled(), 0) } },
+                            onDownload = {
+                                // Load ALL remaining pages before downloading
+                                scope.launch {
+                                    loadAllPages()
+                                    DownloadManager.queueDownloads(
+                                        allSongs.map { it.toDesktopSongInfo() },
+                                        subfolder = page.playlist.title
+                                    )
+                                }
+                            },
+                            below = { CarExportStatus() },
+                            more = { close ->
+                                DropdownMenuItem(
+                                    text = { Text("Smart shuffle") },
+                                    leadingIcon = { Icon(Icons.Default.AutoAwesome, null) },
+                                    onClick = {
+                                        close()
+                                        scope.launch { player.smartShuffle(allSongs.map { it.toDesktopSongInfo() }) }
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Export to folder") },
+                                    leadingIcon = { Icon(Icons.Default.DirectionsCar, null) },
+                                    onClick = {
+                                        close()
+                                        val targetDir = chooseExportFolder(page.playlist.title)
+                                        if (targetDir != null) scope.launch {
+                                            loadAllPages()
+                                            CarExport.exportSongs(allSongs.map { it.toDesktopSongInfo() }, targetDir)
+                                        }
+                                    }
+                                )
+                            }
+                        )
+                    }
+
+                    // Search and sort share one row at the head of the list.
                     item {
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(24.dp)
+                            Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.End
                         ) {
-                            AsyncImage(
-                                model = page.playlist.thumbnail,
-                                contentDescription = page.playlist.title,
-                                modifier = Modifier
-                                    .size(200.dp)
-                                    .clip(RoundedCornerShape(8.dp)),
-                                contentScale = ContentScale.Crop
-                            )
-
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Text(
-                                    page.playlist.title,
-                                    style = MaterialTheme.typography.headlineMedium,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-
-                                page.playlist.author?.let { author ->
-                                    Text(
-                                        author.name,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-
-                                page.playlist.songCountText?.let {
-                                    Text(
-                                        it,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-
-                                Spacer(Modifier.height(8.dp))
-
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Button(
-                                        onClick = {
-                                            scope.launch {
-                                                val songInfos = orderedSongs.map { it.toDesktopSongInfo() }
-                                                player.playQueue(songInfos, 0)
-                                            }
-                                        }
-                                    ) {
-                                        Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp))
-                                        Spacer(Modifier.width(4.dp))
-                                        Text("Play All")
-                                    }
-
-                                    OutlinedButton(
-                                        onClick = {
-                                            scope.launch {
-                                                val songInfos = allSongs.map { it.toDesktopSongInfo() }.shuffled()
-                                                player.playQueue(songInfos, 0)
-                                            }
-                                        }
-                                    ) {
-                                        Icon(Icons.Default.Shuffle, null, Modifier.size(18.dp))
-                                        Spacer(Modifier.width(4.dp))
-                                        Text("Shuffle")
-                                    }
-
-                                    OutlinedButton(
-                                        onClick = {
-                                            scope.launch { player.smartShuffle(allSongs.map { it.toDesktopSongInfo() }) }
-                                        }
-                                    ) {
-                                        Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp))
-                                        Spacer(Modifier.width(4.dp))
-                                        Text("Smart Shuffle")
-                                    }
-
-                                    OutlinedButton(
-                                        onClick = {
-                                            // Load ALL remaining pages before downloading
-                                            scope.launch {
-                                                loadAllPages()
-                                                DownloadManager.queueDownloads(
-                                                    allSongs.map { it.toDesktopSongInfo() },
-                                                    subfolder = page.playlist.title
-                                                )
-                                            }
-                                        }
-                                    ) {
-                                        Icon(Icons.Default.Download, null, Modifier.size(18.dp))
-                                        Spacer(Modifier.width(4.dp))
-                                        Text("Download All")
-                                    }
-
-                                    OutlinedButton(
-                                        onClick = {
-                                            val targetDir = chooseExportFolder(page.playlist.title) ?: return@OutlinedButton
-                                            scope.launch {
-                                                loadAllPages()
-                                                CarExport.exportSongs(allSongs.map { it.toDesktopSongInfo() }, targetDir)
-                                            }
-                                        }
-                                    ) {
-                                        Icon(Icons.Default.DirectionsCar, null, Modifier.size(18.dp))
-                                        Spacer(Modifier.width(4.dp))
-                                        Text("Export to Folder")
-                                    }
-                                }
-
-                                CarExportStatus()
-                            }
+                            CollapsibleSearchField(query, { query = it }, placeholder = "Search this playlist")
+                            PlaylistSortMenu(sortState)
                         }
-                    }
-
-                    item {
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                    }
-
-                    item {
-                        PlaylistSearchField(query, { query = it })
-                        Box(Modifier.padding(bottom = 8.dp)) { PlaylistSortBar(sortState) }
                     }
 
                     if (shownSongs.isEmpty() && query.isNotBlank() && !isLoadingMore) {
@@ -311,27 +235,12 @@ fun PlaylistScreen(
 
                     // Song list. A click plays the whole playlist from that song, filtered or not.
                     items(shownSongs) { (index, song) ->
-                        PlaylistSongItem(
-                            song = song,
+                        TrackRow(
+                            song = orderedInfos[index],
+                            player = player,
+                            explicit = song.explicit,
                             isPlaying = playingId == song.id,
-                            onClick = {
-                                scope.launch {
-                                    val songInfos = orderedSongs.map { it.toDesktopSongInfo() }
-                                    player.playQueue(songInfos, index)
-                                }
-                            },
-                            onPlayNext = {
-                                player.addToQueueNext(song.toDesktopSongInfo())
-                            },
-                            onAddToQueue = {
-                                player.addToQueue(song.toDesktopSongInfo())
-                            },
-                            onDownload = {
-                                DownloadManager.queueDownload(song.toDesktopSongInfo())
-                            },
-                            onArtistClick = { artistId ->
-                                onArtistClick(artistId)
-                            }
+                            onClick = { scope.launch { player.playQueue(orderedInfos, index) } }
                         )
 
                         // Load more when near end
@@ -357,107 +266,4 @@ fun PlaylistScreen(
             }
         }
     }
-}
-
-@Composable
-private fun PlaylistSongItem(
-    song: SongItem,
-    isPlaying: Boolean,
-    onClick: () -> Unit,
-    onPlayNext: () -> Unit,
-    onAddToQueue: () -> Unit,
-    onDownload: () -> Unit,
-    onArtistClick: (String) -> Unit
-) {
-    var showMenu by remember { mutableStateOf(false) }
-
-    ListItem(
-        headlineContent = {
-            Text(
-                song.title,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                color = if (isPlaying) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.onSurface
-            )
-        },
-        supportingContent = {
-            Row {
-                song.artists.forEachIndexed { index, artist ->
-                    Text(
-                        artist.name,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = if (artist.id != null) Modifier.clickable {
-                            artist.id?.let { onArtistClick(it) }
-                        } else Modifier
-                    )
-                    if (index < song.artists.size - 1) {
-                        Text(", ", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-        },
-        leadingContent = {
-            Box {
-                AsyncImage(
-                    model = song.thumbnail,
-                    contentDescription = null,
-                    modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)),
-                    contentScale = ContentScale.Crop
-                )
-                if (isPlaying) {
-                    Icon(
-                        Icons.Default.GraphicEq,
-                        contentDescription = "Playing",
-                        modifier = Modifier.size(48.dp).padding(12.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-        },
-        trailingContent = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                song.duration?.let { dur ->
-                    Text(
-                        formatPlaylistDuration(dur),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.width(4.dp))
-                }
-                Box {
-                    IconButton(onClick = { showMenu = true }) {
-                        Icon(Icons.Default.MoreVert, "More")
-                    }
-                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                        DropdownMenuItem(
-                            text = { Text("Play Next") },
-                            onClick = { onPlayNext(); showMenu = false },
-                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistPlay, null) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Add to Queue") },
-                            onClick = { onAddToQueue(); showMenu = false },
-                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, null) }
-                        )
-                        HorizontalDivider()
-                        DropdownMenuItem(
-                            text = { Text("Download") },
-                            onClick = { onDownload(); showMenu = false },
-                            leadingIcon = { Icon(Icons.Default.Download, null) }
-                        )
-                    }
-                }
-            }
-        },
-        modifier = Modifier.clickable(onClick = onClick)
-    )
-}
-
-private fun formatPlaylistDuration(seconds: Int): String {
-    val m = seconds / 60
-    val s = seconds % 60
-    return "%d:%02d".format(m, s)
 }

@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DownloadDone
+import androidx.compose.material.icons.filled.Explicit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.GraphicEq
@@ -64,6 +65,7 @@ fun TrackRow(
     showArt: Boolean = true,
     liked: Boolean? = null,
     downloaded: Boolean = false,
+    explicit: Boolean = false,
     subtitle: String = song.artist,
     leading: (@Composable () -> Unit)? = null,
     menuExtra: @Composable ColumnScope.(close: () -> Unit) -> Unit = {}
@@ -132,6 +134,13 @@ fun TrackRow(
                     overflow = TextOverflow.Ellipsis
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (explicit) {
+                        Icon(
+                            Icons.Default.Explicit, "Explicit",
+                            tint = colors.onSurfaceVariant, modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                    }
                     if (downloaded) {
                         Icon(
                             Icons.Default.DownloadDone, "Downloaded",

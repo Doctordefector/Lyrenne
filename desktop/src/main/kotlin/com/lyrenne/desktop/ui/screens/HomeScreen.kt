@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.ui.screens
 
+import com.lyrenne.desktop.ui.components.SkeletonShelf
 import com.lyrenne.desktop.ui.components.ScreenTitle
 import com.lyrenne.desktop.ui.components.MediaTile
 import androidx.compose.foundation.shape.CircleShape
@@ -94,13 +95,9 @@ fun HomeScreen(
     // Keyed on the account rather than on being signed in: switching accounts must not keep
     // showing the previous account's recommendations.
     val homeAccount = if (authState.isLoggedIn) authState.accountId.orEmpty() else ""
-    LaunchedEffect(homeAccount) {
-        // Use cache if available and the account hasn't changed
-        if (HomeFeedCache.cachedPage != null && HomeFeedCache.cachedForAccount == homeAccount) {
-            homePage = HomeFeedCache.cachedPage
-            isLoading = false
-            return@LaunchedEffect
-        }
+    // The one loader: first load and Retry both fetch every continuation and fill the cache.
+    // Retry used to call home() alone, so a retried feed was shorter and refetched every visit.
+    suspend fun loadHome() {
         try {
             isLoading = homePage == null // Only show spinner if we have nothing to display
             error = null
@@ -149,12 +146,24 @@ fun HomeScreen(
         }
     }
 
+    LaunchedEffect(homeAccount) {
+        // Use cache if available and the account hasn't changed
+        if (HomeFeedCache.cachedPage != null && HomeFeedCache.cachedForAccount == homeAccount) {
+            homePage = HomeFeedCache.cachedPage
+            isLoading = false
+            return@LaunchedEffect
+        }
+        loadHome()
+    }
+
     Box(modifier = Modifier.fillMaxSize().padding(LyrenneTokens.contentPadding)) {
         when {
             isLoading -> {
-                CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.Center)
-                )
+                // Grey placeholders in the shape of the page read as faster than a spinner.
+                Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                    ScreenTitle("Home")
+                    repeat(3) { SkeletonShelf() }
+                }
             }
             error != null -> {
                 Column(
@@ -169,10 +178,7 @@ fun HomeScreen(
                     Button(onClick = {
                         scope.launch {
                             isLoading = true
-                            error = null
-                            YouTube.home().onSuccess { homePage = it }
-                                .onFailure { error = friendlyErrorMessage(it, "Failed to load home page") }
-                            isLoading = false
+                            loadHome()
                         }
                     }) {
                         Text("Retry")

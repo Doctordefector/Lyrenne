@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.ui.components
 
+import com.lyrenne.desktop.ui.theme.LyrenneTokens
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -127,6 +128,47 @@ fun PillTab(label: String, selected: Boolean, onClick: () -> Unit, count: Int = 
                 style = MaterialTheme.typography.labelMedium,
                 color = if (selected) colors.onPrimary else colors.onSurfaceVariant
             )
+        }
+    }
+}
+
+/** Loading placeholder for a shelf of tiles: a title bar and a row of squares. */
+@Composable
+fun SkeletonShelf() {
+    val fill = MaterialTheme.colorScheme.surfaceContainerHigh
+    androidx.compose.foundation.layout.Column {
+        androidx.compose.foundation.layout.Box(
+            Modifier.size(width = 160.dp, height = 18.dp).clip(RoundedCornerShape(4.dp)).background(fill)
+        )
+        Spacer(Modifier.size(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            repeat(6) {
+                androidx.compose.foundation.layout.Box(
+                    Modifier.size(160.dp).clip(RoundedCornerShape(LyrenneTokens.artworkRadius)).background(fill)
+                )
+            }
+        }
+    }
+}
+
+/** Loading placeholder for a list of TrackRows. */
+@Composable
+fun SkeletonRows(count: Int = 8) {
+    val fill = MaterialTheme.colorScheme.surfaceContainerHigh
+    androidx.compose.foundation.layout.Column {
+        repeat(count) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                androidx.compose.foundation.layout.Box(Modifier.size(40.dp).clip(RoundedCornerShape(6.dp)).background(fill))
+                Spacer(Modifier.width(12.dp))
+                androidx.compose.foundation.layout.Column {
+                    androidx.compose.foundation.layout.Box(Modifier.size(width = 220.dp, height = 12.dp).clip(RoundedCornerShape(4.dp)).background(fill))
+                    Spacer(Modifier.size(6.dp))
+                    androidx.compose.foundation.layout.Box(Modifier.size(width = 140.dp, height = 10.dp).clip(RoundedCornerShape(4.dp)).background(fill))
+                }
+            }
         }
     }
 }

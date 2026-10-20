@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.ui.screens
 
+import com.lyrenne.desktop.ui.components.SkeletonRows
 import androidx.compose.foundation.lazy.rememberLazyListState
 import com.lyrenne.desktop.ui.theme.LyrenneTokens
 import com.lyrenne.desktop.ui.components.headerScrolledAway
@@ -78,9 +79,7 @@ fun ArtistScreen(
 
         when {
             isLoading -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
+                Box(Modifier.fillMaxSize().padding(horizontal = LyrenneTokens.contentPadding)) { SkeletonRows() }
             }
             error != null -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.ui.screens
 
+import androidx.compose.material.icons.outlined.Download
 import com.lyrenne.desktop.ui.components.PillTab
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusRequester
@@ -290,7 +291,7 @@ fun LibraryScreen(
                     com.lyrenne.desktop.ui.AutoPlaylistType.DOWNLOADED to downloadedSongs.size
                 )
             )
-            LibraryTab.Downloads -> DownloadsTab(downloadedSongs, activeDownloads, player, artistNamesMap, searchQuery)
+            LibraryTab.Downloads -> DownloadsTab(downloadedSongs, activeDownloads, player, artistNamesMap, searchQuery, onBrowse = { selectedTab = LibraryTab.Songs })
         }
     }
 }
@@ -886,7 +887,8 @@ private fun DownloadsTab(
     activeDownloads: Map<String, com.lyrenne.desktop.download.DownloadProgress>,
     player: DesktopPlayer,
     artistNamesMap: Map<String, String>,
-    searchQuery: String
+    searchQuery: String,
+    onBrowse: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val playingId by player.select { it.currentSong?.id }
@@ -934,9 +936,13 @@ private fun DownloadsTab(
 
     if (filteredDownloaded.isEmpty() && active.isEmpty()) {
         EmptyLibraryMessage(
-            icon = Icons.Default.DownloadDone,
+            icon = Icons.Outlined.Download,
             message = if (searchQuery.isNotBlank()) "No matching downloads" else "No downloaded songs",
-            subMessage = if (searchQuery.isNotBlank()) "Try a different search term" else "Download songs for offline playback"
+            subMessage = if (searchQuery.isNotBlank()) "Try a different search term"
+                else "Download from any song's menu (⋮ or right-click) to play it offline",
+            action = if (searchQuery.isBlank()) {
+                { SecondaryAction("Browse your library", Icons.Default.LibraryMusic, onClick = onBrowse) }
+            } else null
         )
         return
     }
@@ -1096,7 +1102,8 @@ private fun DownloadsTab(
 private fun EmptyLibraryMessage(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     message: String,
-    subMessage: String
+    subMessage: String,
+    action: (@Composable () -> Unit)? = null
 ) {
     Box(
         modifier = Modifier.fillMaxSize(),
@@ -1122,6 +1129,10 @@ private fun EmptyLibraryMessage(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            if (action != null) {
+                Spacer(Modifier.height(16.dp))
+                action()
+            }
         }
     }
 }

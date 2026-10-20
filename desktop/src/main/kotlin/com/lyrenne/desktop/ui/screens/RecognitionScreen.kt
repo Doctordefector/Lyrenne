@@ -162,13 +162,7 @@ private fun ReadyState(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier.fillMaxHeight().padding(vertical = 24.dp)
     ) {
-        Icon(
-            Icons.Default.Mic,
-            contentDescription = null,
-            modifier = Modifier.size(80.dp),
-            tint = MaterialTheme.colorScheme.primary
-        )
-
+        // One mic: the button. A decorative mic above it made two.
         Text(
             "Click to identify a song",
             style = MaterialTheme.typography.headlineSmall

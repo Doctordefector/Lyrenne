@@ -36,7 +36,6 @@ import kotlinx.coroutines.launch
 import com.lyrenne.desktop.ui.components.AutoScroll
 import com.lyrenne.desktop.ui.components.LyricsPanel
 import com.lyrenne.desktop.ui.components.MiniPlayer
-import com.lyrenne.desktop.ui.components.Tip
 import com.lyrenne.desktop.ui.components.select
 import com.lyrenne.desktop.ui.theme.rememberArtTint
 import com.lyrenne.desktop.ui.components.UpdateBadge
@@ -291,7 +290,8 @@ fun App(player: DesktopPlayer) {
                             ) {
                     Spacer(Modifier.height(8.dp))
 
-                    Screen.entries.forEach { screen ->
+                    @Composable
+                    fun ScreenButton(screen: Screen) {
                         val selected = currentScreen == screen && detailStack.isEmpty()
                         RailButton(if (selected) screen.selectedIcon else screen.icon, screen.title, selected) {
                             currentScreen = screen
@@ -299,22 +299,27 @@ fun App(player: DesktopPlayer) {
                         }
                     }
 
+                    // Content destinations on top; tools and Settings in the bottom group.
+                    Screen.entries.filter { it != Screen.Settings }.forEach { ScreenButton(it) }
+
                     Spacer(Modifier.weight(1f))
 
                     // Separates destinations above from tools below, which otherwise look identical.
                     HorizontalDivider(Modifier.padding(horizontal = 18.dp, vertical = 8.dp))
 
+                    // One glyph shape each: Equalizer and Stats were both vertical bars.
                     listOf(
-                        Triple(Icons.Default.Equalizer, "Equalizer", DetailScreen.Equalizer),
-                        Triple(Icons.Default.BarChart, "Stats", DetailScreen.Stats),
-                        Triple(Icons.Default.Mic, "Recognize music", DetailScreen.Recognition),
-                        Triple(Icons.Default.Group, "Listen Together", DetailScreen.ListenTogether),
+                        Triple(Icons.Outlined.Tune, "EQ", DetailScreen.Equalizer),
+                        Triple(Icons.Outlined.Insights, "Stats", DetailScreen.Stats),
+                        Triple(Icons.Outlined.Mic, "Identify", DetailScreen.Recognition),
+                        Triple(Icons.Outlined.Headphones, "Together", DetailScreen.ListenTogether),
                     ).forEach { (icon, label, dest) ->
                         RailButton(icon, label, detailStack.lastOrNull() == dest) {
                             detailStack.clear()
                             detailStack.add(dest)
                         }
                     }
+                    ScreenButton(Screen.Settings)
 
                     // Signing in lives in one place: the account button in the rail header.
 
@@ -543,29 +548,39 @@ fun App(player: DesktopPlayer) {
 }
 
 /**
- * One rail destination: icon only, with the name in a hover tooltip. A filled rounded square
- * marks the current one; that is the whole indicator, no animation to pay for.
+ * One rail destination: icon over an always-visible label. Icon-only with hover tooltips left
+ * new users guessing. A filled pill behind the icon marks the current one; that is the whole
+ * indicator, no animation to pay for.
  */
 @Composable
 private fun RailButton(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    Tip(label) {
+    val fg = if (selected) colors.onPrimaryContainer else colors.onSurfaceVariant
+    Column(
+        Modifier
+            .padding(vertical = 2.dp)
+            .width(68.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(role = Role.Tab, onClickLabel = label, onClick = onClick)
+            .padding(vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
         Box(
             Modifier
-                .padding(vertical = 3.dp)
-                .size(52.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(if (selected) colors.primaryContainer else Color.Transparent)
-                .clickable(role = Role.Tab, onClickLabel = label, onClick = onClick),
+                .size(width = 52.dp, height = 32.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(if (selected) colors.primaryContainer else Color.Transparent),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                icon,
-                contentDescription = label,
-                tint = if (selected) colors.onPrimaryContainer else colors.onSurfaceVariant,
-                modifier = Modifier.size(28.dp)
-            )
+            Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(24.dp))
         }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (selected) colors.onSurface else colors.onSurfaceVariant,
+            maxLines = 1
+        )
     }
 }
 

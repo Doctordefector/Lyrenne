@@ -1,11 +1,17 @@
 package com.lyrenne.desktop.ui.components
 
-import com.lyrenne.desktop.ui.theme.selectedChipColors
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.height
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -13,7 +19,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import java.text.Collator
@@ -65,45 +70,55 @@ fun <T> sortPlaylist(
 }
 
 /**
- * Sort chips plus a direction toggle. [defaultLabel] and [defaultDirections] name what DEFAULT
- * means for this list, since Liked Songs comes newest first and Most Played by play count.
+ * One sort button with the orders and the direction in its menu, like Library's. [defaultLabel]
+ * and [defaultDirections] name what DEFAULT means for this list, since Liked Songs comes newest
+ * first and Most Played by play count.
  */
 @Composable
-fun PlaylistSortBar(
+fun PlaylistSortMenu(
     state: PlaylistSortState,
     defaultLabel: String = "Date added",
     defaultDirections: Pair<String, String> = "Oldest first" to "Newest first"
 ) {
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        itemVerticalAlignment = Alignment.CenterVertically
-    ) {
-        Text("Sort:", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        PlaylistSort.entries.forEach { sort ->
-            val label = when (sort) {
-                PlaylistSort.DEFAULT -> defaultLabel
-                PlaylistSort.TITLE -> "Song name"
-                PlaylistSort.ARTIST -> "Artist"
-                PlaylistSort.ALBUM -> "Album"
-                PlaylistSort.RANDOM -> "Random"
-            }
-            FilterChip(
-                colors = selectedChipColors(),
-                selected = state.sort == sort,
-                onClick = {
-                    // Picking Random again deals a new order
-                    if (sort == PlaylistSort.RANDOM) state.seed = Random.nextInt()
-                    if (state.sort != sort) state.reversed = false
-                    state.sort = sort
-                },
-                label = { Text(label, style = MaterialTheme.typography.labelSmall) },
-                modifier = Modifier.height(32.dp)
-            )
+    fun label(sort: PlaylistSort) = when (sort) {
+        PlaylistSort.DEFAULT -> defaultLabel
+        PlaylistSort.TITLE -> "Song name"
+        PlaylistSort.ARTIST -> "Artist"
+        PlaylistSort.ALBUM -> "Album"
+        PlaylistSort.RANDOM -> "Random"
+    }
+    var open by remember { mutableStateOf(false) }
+    Box {
+        TextButton(onClick = { open = true }) {
+            Icon(Icons.AutoMirrored.Filled.Sort, null, Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(label(state.sort))
+            Icon(Icons.Default.ArrowDropDown, null, Modifier.size(18.dp))
         }
-        if (state.sort != PlaylistSort.RANDOM) {
-            val (forward, backward) = if (state.sort == PlaylistSort.DEFAULT) defaultDirections else "A to Z" to "Z to A"
-            TextButton(onClick = { state.reversed = !state.reversed }) {
-                Text(if (state.reversed) backward else forward, style = MaterialTheme.typography.labelMedium)
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            PlaylistSort.entries.forEach { sort ->
+                DropdownMenuItem(
+                    text = { Text(label(sort)) },
+                    onClick = {
+                        // Picking Random again deals a new order
+                        if (sort == PlaylistSort.RANDOM) state.seed = Random.nextInt()
+                        if (state.sort != sort) state.reversed = false
+                        state.sort = sort
+                        open = false
+                    },
+                    trailingIcon = { if (state.sort == sort) Icon(Icons.Default.Check, null) }
+                )
+            }
+            if (state.sort != PlaylistSort.RANDOM) {
+                HorizontalDivider()
+                val (forward, backward) = if (state.sort == PlaylistSort.DEFAULT) defaultDirections else "A to Z" to "Z to A"
+                listOf(false to forward, true to backward).forEach { (rev, text) ->
+                    DropdownMenuItem(
+                        text = { Text(text) },
+                        onClick = { state.reversed = rev; open = false },
+                        trailingIcon = { if (state.reversed == rev) Icon(Icons.Default.Check, null) }
+                    )
+                }
             }
         }
     }

@@ -8,6 +8,7 @@ import com.lyrenne.desktop.ui.components.ScreenTitle
 import com.lyrenne.desktop.ui.components.SecondaryAction
 import com.lyrenne.desktop.ui.components.PrimaryAction
 import com.lyrenne.desktop.ui.components.TrackRow
+import com.lyrenne.desktop.ui.components.CollapsibleSearchField
 import com.lyrenne.desktop.ui.components.Tip
 import com.lyrenne.desktop.ui.components.ConfirmDialog
 import com.lyrenne.desktop.ui.theme.selectedChipColors
@@ -247,7 +248,7 @@ fun LibraryScreen(
                 }
             }
             Spacer(Modifier.width(8.dp))
-            LibrarySearchField(searchQuery, onQueryChange = { searchQuery = it })
+            CollapsibleSearchField(searchQuery, onQueryChange = { searchQuery = it }, placeholder = "Search library")
             if (selectedTab == LibraryTab.Songs) {
                 Spacer(Modifier.width(4.dp))
                 FilterChip(
@@ -354,42 +355,6 @@ private fun SortMenu(
                     trailingIcon = { if (rev == reversed) Icon(Icons.Default.Check, null) }
                 )
             }
-        }
-    }
-}
-
-/** A search icon that opens into a field, and stays open while it holds a query. */
-@Composable
-private fun LibrarySearchField(query: String, onQueryChange: (String) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
-    if (open || query.isNotEmpty()) {
-        OutlinedTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            modifier = Modifier.width(220.dp).focusRequester(focus).suppressMediaKeys()
-                .onFocusChanged { if (!it.isFocused && query.isEmpty()) open = false },
-            placeholder = { Text("Search library") },
-            leadingIcon = { Icon(Icons.Default.Search, null) },
-            trailingIcon = {
-                if (query.isNotEmpty()) {
-                    IconButton(onClick = { onQueryChange("") }) { Icon(Icons.Default.Clear, "Clear") }
-                }
-            },
-            singleLine = true,
-            textStyle = MaterialTheme.typography.bodyMedium,
-            // A filled pill: the outline only appears on focus.
-            shape = RoundedCornerShape(50),
-            colors = OutlinedTextFieldDefaults.colors(
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                unfocusedBorderColor = Color.Transparent
-            )
-        )
-        LaunchedEffect(open) { if (open) runCatching { focus.requestFocus() } }
-    } else {
-        Tip("Search library") {
-            IconButton(onClick = { open = true }) { Icon(Icons.Default.Search, "Search library") }
         }
     }
 }

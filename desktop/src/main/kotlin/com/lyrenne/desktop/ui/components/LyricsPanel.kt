@@ -283,9 +283,12 @@ private fun SyncedLyricsView(
     val currentIndex = remember(positionMs, lines) { currentLineIndex(lines, positionMs) }
 
     val listState = rememberLazyListState()
+    // Dimmed once, by colour only. A layer alpha on top used to multiply with these, leaving past
+    // lines at 0.18 (1.5:1). 0.65 is the floor that keeps 4.5:1 on the light page (5.1:1).
     val accentColor = MaterialTheme.colorScheme.primary
-    val dimColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-    val upcomingColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+    val currentColor = MaterialTheme.colorScheme.onSurface
+    val dimColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+    val upcomingColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
 
     // Smooth auto-scroll: keep the current line a little below the top. Item 0 is the spacer.
     LaunchedEffect(currentIndex) {
@@ -324,6 +327,7 @@ private fun SyncedLyricsView(
                         isPlaying = isPlaying,
                         speed = speed,
                         accentColor = accentColor,
+                        currentColor = currentColor,
                         dimColor = dimColor,
                         upcomingColor = upcomingColor,
                         baseSize = textSize,
@@ -338,6 +342,7 @@ private fun SyncedLyricsView(
                             isPlaying = isPlaying,
                             speed = speed,
                             accentColor = accentColor,
+                            currentColor = currentColor,
                             dimColor = dimColor,
                             upcomingColor = upcomingColor,
                             baseSize = (textSize - 3f).coerceAtLeast(10f),
@@ -364,6 +369,7 @@ private fun LyricsLine(
     isPlaying: Boolean,
     speed: Float,
     accentColor: Color,
+    currentColor: Color,
     dimColor: Color,
     upcomingColor: Color,
     baseSize: Float = 16f,
@@ -376,15 +382,6 @@ private fun LyricsLine(
         animationSpec = tween(durationMillis = 400)
     )
 
-    // Animate opacity: current = full, past = dimmed, upcoming = slightly dimmed
-    val alpha by animateFloatAsState(
-        targetValue = when {
-            isCurrent -> if (isBackground) 0.85f else 1f
-            isPast -> 0.45f
-            else -> 0.7f
-        },
-        animationSpec = tween(durationMillis = 400)
-    )
 
     val words = line.words
     // Word timing lights the current line up word by word. Every other line, and any line
@@ -392,7 +389,7 @@ private fun LyricsLine(
     val wordByWord = isCurrent && words != null
 
     val targetColor = when {
-        isCurrent -> accentColor
+        isCurrent -> currentColor
         isPast -> dimColor
         else -> upcomingColor
     }
@@ -412,7 +409,6 @@ private fun LyricsLine(
         .graphicsLayer {
             scaleX = scale
             scaleY = scale
-            this.alpha = alpha
             transformOrigin = androidx.compose.ui.graphics.TransformOrigin(
                 when (textAlign) {
                     TextAlign.Center -> 0.5f

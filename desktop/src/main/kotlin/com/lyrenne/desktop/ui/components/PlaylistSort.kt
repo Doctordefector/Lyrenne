@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.ui.components
 
+import com.lyrenne.desktop.ui.theme.selectedChipColors
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.height
@@ -87,6 +88,7 @@ fun PlaylistSortBar(
                 PlaylistSort.RANDOM -> "Random"
             }
             FilterChip(
+                colors = selectedChipColors(),
                 selected = state.sort == sort,
                 onClick = {
                     // Picking Random again deals a new order

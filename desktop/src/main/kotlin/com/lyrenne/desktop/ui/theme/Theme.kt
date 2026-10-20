@@ -4,6 +4,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -29,10 +31,12 @@ import java.io.File
  * The accent is #A37C43 exactly, the same value the logo ring and the site use. It appears as a
  * *fill* only. As a foreground on near-black it measures 4.0:1, under the 4.5:1 AA wants for body
  * text, so anywhere the accent has to be legible as text or an icon a lighter tint of it
- * (#DFBE8A, from the top of the logo's gradient) is used instead, which measures 9.6:1.
+ * (#E3C089, from the top of the logo's gradient) is used instead, which measures 10.9:1.
+ *
+ * Neutrals are warm (a hint of the bronze's hue) rather than Material's blue-grey, which looked
+ * cold next to the gold.
  */
-private val LyrenneGold = Color(0xFFA37C43)
-private val LyrenneGoldLight = Color(0xFFDFBE8A)
+private val LyrenneGoldLight = Color(0xFFE3C089)
 
 object LyrenneTokens {
     // Icon-only rail: labels moved into hover tooltips.
@@ -40,8 +44,6 @@ object LyrenneTokens {
     val playerHeight = 80.dp
     // The player and tray panel are floating, rounded docks rather than edge-to-edge bars.
     val dockRadius = 18.dp
-    // Strength of the cover-colour wash (see ArtColor). Low enough to leave text contrast alone.
-    const val artWashAlpha = 0.32f
     val artworkRadius = 4.dp
     val panelRadius = 8.dp
     val contentPadding = 20.dp
@@ -51,44 +53,45 @@ object LyrenneTokens {
 // written down because the palette has been retuned twice and the ratios are the only part of it a
 // reviewer cannot judge by eye. Recompute them when a colour moves.
 private val DarkColorScheme = darkColorScheme(
-    primary = LyrenneGoldLight,                // foreground-capable gold, 10.7:1 on the background
-    onPrimary = Color(0xFF2A1B06),             // 9.4:1 on primary
+    primary = LyrenneGoldLight,                // foreground-capable gold, 10.9:1 on the background
+    onPrimary = Color(0xFF2A1B06),             // 9.7:1 on primary
     // Containers are DARK in a dark scheme. Filling a whole card with the mid-tone bronze made it
     // read as a flat brown slab: the accent looks metallic as a hairline or a label, not as a
     // large area. Dark panel, light gold on top, which is how the site uses it.
-    primaryContainer = Color(0xFF54401E),
-    onPrimaryContainer = Color(0xFFF7E2BC),    // 7.8:1 on primaryContainer
+    primaryContainer = Color(0xFF4A3819),
+    onPrimaryContainer = Color(0xFFF7E2BC),    // 8.9:1 on primaryContainer, gold on it 6.5:1
 
     secondary = Color(0xFFD3C3AA),
     onSecondary = Color(0xFF2A2015),
-    secondaryContainer = Color(0xFF4E4231),
-    onSecondaryContainer = Color(0xFFEFE3CF),
+    // Tonal buttons and selected chips. At #4E4231 (1.9:1 against the page) they barely showed.
+    secondaryContainer = Color(0xFF5A4A33),    // 2.2:1 against the background
+    onSecondaryContainer = Color(0xFFF1E4CE),  // 6.8:1 on secondaryContainer
 
     tertiary = Color(0xFFC4B197),
     onTertiary = Color(0xFF241B0E),
     tertiaryContainer = Color(0xFF443725),
     onTertiaryContainer = Color(0xFFEDE0CB),
 
-    background = Color(0xFF101112),
-    onBackground = Color(0xFFE8E9EA),          // 15.5:1 on the background
-    surface = Color(0xFF161819),
-    onSurface = Color(0xFFE8E9EA),             // 14.7:1 on surface
-    surfaceVariant = Color(0xFF24272A),
-    onSurfaceVariant = Color(0xFFBEC2C5),      // 8.4:1 on surfaceVariant, 9.9:1 on surface
+    background = Color(0xFF121110),
+    onBackground = Color(0xFFECE8E2),          // 15.5:1 on the background
+    surface = Color(0xFF181715),
+    onSurface = Color(0xFFECE8E2),             // 14.7:1 on surface
+    surfaceVariant = Color(0xFF27241F),
+    onSurfaceVariant = Color(0xFFC7C0B6),      // 8.6:1 on surfaceVariant, 9.9:1 on surface
 
     // Borders lift with the surfaces. A hairline tuned for near-black disappears once the page
     // comes up, which would have traded one legibility problem for another.
-    outline = Color(0xFF8E9499),               // 6.2:1 on the background
-    outlineVariant = Color(0xFF363A3E),        // dividers, not held to a text ratio
+    outline = Color(0xFF958E84),               // 5.8:1 on the background
+    outlineVariant = Color(0xFF3A3530),        // dividers, not held to a text ratio
 
     surfaceTint = LyrenneGoldLight,
-    surfaceBright = Color(0xFF34383B),
-    surfaceDim = Color(0xFF101112),
-    surfaceContainerLowest = Color(0xFF0B0C0D),
-    surfaceContainerLow = Color(0xFF141617),
-    surfaceContainer = Color(0xFF1B1E20),
-    surfaceContainerHigh = Color(0xFF23272A),
-    surfaceContainerHighest = Color(0xFF2C3135),
+    surfaceBright = Color(0xFF3A3530),
+    surfaceDim = Color(0xFF121110),
+    surfaceContainerLowest = Color(0xFF0D0C0B),
+    surfaceContainerLow = Color(0xFF161513),
+    surfaceContainer = Color(0xFF1D1B19),
+    surfaceContainerHigh = Color(0xFF2A2622),   // onSurfaceVariant 8.3:1 on it
+    surfaceContainerHighest = Color(0xFF332E29),
 
     inverseSurface = Color(0xFFE8E6E2),
     inverseOnSurface = Color(0xFF1F1B16),
@@ -187,26 +190,29 @@ private val LyrenneShapes = Shapes(
  *
  * Two deliberate departures, both for legibility rather than taste:
  *
- * - Copper is bright. White on it measures 3.2:1 and copper as text on the background measures
- *   3.1:1, both short of the 4.5:1 WCAG AA needs for body text. Rather than darken the flag
- *   colour, copper stays exact and carries dark text instead (5.4:1). Copper is never used as a
- *   text colour on the background.
+ * - Copper is bright: as text on the page it measures 2.9:1, and `primary` is a text colour
+ *   (headers, links, every TextButton, the current lyric line). So `primary` is a copper *ink*,
+ *   #9A4A00, the flag hue darkened to 5.6:1 on the page. The exact flag copper misses even the
+ *   3:1 non-text floor on the page, so nothing draws it; [CyprusCopper] stays for reference.
  * - The background is a warm off-white rather than pure #FFFFFF. Full white next to a large
  *   copper fill glares; a 2% warm tint keeps the flag's feel without the hotspot.
  */
+@Suppress("unused")
 private val CyprusCopper = Color(0xFFD57800)
+private val CyprusCopperInk = Color(0xFF9A4A00)
 private val CyprusGreen = Color(0xFF4E5B31)
 
 private val LightColorScheme = lightColorScheme(
-    primary = CyprusCopper,
-    onPrimary = Color(0xFF2B1400),             // dark on copper: 5.4:1. White would be 3.2:1.
-    primaryContainer = Color(0xFFFFDCBA),      // copper, lightened for container fills
-    onPrimaryContainer = Color(0xFF4A2600),    // copper darkened to 9.6:1 on its container
+    primary = CyprusCopperInk,                 // 5.6:1 on the background, 6.2:1 on cards
+    onPrimary = Color(0xFFFFFFFF),             // 6.3:1 on primary
+    primaryContainer = Color(0xFFFFE3C4),      // copper, lightened for container fills
+    onPrimaryContainer = Color(0xFF3D1F00),    // 12.2:1 on its container; primary on it 5.1:1
 
     secondary = CyprusGreen,
-    onSecondary = Color(0xFFFFFFFF),           // 7.3:1 on the flag green
-    secondaryContainer = Color(0xFFD5DEC0),    // green, lightened
-    onSecondaryContainer = Color(0xFF1B2408),
+    onSecondary = Color(0xFFFFFFFF),           // 7.3:1 on the flag green; green on the page 6.5:1
+    // Olive-grey, not a saturated green: selected chips sat olive next to copper selections.
+    secondaryContainer = Color(0xFFE3E6D2),
+    onSecondaryContainer = Color(0xFF252B14),  // 11.5:1
 
     tertiary = Color(0xFF7A5C31),              // midpoint of the two flag hues, for accents
     onTertiary = Color(0xFFFFFFFF),            // 6.2:1
@@ -216,26 +222,26 @@ private val LightColorScheme = lightColorScheme(
     // The page is deliberately a shade or two down from white. At #FDFBF7 the background, the
     // cards and the white container tones were all within 3% of each other, so panels had no
     // visible edge and outlined controls looked borderless.
-    background = Color(0xFFF4EEE4),
-    onBackground = Color(0xFF1F1B16),
-    surface = Color(0xFFF4EEE4),
+    background = Color(0xFFF6F1E9),
+    onBackground = Color(0xFF1F1B16),          // 15.2:1
+    surface = Color(0xFFF6F1E9),
     onSurface = Color(0xFF1F1B16),
-    surfaceVariant = Color(0xFFE9DFCF),
-    onSurfaceVariant = Color(0xFF4F4639),      // 7.0:1 on surfaceVariant
-    outline = Color(0xFF6B5F52),               // 6.0:1 on background
+    surfaceVariant = Color(0xFFE9E0D1),
+    onSurfaceVariant = Color(0xFF4F4639),      // 7.1:1 on surfaceVariant, 8.2:1 on the page
+    outline = Color(0xFF6B5F52),               // 5.5:1 on background
     outlineVariant = Color(0xFFB5A692),        // dividers and control borders, visible on the page
 
     // Every role below is set explicitly on purpose. Anything left out falls back to Material's
     // default baseline palette, which is purple-tinted: it would clash with the copper and, worse,
     // put text on surfaces whose contrast nobody has checked. Menus, cards, snackbars and error
     // states all draw from these.
-    surfaceTint = CyprusCopper,
+    surfaceTint = CyprusCopperInk,
     surfaceBright = Color(0xFFFDFBF7),
     surfaceDim = Color(0xFFD8D1C4),
-    surfaceContainerLowest = Color(0xFFFFFFFF),   // raised cards read as lighter than the page
+    surfaceContainerLowest = Color(0xFFFFFDF9),   // raised cards read as lighter than the page
     surfaceContainerLow = Color(0xFFFCF8F1),
     surfaceContainer = Color(0xFFF8F2E8),
-    surfaceContainerHigh = Color(0xFFEDE6D9),
+    surfaceContainerHigh = Color(0xFFEEE6D9),     // the rail; onSurfaceVariant 7.5:1 on it
     surfaceContainerHighest = Color(0xFFE4DCCC),
 
     inverseSurface = Color(0xFF352F27),
@@ -328,6 +334,35 @@ private fun isLinuxDarkTheme(): Boolean {
     return false
 }
 
+/**
+ * Selected = the copper/gold family everywhere. FilterChip defaults to secondaryContainer, which
+ * put olive selections beside copper ones in light and was near-invisible in dark.
+ */
+@Composable
+fun selectedChipColors() = FilterChipDefaults.filterChipColors(
+    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+    selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+    selectedTrailingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+)
+
+/**
+ * Per-scheme values Material has no role for. Read with `LocalLyrenneExtras.current`.
+ *
+ * [artWashAlpha] is the strength of the cover-colour wash (see ArtColor). Over near-black a
+ * strong wash stays dark, but over the light page 0.32 turned it salmon and pulled primary text
+ * to 3.7:1. At 0.10 the worst hue (pure blue) leaves primary at 4.5:1 on the page; gold on a
+ * 0.26 red wash in dark is 8.7:1.
+ */
+@Immutable
+class LyrenneExtras(val artWashAlpha: Float, val railColor: Color)
+
+private val DarkExtras = LyrenneExtras(0.26f, railColor = DarkColorScheme.surfaceContainerLowest)
+// A pure white rail glared next to the warm page.
+private val LightExtras = LyrenneExtras(0.10f, railColor = LightColorScheme.surfaceContainerHigh)
+
+val LocalLyrenneExtras = staticCompositionLocalOf { DarkExtras }
+
 @Composable
 fun LyrenneTheme(
     themeMode: ThemeMode = ThemeMode.SYSTEM,
@@ -348,6 +383,7 @@ fun LyrenneTheme(
     ) {
         CompositionLocalProvider(
             LocalMinimumInteractiveComponentSize provides 40.dp,
+            LocalLyrenneExtras provides if (darkTheme) DarkExtras else LightExtras,
             content = content
         )
     }

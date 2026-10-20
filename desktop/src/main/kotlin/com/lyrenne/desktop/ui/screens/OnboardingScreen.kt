@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.ui.screens
 
+import com.lyrenne.desktop.ui.theme.selectedChipColors
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -155,6 +156,7 @@ private fun <T> ChipChoice(
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         options.forEach { (value, text) ->
             FilterChip(
+                colors = selectedChipColors(),
                 selected = selected == value,
                 onClick = { onSelect(value) },
                 label = { Text(text) }

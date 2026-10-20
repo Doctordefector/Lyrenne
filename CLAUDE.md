@@ -597,8 +597,12 @@ Deemed a mobile-shaped want and deliberately not built.
 Two hand-tuned schemes in `ui/theme/Theme.kt`, neither generated from a seed colour.
 
 - **Dark**: the project's own bronze on near-black, matching the site and the app mark.
-- **Light**: the flag of Cyprus, using the official values exactly — copper `#D57800`
-  (Pantone 1385), olive `#4E5B31` (Pantone 574), white.
+- **Light**: the flag of Cyprus — copper `#D57800` (Pantone 1385), olive `#4E5B31` (Pantone 574),
+  white. `primary` is a copper *ink*, `#9A4A00` (5.6:1 on the page), not the flag copper: `primary`
+  is a text colour in ~50 places (every TextButton, headers, links), and flag copper is 2.9:1 there.
+- Values Material has no role for (art-wash strength, rail colour) live in `LyrenneExtras`, per
+  scheme. The wash is 0.26 in dark but 0.10 in light: 0.32 over the light page turned it salmon and
+  pulled primary text under 4.5:1.
 
 Two rules that keep them legible, both learned the hard way:
 

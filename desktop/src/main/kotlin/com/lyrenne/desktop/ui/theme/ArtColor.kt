@@ -30,7 +30,7 @@ import kotlinx.coroutines.withContext
  * - Results are cached by URL, so going back to a song costs nothing.
  *
  * No blur, no palette library. Callers paint the result as a translucent wash over their own
- * surface, which keeps the theme's text contrast intact: the wash is at most ~32% alpha.
+ * surface, which keeps the theme's text contrast intact (see LyrenneExtras.artWashAlpha).
  */
 object ArtColor {
     private const val SAMPLE = 16

@@ -26,6 +26,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.style.TextAlign
 import coil3.compose.AsyncImage
 import com.lyrenne.desktop.db.DatabaseHelper
 import com.lyrenne.desktop.db.Playlist
@@ -47,20 +49,19 @@ fun MiniPlayer(
     onQueueClick: () -> Unit = {},
     onLyricsClick: () -> Unit = {},
     lyricsActive: Boolean = false,
+    queueActive: Boolean = false,
     artTint: State<Color> = remember { mutableStateOf(Color.Transparent) }
 ) {
     // Position is left out: it ticks five times a second, and only the seek bar and the time
     // readout draw it. They collect it themselves, so the rest of the bar stays still.
     val state by player.select { it.copy(position = 0L) }
     val scope = rememberCoroutineScope()
-    var showSongMenu by remember { mutableStateOf(false) }
-    var showPlaylistPicker by remember { mutableStateOf(false) }
     var showSleepMenu by remember { mutableStateOf(false) }
     var showSpeedMenu by remember { mutableStateOf(false) }
     var showMoreMenu by remember { mutableStateOf(false) }
-    val playlists by remember { DatabaseHelper.getAllPlaylists() }.collectAsState(initial = emptyList())
     val sleepTimer by player.sleepTimer.collectAsState()
     val prefs by PreferencesManager.preferences.collectAsState()
+    val songMenu = rememberMenuAnchor()
 
     if (state.currentSong == null) {
         return // Don't show if nothing is playing
@@ -74,31 +75,12 @@ fun MiniPlayer(
         .collectAsState(initial = null)
     val isLiked = dbSong?.liked == 1L
 
-    fun toggleLike() {
-        val nowLiked = !isLiked
-        // The playing song is not necessarily in the library yet, so there would be no row to update.
-        DatabaseHelper.insertSong(
-            id = song.id,
-            title = song.title,
-            duration = song.duration,
-            thumbnailUrl = song.thumbnailUrl,
-            albumName = song.album
-        )
-        DatabaseHelper.updateSongLiked(song.id, nowLiked)
-        YouTubeWrites.likeSong(song.id, nowLiked)
-        if (nowLiked && dbSong?.isDownloaded != 1L &&
-            PreferencesManager.preferences.value.autoDownloadOnLike
-        ) {
-            DownloadManager.queueDownload(song)
-        }
-    }
-
     // A floating dock rather than an edge-to-edge bar: inset from the window, rounded, and washed
     // with the cover's colour. The wash is read in the draw phase, so a track change only redraws.
     val dockShape = RoundedCornerShape(LyrenneTokens.dockRadius)
     val dockColor = MaterialTheme.colorScheme.surfaceContainer
     val washAlpha = LocalLyrenneExtras.current.artWashAlpha
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 10.dp)
             .height(LyrenneTokens.playerHeight)
@@ -110,143 +92,75 @@ fun MiniPlayer(
             }
             .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, dockShape)
     ) {
-        Column {
-            // Seekable progress bar
-            SeekBar(player, state.duration, Modifier.padding(horizontal = 10.dp))
-
-            BoxWithConstraints(Modifier.fillMaxSize()) {
-                val responsiveLayout = miniPlayerResponsiveLayout(maxWidth)
-                val showSecondaryControls = responsiveLayout.showSecondaryControls
-                val showExtendedControls = responsiveLayout.showExtendedControls
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Album art
-                    AsyncImage(
-                        model = squareCropFriendly(song.thumbnailUrl),
-                        contentDescription = "Album art",
-                        modifier = Modifier
-                            .size(46.dp)
-                            .clip(RoundedCornerShape(8.dp)),
-                        contentScale = ContentScale.Crop
-                    )
-
-                    Spacer(Modifier.width(12.dp))
-
-                    // Song info + context menu
-                    Box(modifier = Modifier.weight(1f)) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth().clickable { showSongMenu = true }
-                        ) {
-                            Text(
-                                text = song.title,
-                                style = MaterialTheme.typography.bodyMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = song.artist,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                        DropdownMenu(
-                            expanded = showSongMenu,
-                            onDismissRequest = { showSongMenu = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Play Next") },
-                                onClick = {
-                                    player.addToQueueNext(song)
-                                    showSongMenu = false
-                                },
-                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistPlay, null) }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Add to Queue") },
-                                onClick = {
-                                    player.addToQueue(song)
-                                    showSongMenu = false
-                                },
-                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, null) }
-                            )
-                            if (playlists.isNotEmpty()) {
-                                DropdownMenuItem(
-                                    text = { Text("Add to Playlist") },
-                                    onClick = {
-                                        showSongMenu = false
-                                        showPlaylistPicker = true
-                                    },
-                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null) }
-                                )
-                            }
-                            DropdownMenuItem(
-                                text = { Text("Start Radio") },
-                                onClick = {
-                                    showSongMenu = false
-                                    scope.launch { player.startRadio(song) }
-                                },
-                                leadingIcon = { Icon(Icons.Default.Radio, null) }
-                            )
-                            HorizontalDivider()
-                            DropdownMenuItem(
-                                text = { Text("Download") },
-                                onClick = {
-                                    DownloadManager.queueDownload(song)
-                                    showSongMenu = false
-                                },
-                                leadingIcon = { Icon(Icons.Default.Download, null) }
-                            )
-                        }
-                    }
-
-                    // Like: the one library action people look for on the player itself.
-                    PlayerIconButton(
-                        onClick = ::toggleLike,
-                        icon = if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                        contentDescription = if (isLiked) "Remove from liked songs" else "Add to liked songs",
-                        selected = isLiked
-                    )
-
-                    if (showExtendedControls) {
-                        Spacer(Modifier.width(8.dp))
-
-                        // Time display
-                        TimeReadout(player, state.duration)
-
-                        Spacer(Modifier.width(12.dp))
-                    }
-
-                    // Shuffle button
-                    if (showSecondaryControls) {
-                        PlayerIconButton(
-                            onClick = player::toggleShuffle,
-                            icon = Icons.Default.Shuffle,
-                            contentDescription = if (state.shuffleEnabled) "Disable shuffle" else "Enable shuffle",
-                            selected = state.shuffleEnabled,
-                            shortcut = "Ctrl+S"
+        val layout = dockLayout(maxWidth)
+        // Three zones, like every desktop player: the track on the left, transport and seek in a
+        // fixed centre column, volume and extras on the right. The side zones share what is left
+        // equally, so the play button sits at the dock's centre at every width. Track info used
+        // to take all the slack, which pushed transport right and moved it on every resize.
+        Row(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // ---- Left: art, title/artist (menu on click or right-click), like
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                AsyncImage(
+                    model = squareCropFriendly(song.thumbnailUrl),
+                    contentDescription = "Album art",
+                    modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)),
+                    contentScale = ContentScale.Crop
+                )
+                Spacer(Modifier.width(12.dp))
+                Box(Modifier.weight(1f).contextMenu(songMenu)) {
+                    Column(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp))
+                            .clickable { songMenu.open = true }.padding(vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = song.title,
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = song.artist,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
+                    SongMenu(songMenu, song, player)
+                }
+                // Like: the one library action people look for on the player itself.
+                PlayerIconButton(
+                    onClick = { setLiked(song, !isLiked, dbSong?.isDownloaded == 1L) },
+                    icon = if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                    contentDescription = if (isLiked) "Remove from liked songs" else "Add to liked songs",
+                    selected = isLiked
+                )
+            }
 
-                    // Controls
+            Spacer(Modifier.width(12.dp))
+
+            // ---- Centre: transport over the seek bar, times at both ends
+            Column(Modifier.width(layout.centerWidth), horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    PlayerIconButton(
+                        onClick = player::toggleShuffle,
+                        icon = Icons.Default.Shuffle,
+                        contentDescription = if (state.shuffleEnabled) "Disable shuffle" else "Enable shuffle",
+                        selected = state.shuffleEnabled,
+                        shortcut = "Ctrl+S"
+                    )
                     Tip("Previous (Ctrl+Left)") {
-                        IconButton(
-                            onClick = { scope.launch { player.playPrevious() } }
-                        ) {
+                        IconButton(onClick = { scope.launch { player.playPrevious() } }, modifier = Modifier.size(40.dp)) {
                             Icon(Icons.Default.SkipPrevious, "Previous")
                         }
                     }
-
                     Tip(if (state.isPlaying) "Pause (Space)" else "Play (Space)") {
                         FilledIconButton(
                             onClick = { player.togglePlayPause() },
-                            modifier = Modifier.size(44.dp),
+                            modifier = Modifier.size(40.dp),
                             shape = CircleShape
                         ) {
                             Icon(
@@ -255,209 +169,132 @@ fun MiniPlayer(
                             )
                         }
                     }
-
                     Tip("Next (Ctrl+Right)") {
-                        IconButton(
-                            onClick = { scope.launch { player.playNext() } }
-                        ) {
+                        IconButton(onClick = { scope.launch { player.playNext() } }, modifier = Modifier.size(40.dp)) {
                             Icon(Icons.Default.SkipNext, "Next")
                         }
                     }
+                    PlayerIconButton(
+                        onClick = player::toggleRepeat,
+                        icon = when (state.repeatMode) {
+                            RepeatMode.ONE -> Icons.Default.RepeatOne
+                            else -> Icons.Default.Repeat
+                        },
+                        contentDescription = when (state.repeatMode) {
+                            RepeatMode.OFF -> "Enable repeat"
+                            RepeatMode.ALL -> "Repeat all enabled"
+                            RepeatMode.ONE -> "Repeat one enabled"
+                        },
+                        selected = state.repeatMode != RepeatMode.OFF,
+                        shortcut = "Ctrl+R"
+                    )
+                }
+                SeekRow(player, state.duration)
+            }
 
-                    // Repeat button
-                    if (showSecondaryControls) {
-                        PlayerIconButton(
-                            onClick = player::toggleRepeat,
-                            icon = when (state.repeatMode) {
-                                RepeatMode.ONE -> Icons.Default.RepeatOne
-                                else -> Icons.Default.Repeat
-                            },
-                            contentDescription = when (state.repeatMode) {
-                                RepeatMode.OFF -> "Enable repeat"
-                                RepeatMode.ALL -> "Repeat all enabled"
-                                RepeatMode.ONE -> "Repeat one enabled"
-                            },
-                            selected = state.repeatMode != RepeatMode.OFF,
-                            shortcut = "Ctrl+R"
+            Spacer(Modifier.width(12.dp))
+
+            // ---- Right: lyrics, queue, overflow, volume
+            Row(
+                Modifier.weight(1f),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                PlayerIconButton(
+                    onClick = onLyricsClick,
+                    icon = Icons.Outlined.Lyrics,
+                    contentDescription = if (lyricsActive) "Close lyrics" else "Open lyrics",
+                    selected = lyricsActive,
+                    shortcut = "Ctrl+L"
+                )
+                PlayerIconButton(
+                    onClick = onQueueClick,
+                    icon = Icons.AutoMirrored.Filled.QueueMusic,
+                    contentDescription = if (queueActive) "Close queue" else "Open queue",
+                    selected = queueActive,
+                    shortcut = "Ctrl+Q"
+                )
+
+                // Speed and the sleep timer are rare, so they live in the overflow at every width.
+                Box {
+                    Tip("Speed and sleep timer") {
+                        IconButton(onClick = { showMoreMenu = true }, modifier = Modifier.size(40.dp)) {
+                            // Tinted while a speed or sleep timer is set, so that state stays visible.
+                            Icon(
+                                Icons.Default.MoreVert, "Speed and sleep timer",
+                                tint = if (sleepTimer != null || prefs.playbackSpeed != 1f)
+                                    MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    DropdownMenu(expanded = showMoreMenu, onDismissRequest = { showMoreMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Playback speed") },
+                            onClick = { showMoreMenu = false; showSpeedMenu = true },
+                            leadingIcon = { Icon(Icons.Default.Speed, null) },
+                            trailingIcon = { Text(playbackSpeedLabel(prefs.playbackSpeed)) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Sleep timer") },
+                            onClick = { showMoreMenu = false; showSleepMenu = true },
+                            leadingIcon = { Icon(Icons.Outlined.Timer, null) },
+                            trailingIcon = { if (sleepTimer != null) Icon(Icons.Default.Check, null) }
                         )
                     }
-
-                    Spacer(Modifier.width(8.dp))
-
-                    // Queue button
-                    Tip("Queue (Ctrl+Q)") {
-                        IconButton(
-                            onClick = onQueueClick,
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.QueueMusic,
-                                contentDescription = "Queue",
-                                modifier = Modifier.size(20.dp)
-                            )
+                    PlaybackSpeedMenu(
+                        expanded = showSpeedMenu,
+                        currentSpeed = prefs.playbackSpeed,
+                        onDismissRequest = { showSpeedMenu = false },
+                        onSpeedSelected = { speed ->
+                            player.setPlaybackSpeed(speed)
+                            showSpeedMenu = false
                         }
-                    }
+                    )
+                    SleepTimerMenu(
+                        expanded = showSleepMenu,
+                        sleepTimer = sleepTimer,
+                        onDismissRequest = { showSleepMenu = false },
+                        onCancel = {
+                            player.cancelSleepTimer()
+                            showSleepMenu = false
+                        },
+                        onMinutesSelected = { minutes ->
+                            player.startSleepTimer(minutes)
+                            showSleepMenu = false
+                        },
+                        onEndOfTrack = {
+                            player.setSleepEndOfTrack()
+                            showSleepMenu = false
+                        }
+                    )
+                }
 
-                    // Lyrics button
-                    if (showSecondaryControls) {
-                        PlayerIconButton(
-                            onClick = onLyricsClick,
-                            icon = Icons.Outlined.Lyrics,
-                            contentDescription = if (lyricsActive) "Close lyrics" else "Open lyrics",
-                            selected = lyricsActive,
-                            shortcut = "Ctrl+L"
+                // Volume slider (persisted) with proper mute state
+                val volume = prefs.volume
+                val isMuted = prefs.isMuted
+                val onVolume: (Float) -> Unit = {
+                    // Moving the slider unmutes
+                    if (PreferencesManager.preferences.value.isMuted) PreferencesManager.setMuted(false)
+                    PreferencesManager.setVolume(it)
+                    player.setVolume(it)
+                }
+                Tip(if (isMuted) "Unmute (M)" else "Mute (M)") {
+                    IconButton(
+                        onClick = { MediaKeyHandler.toggleMute(player) },
+                        // The wheel works on the icon too, which is all there is on a narrow dock.
+                        modifier = Modifier.size(40.dp)
+                            .wheelStep({ PreferencesManager.preferences.value.volume }, 0.05f, onChange = onVolume)
+                    ) {
+                        Icon(
+                            if (isMuted || volume == 0f) Icons.AutoMirrored.Filled.VolumeOff
+                            else if (volume > 0.5f) Icons.AutoMirrored.Filled.VolumeUp
+                            else Icons.AutoMirrored.Filled.VolumeDown,
+                            contentDescription = if (isMuted) "Unmute" else "Mute",
+                            modifier = Modifier.size(20.dp)
                         )
                     }
-
-                    // Speed and sleep timer are rare, so they always live here, plus whatever the
-                    // responsive layout dropped from the row. One overflow, at every width.
-                    run {
-                        Box {
-                            Tip("More playback controls") {
-                                IconButton(
-                                    onClick = { showMoreMenu = true },
-                                    modifier = Modifier.size(40.dp)
-                                ) {
-                                    // Tinted while a speed or sleep timer is set, so that state stays visible.
-                                    Icon(
-                                        Icons.Default.MoreVert, "More playback controls",
-                                        tint = if (sleepTimer != null || prefs.playbackSpeed != 1f)
-                                            MaterialTheme.colorScheme.primary else LocalContentColor.current
-                                    )
-                                }
-                            }
-                            DropdownMenu(
-                                expanded = showMoreMenu,
-                                onDismissRequest = { showMoreMenu = false }
-                            ) {
-                                if (!showSecondaryControls) {
-                                    DropdownMenuItem(
-                                        text = { Text(if (state.shuffleEnabled) "Disable shuffle" else "Enable shuffle") },
-                                        onClick = {
-                                            player.toggleShuffle()
-                                            showMoreMenu = false
-                                        },
-                                        leadingIcon = { Icon(Icons.Default.Shuffle, null) },
-                                        trailingIcon = {
-                                            if (state.shuffleEnabled) Icon(Icons.Default.Check, null)
-                                        }
-                                    )
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                when (state.repeatMode) {
-                                                    RepeatMode.OFF -> "Enable repeat"
-                                                    RepeatMode.ALL -> "Repeat all"
-                                                    RepeatMode.ONE -> "Repeat one"
-                                                }
-                                            )
-                                        },
-                                        onClick = {
-                                            player.toggleRepeat()
-                                            showMoreMenu = false
-                                        },
-                                        leadingIcon = {
-                                            Icon(
-                                                if (state.repeatMode == RepeatMode.ONE) Icons.Default.RepeatOne
-                                                else Icons.Default.Repeat,
-                                                null
-                                            )
-                                        },
-                                        trailingIcon = {
-                                            if (state.repeatMode != RepeatMode.OFF) Icon(Icons.Default.Check, null)
-                                        }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text(if (lyricsActive) "Close lyrics" else "Open lyrics") },
-                                        onClick = {
-                                            onLyricsClick()
-                                            showMoreMenu = false
-                                        },
-                                        leadingIcon = { Icon(Icons.Outlined.Lyrics, null) },
-                                        trailingIcon = {
-                                            if (lyricsActive) Icon(Icons.Default.Check, null)
-                                        }
-                                    )
-                                    HorizontalDivider()
-                                }
-
-                                DropdownMenuItem(
-                                    text = { Text("Playback speed") },
-                                    onClick = {
-                                        showMoreMenu = false
-                                        showSpeedMenu = true
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.Speed, null) },
-                                    trailingIcon = { Text(playbackSpeedLabel(prefs.playbackSpeed)) }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Sleep timer") },
-                                    onClick = {
-                                        showMoreMenu = false
-                                        showSleepMenu = true
-                                    },
-                                    leadingIcon = { Icon(Icons.Outlined.Timer, null) },
-                                    trailingIcon = {
-                                        if (sleepTimer != null) Icon(Icons.Default.Check, null)
-                                    }
-                                )
-                            }
-                            PlaybackSpeedMenu(
-                                expanded = showSpeedMenu,
-                                currentSpeed = prefs.playbackSpeed,
-                                onDismissRequest = { showSpeedMenu = false },
-                                onSpeedSelected = { speed ->
-                                    player.setPlaybackSpeed(speed)
-                                    showSpeedMenu = false
-                                }
-                            )
-                            SleepTimerMenu(
-                                expanded = showSleepMenu,
-                                sleepTimer = sleepTimer,
-                                onDismissRequest = { showSleepMenu = false },
-                                onCancel = {
-                                    player.cancelSleepTimer()
-                                    showSleepMenu = false
-                                },
-                                onMinutesSelected = { minutes ->
-                                    player.startSleepTimer(minutes)
-                                    showSleepMenu = false
-                                },
-                                onEndOfTrack = {
-                                    player.setSleepEndOfTrack()
-                                    showSleepMenu = false
-                                }
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.width(8.dp))
-
-                    // Volume slider (persisted) with proper mute state
-                    val volume = prefs.volume
-                    val isMuted = prefs.isMuted
-                    Tip(if (isMuted) "Unmute (M)" else "Mute (M)") {
-                        IconButton(
-                            onClick = {
-                                MediaKeyHandler.toggleMute(player)
-                            },
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(
-                                if (isMuted || volume == 0f) Icons.AutoMirrored.Filled.VolumeOff
-                                else if (volume > 0.5f) Icons.AutoMirrored.Filled.VolumeUp
-                                else Icons.AutoMirrored.Filled.VolumeDown,
-                                contentDescription = if (isMuted) "Unmute" else "Mute",
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                    val onVolume: (Float) -> Unit = {
-                        // Moving the slider unmutes
-                        if (PreferencesManager.preferences.value.isMuted) PreferencesManager.setMuted(false)
-                        PreferencesManager.setVolume(it)
-                        player.setVolume(it)
-                    }
+                }
+                if (layout.volumeSliderWidth > 0.dp) {
                     PlayerSlider(
                         value = volume,
                         // Dragging fires dozens of times a second: keep it in memory, write once on release.
@@ -468,21 +305,12 @@ fun MiniPlayer(
                         },
                         onValueChangeFinished = { PreferencesManager.setVolume(PreferencesManager.preferences.value.volume) },
                         modifier = Modifier
-                            .width(responsiveLayout.volumeSliderWidth)
+                            .width(layout.volumeSliderWidth)
                             .wheelStep({ PreferencesManager.preferences.value.volume }, 0.05f, onChange = onVolume)
                     )
                 }
             }
         }
-    }
-
-    // Playlist picker dialog
-    if (showPlaylistPicker) {
-        PlaylistPickerDialog(
-            song = song,
-            playlists = playlists,
-            onDismiss = { showPlaylistPicker = false }
-        )
     }
 }
 
@@ -578,24 +406,20 @@ private fun SleepTimerMenu(
 private fun playbackSpeedLabel(speed: Float): String =
     if (speed == 1f) "Normal" else "${speed}x"
 
-internal data class MiniPlayerResponsiveLayout(
-    val showSecondaryControls: Boolean,
-    val showExtendedControls: Boolean,
-    val volumeSliderWidth: androidx.compose.ui.unit.Dp
-)
+internal data class DockLayout(val centerWidth: Dp, val volumeSliderWidth: Dp)
 
-internal fun miniPlayerResponsiveLayout(width: androidx.compose.ui.unit.Dp): MiniPlayerResponsiveLayout {
-    val showSecondaryControls = width >= 840.dp
-    val showExtendedControls = width >= 1040.dp
-    return MiniPlayerResponsiveLayout(
-        showSecondaryControls = showSecondaryControls,
-        showExtendedControls = showExtendedControls,
-        volumeSliderWidth = when {
-            showExtendedControls -> 100.dp
-            showSecondaryControls -> 80.dp
-            else -> 64.dp
-        }
-    )
+/**
+ * Sizes the dock's zones from its inner width. The centre column holds five 40 dp buttons and the
+ * seek bar; each side zone gets half of what is left. The right zone needs 160 dp for lyrics,
+ * queue, overflow and mute, and the volume slider only appears once there is room for a usable
+ * one: below that the wheel over the mute icon still sets the volume.
+ */
+internal fun dockLayout(width: Dp): DockLayout {
+    val inner = width - 24.dp
+    val center = (inner * 0.42f).coerceIn(244.dp, 560.dp)
+    val side = (inner - center - 24.dp) / 2
+    val slider = (side - 160.dp).coerceAtMost(110.dp)
+    return DockLayout(center, if (slider >= 56.dp) slider else 0.dp)
 }
 
 /**
@@ -649,29 +473,39 @@ internal fun squareCropFriendly(url: String?): String? {
     return url.substringBefore('?').replace(Regex("/(hq|sd|maxres)default"), "/mqdefault")
 }
 
-/** The seek bar. Reads the position itself so a tick recomposes only this. */
+/**
+ * The seek bar with elapsed and total time at its ends. Reads the position itself so a tick
+ * recomposes only this. The thumb only shows on hover or drag: at 0:00 it sat in the corner.
+ */
 @Composable
-private fun SeekBar(player: DesktopPlayer, duration: Long, modifier: Modifier = Modifier) {
+private fun SeekRow(player: DesktopPlayer, duration: Long) {
     val position by player.select { it.position }
-    PlayerSlider(
-        value = if (duration > 0) position.toFloat() / duration else 0f,
-        onValueChange = { fraction -> player.seekTo((fraction * duration).toLong()) },
-        modifier = modifier.fillMaxWidth().height(12.dp)
-            .wheelStep(
-                value = { player.state.value.position.toFloat() },
-                step = 5_000f,
-                range = 0f..duration.toFloat(),
-                enabled = duration > 0
-            ) { player.seekTo(it.toLong()) }
-    )
-}
-
-@Composable
-private fun TimeReadout(player: DesktopPlayer, duration: Long) {
-    val position by player.select { it.position }
-    Text(
-        text = "${formatTime(position)} / ${formatTime(duration)}",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            formatTime(position),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.End,
+            modifier = Modifier.width(44.dp)
+        )
+        PlayerSlider(
+            value = if (duration > 0) position.toFloat() / duration else 0f,
+            onValueChange = { fraction -> player.seekTo((fraction * duration).toLong()) },
+            idleThumb = 0.dp,
+            modifier = Modifier.weight(1f).height(16.dp).padding(horizontal = 8.dp)
+                .wheelStep(
+                    value = { player.state.value.position.toFloat() },
+                    step = 5_000f,
+                    range = 0f..duration.toFloat(),
+                    enabled = duration > 0
+                ) { player.seekTo(it.toLong()) }
+        )
+        // Not "0:00" before the length is known: that read as a zero-length track.
+        Text(
+            if (duration > 0) formatTime(duration) else "–:––",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(44.dp)
+        )
+    }
 }

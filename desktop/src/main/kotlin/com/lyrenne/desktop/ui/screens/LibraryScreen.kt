@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.ui.screens
 
+import com.lyrenne.desktop.ui.components.ConfirmDialog
 import com.lyrenne.desktop.ui.theme.selectedChipColors
 import com.lyrenne.desktop.ui.components.select
 import androidx.compose.foundation.background
@@ -1047,7 +1048,23 @@ private fun PlaylistsTab(
             // Local playlists have no browseId; remote ones navigate to the YouTube playlist screen
             val isLocal = playlist.browseId == null
             var showMenu by remember(playlist.id) { mutableStateOf(false) }
+            var confirmDelete by remember(playlist.id) { mutableStateOf(false) }
             var localSongCount by remember(playlist.id) { mutableStateOf<Int?>(null) }
+
+            if (confirmDelete) {
+                ConfirmDialog(
+                    title = "Delete playlist?",
+                    text = "\"${playlist.name}\" is deleted here and on YouTube. The songs stay in your library.",
+                    confirmLabel = "Delete",
+                    onConfirm = {
+                        scope.launch(Dispatchers.IO) {
+                            DatabaseHelper.deletePlaylist(playlist.id)
+                            YouTubeWrites.deletePlaylist(playlist.id)
+                        }
+                    },
+                    onDismiss = { confirmDelete = false }
+                )
+            }
 
             if (isLocal) {
                 LaunchedEffect(playlist.id) {
@@ -1094,10 +1111,7 @@ private fun PlaylistsTab(
                                     text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
                                     onClick = {
                                         showMenu = false
-                                        scope.launch(Dispatchers.IO) {
-                                            DatabaseHelper.deletePlaylist(playlist.id)
-                                            YouTubeWrites.deletePlaylist(playlist.id)
-                                        }
+                                        confirmDelete = true
                                     },
                                     leadingIcon = {
                                         Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error)
@@ -1157,27 +1171,14 @@ private fun DownloadsTab(
     }
 
     if (showDeleteAllDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteAllDialog = false },
-            title = { Text("Delete all downloads?") },
-            text = {
-                Text(
-                    "This permanently deletes " + downloadedSongs.size + " downloaded " +
-                        (if (downloadedSongs.size == 1) "file" else "files") +
-                        " from disk. Your library and playlists are not affected."
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    DownloadManager.deleteAllDownloads()
-                    showDeleteAllDialog = false
-                }) {
-                    Text("Delete all", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteAllDialog = false }) { Text("Cancel") }
-            }
+        ConfirmDialog(
+            title = "Delete all downloads?",
+            text = "This permanently deletes " + downloadedSongs.size + " downloaded " +
+                (if (downloadedSongs.size == 1) "file" else "files") +
+                " from disk. Your library and playlists are not affected.",
+            confirmLabel = "Delete all",
+            onConfirm = { DownloadManager.deleteAllDownloads() },
+            onDismiss = { showDeleteAllDialog = false }
         )
     }
 

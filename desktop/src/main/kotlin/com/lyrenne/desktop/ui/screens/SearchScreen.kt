@@ -1,5 +1,7 @@
 package com.lyrenne.desktop.ui.screens
 
+import com.lyrenne.desktop.ui.components.ConfirmDialog
+import com.lyrenne.desktop.ui.components.squareCropFriendly
 import com.lyrenne.desktop.ui.theme.selectedChipColors
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -254,6 +256,16 @@ fun SearchScreen(
                     val searchHistory by remember { DatabaseHelper.getSearchHistory() }
                         .collectAsState(initial = emptyList())
 
+                    var confirmClear by remember { mutableStateOf(false) }
+                    if (confirmClear) {
+                        ConfirmDialog(
+                            title = "Clear search history?",
+                            text = "All ${searchHistory.size} recent searches are removed.",
+                            confirmLabel = "Clear",
+                            onConfirm = { scope.launch(Dispatchers.IO) { DatabaseHelper.clearSearchHistory() } },
+                            onDismiss = { confirmClear = false }
+                        )
+                    }
                     if (searchHistory.isNotEmpty()) {
                         Column {
                             Row(
@@ -266,9 +278,7 @@ fun SearchScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.weight(1f)
                                 )
-                                TextButton(onClick = {
-                                    scope.launch(Dispatchers.IO) { DatabaseHelper.clearSearchHistory() }
-                                }) {
+                                TextButton(onClick = { confirmClear = true }) {
                                     Text("Clear all")
                                 }
                             }
@@ -376,7 +386,7 @@ private fun SearchResultItem(
         },
         leadingContent = {
             AsyncImage(
-                model = item.thumbnail,
+                model = squareCropFriendly(item.thumbnail),
                 contentDescription = null,
                 modifier = Modifier
                     .size(56.dp)

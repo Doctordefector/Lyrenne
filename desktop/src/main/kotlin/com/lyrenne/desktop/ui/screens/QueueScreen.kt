@@ -1,9 +1,11 @@
 package com.lyrenne.desktop.ui.screens
 
+import com.lyrenne.desktop.ui.components.Tip
+import com.lyrenne.desktop.ui.components.ConfirmDialog
 import com.lyrenne.desktop.ui.components.select
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -39,6 +41,17 @@ fun QueueScreen(
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
+    var confirmClear by remember { mutableStateOf(false) }
+    if (confirmClear) {
+        ConfirmDialog(
+            title = "Clear queue?",
+            text = "Everything after the playing song is removed.",
+            confirmLabel = "Clear",
+            onConfirm = { player.clearQueue() },
+            onDismiss = { confirmClear = false }
+        )
+    }
+
     // Drag-to-reorder state
     var draggedIndex by remember { mutableStateOf<Int?>(null) }
     var dragOffsetY by remember { mutableStateOf(0f) }
@@ -70,8 +83,10 @@ fun QueueScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, "Close")
+                    Tip("Close (Esc)") {
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.Default.Close, "Close")
+                        }
                     }
                     Spacer(Modifier.width(8.dp))
                     Text(
@@ -79,14 +94,18 @@ fun QueueScreen(
                         style = MaterialTheme.typography.headlineSmall
                     )
                     Spacer(Modifier.width(8.dp))
-                    Badge {
+                    // A count, not an alert: Badge defaults to the error colour.
+                    Badge(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    ) {
                         Text("${state.queue.size}")
                     }
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     // Shuffle button
-                    IconToggleButton(
+                    Tip("Shuffle") { IconToggleButton(
                         checked = state.shuffleEnabled,
                         onCheckedChange = { player.toggleShuffle() }
                     ) {
@@ -98,10 +117,10 @@ fun QueueScreen(
                             else
                                 MaterialTheme.colorScheme.onSurface
                         )
-                    }
+                    } }
 
                     // Repeat button
-                    IconButton(onClick = { player.toggleRepeat() }) {
+                    Tip("Repeat") { IconButton(onClick = { player.toggleRepeat() }) {
                         Icon(
                             when (state.repeatMode) {
                                 RepeatMode.ONE -> Icons.Default.RepeatOne
@@ -113,14 +132,16 @@ fun QueueScreen(
                             else
                                 MaterialTheme.colorScheme.onSurface
                         )
-                    }
+                    } }
 
                     // Clear queue button
-                    IconButton(
-                        onClick = { player.clearQueue() },
-                        enabled = state.queue.size > 1
-                    ) {
-                        Icon(Icons.Default.ClearAll, "Clear Queue")
+                    Tip("Clear queue") {
+                        IconButton(
+                            onClick = { confirmClear = true },
+                            enabled = state.queue.size > 1
+                        ) {
+                            Icon(Icons.Default.ClearAll, "Clear queue")
+                        }
                     }
                 }
             }
@@ -197,7 +218,7 @@ fun QueueScreen(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        "Long-press and drag to reorder",
+                        "Drag ≡ to reorder",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -380,7 +401,7 @@ private fun QueueItem(
                     modifier = Modifier
                         .size(24.dp)
                         .pointerInput(Unit) {
-                            detectDragGesturesAfterLongPress(
+                            detectDragGestures(
                                 onDragStart = { onDragStart() },
                                 onDrag = { change, offset ->
                                     change.consume()

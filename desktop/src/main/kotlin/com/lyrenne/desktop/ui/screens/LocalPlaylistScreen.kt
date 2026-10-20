@@ -30,6 +30,8 @@ import com.lyrenne.desktop.sync.YouTubeWrites
 import com.lyrenne.desktop.ui.AutoPlaylistType
 import com.lyrenne.desktop.ui.components.CarExportStatus
 import com.lyrenne.desktop.ui.components.PlaylistSearchField
+import com.lyrenne.desktop.ui.components.PlaylistSortBar
+import com.lyrenne.desktop.ui.components.rememberPlaylistSortState
 import com.lyrenne.desktop.ui.components.matchesQuery
 import com.lyrenne.desktop.ui.components.chooseExportFolder
 import kotlinx.coroutines.Dispatchers
@@ -52,6 +54,11 @@ fun LocalPlaylistScreen(
     var showDeleteDialog by remember { mutableStateOf(false) }
     var renameText by remember { mutableStateOf("") }
     var query by remember { mutableStateOf("") }
+    val sortState = rememberPlaylistSortState()
+    // Play All and a click play the songs in the order shown (issue #16)
+    val ordered = remember(songs, artistNamesMap, sortState.sort, sortState.reversed, sortState.seed) {
+        sortState.apply(songs.map { it.toPlaylistSongInfo(artistNamesMap) }, { it.title }, { it.artist }, { it.album })
+    }
 
     if (showRenameDialog) {
         AlertDialog(
@@ -145,8 +152,7 @@ fun LocalPlaylistScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 FilledTonalButton(onClick = {
-                    val infos = songs.map { it.toPlaylistSongInfo(artistNamesMap) }
-                    scope.launch { player.playQueue(infos) }
+                    scope.launch { player.playQueue(ordered) }
                 }) {
                     Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(4.dp))
@@ -191,6 +197,7 @@ fun LocalPlaylistScreen(
             CarExportStatus()
             Spacer(Modifier.height(12.dp))
             PlaylistSearchField(query, { query = it })
+            PlaylistSortBar(sortState)
             Spacer(Modifier.height(8.dp))
         }
 
@@ -219,10 +226,10 @@ fun LocalPlaylistScreen(
         } else {
             val playingId by player.select { it.currentSong?.id }
             val searching = query.isNotBlank()
-            val shown = remember(songs, artistNamesMap, query) {
-                songs.indices
-                    .map { it to songs[it].toPlaylistSongInfo(artistNamesMap) }
-                    .filter { (_, song) -> matchesQuery(query, song.title, song.artist, song.album) }
+            // Moving a song only means something in the playlist's own order
+            val canMove = !searching && sortState.isDefault
+            val shown = remember(ordered, query) {
+                ordered.withIndex().filter { (_, song) -> matchesQuery(query, song.title, song.artist, song.album) }
             }
             if (searching && shown.isEmpty()) NoMatches(query)
             LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -236,17 +243,16 @@ fun LocalPlaylistScreen(
                         isPlaying = playingId == song.id,
                         player = player,
                         onClick = {
-                            val infos = songs.map { it.toPlaylistSongInfo(artistNamesMap) }
-                            scope.launch { player.playQueue(infos, index) }
+                            scope.launch { player.playQueue(ordered, index) }
                         },
-                        onMoveUp = if (index > 0 && !searching) {
+                        onMoveUp = if (index > 0 && canMove) {
                             {
                                 scope.launch(Dispatchers.IO) {
                                     reorderPlaylistSongs(playlistId, songs, index, index - 1)
                                 }
                             }
                         } else null,
-                        onMoveDown = if (index < songs.size - 1 && !searching) {
+                        onMoveDown = if (index < songs.size - 1 && canMove) {
                             {
                                 scope.launch(Dispatchers.IO) {
                                     reorderPlaylistSongs(playlistId, songs, index, index + 1)
@@ -290,7 +296,8 @@ fun AutoPlaylistScreen(
     }
 
     var query by remember { mutableStateOf("") }
-    val songInfos: List<SongInfo> = when (type) {
+    val sortState = rememberPlaylistSortState()
+    val unsorted: List<SongInfo> = when (type) {
         AutoPlaylistType.LIKED -> likedSongs.map { it.toPlaylistSongInfo(artistNamesMap) }
         AutoPlaylistType.DOWNLOADED -> downloadedSongs.map { it.toPlaylistSongInfo(artistNamesMap) }
         AutoPlaylistType.MOST_PLAYED -> mostPlayed.map {
@@ -303,6 +310,9 @@ fun AutoPlaylistScreen(
                 thumbnailUrl = it.thumbnailUrl
             )
         }
+    }
+    val songInfos = remember(unsorted, sortState.sort, sortState.reversed, sortState.seed) {
+        sortState.apply(unsorted, { it.title }, { it.artist }, { it.album })
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -348,6 +358,10 @@ fun AutoPlaylistScreen(
             }
             Spacer(Modifier.height(12.dp))
             PlaylistSearchField(query, { query = it })
+            when (type) {
+                AutoPlaylistType.MOST_PLAYED -> PlaylistSortBar(sortState, "Play count", "Most played" to "Least played")
+                else -> PlaylistSortBar(sortState, type.dateLabel, "Newest first" to "Oldest first")
+            }
             Spacer(Modifier.height(8.dp))
         }
 
@@ -387,6 +401,8 @@ fun AutoPlaylistScreen(
         }
     }
 }
+
+private val AutoPlaylistType.dateLabel get() = if (this == AutoPlaylistType.DOWNLOADED) "Date downloaded" else "Date liked"
 
 @Composable
 private fun NoMatches(query: String) {

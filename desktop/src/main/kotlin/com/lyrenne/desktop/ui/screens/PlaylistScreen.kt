@@ -29,6 +29,8 @@ import com.lyrenne.desktop.download.DownloadManager
 import com.lyrenne.desktop.playback.DesktopPlayer
 import com.lyrenne.desktop.ui.components.CarExportStatus
 import com.lyrenne.desktop.ui.components.PlaylistSearchField
+import com.lyrenne.desktop.ui.components.PlaylistSortBar
+import com.lyrenne.desktop.ui.components.rememberPlaylistSortState
 import com.lyrenne.desktop.ui.components.matchesQuery
 import com.lyrenne.desktop.ui.components.chooseExportFolder
 import kotlinx.coroutines.launch
@@ -53,6 +55,7 @@ fun PlaylistScreen(
     var continuation by rememberSaveable { mutableStateOf<String?>(null) }
     val playingId by player.select { it.currentSong?.id }
     var query by remember { mutableStateOf("") }
+    val sortState = rememberPlaylistSortState()
     // One page fetch at a time: scrolling, searching and Download All each page through the
     // playlist, and two of them reading the same continuation appended that page twice
     val pageLock = remember { Mutex() }
@@ -94,9 +97,10 @@ fun PlaylistScreen(
         }
     }
 
-    // A search has to see the whole playlist, not just the pages scrolled to so far
-    LaunchedEffect(query.isNotBlank(), playlistPage) {
-        if (query.isNotBlank() && playlistPage != null) {
+    // A search or a sort has to see the whole playlist, not just the pages scrolled to so far
+    val needsAllPages = query.isNotBlank() || !sortState.isDefault
+    LaunchedEffect(needsAllPages, playlistPage) {
+        if (needsAllPages && playlistPage != null) {
             isLoadingMore = true
             try {
                 loadAllPages()
@@ -106,8 +110,12 @@ fun PlaylistScreen(
         }
     }
 
-    val shownSongs = remember(allSongs, query) {
-        allSongs.withIndex().filter { (_, song) ->
+    // Play All and a click play the songs in the order shown (issue #16)
+    val orderedSongs = remember(allSongs, sortState.sort, sortState.reversed, sortState.seed) {
+        sortState.apply(allSongs, { it.title }, { song -> song.artists.joinToString { it.name } }, { it.album?.name })
+    }
+    val shownSongs = remember(orderedSongs, query) {
+        orderedSongs.withIndex().filter { (_, song) ->
             matchesQuery(query, song.title, song.album?.name, song.artists.joinToString { it.name })
         }
     }
@@ -212,7 +220,7 @@ fun PlaylistScreen(
                                     Button(
                                         onClick = {
                                             scope.launch {
-                                                val songInfos = allSongs.map { it.toDesktopSongInfo() }
+                                                val songInfos = orderedSongs.map { it.toDesktopSongInfo() }
                                                 player.playQueue(songInfos, 0)
                                             }
                                         }
@@ -287,7 +295,8 @@ fun PlaylistScreen(
                     }
 
                     item {
-                        PlaylistSearchField(query, { query = it }, Modifier.padding(bottom = 8.dp))
+                        PlaylistSearchField(query, { query = it })
+                        Box(Modifier.padding(bottom = 8.dp)) { PlaylistSortBar(sortState) }
                     }
 
                     if (shownSongs.isEmpty() && query.isNotBlank() && !isLoadingMore) {
@@ -307,7 +316,7 @@ fun PlaylistScreen(
                             isPlaying = playingId == song.id,
                             onClick = {
                                 scope.launch {
-                                    val songInfos = allSongs.map { it.toDesktopSongInfo() }
+                                    val songInfos = orderedSongs.map { it.toDesktopSongInfo() }
                                     player.playQueue(songInfos, index)
                                 }
                             },

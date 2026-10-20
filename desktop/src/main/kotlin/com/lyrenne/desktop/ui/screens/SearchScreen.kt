@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.ui.screens
 
+import com.lyrenne.desktop.ui.theme.selectedChipColors
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -155,6 +156,7 @@ fun SearchScreen(
         ) {
             SearchFilter.entries.forEach { filter ->
                 FilterChip(
+                    colors = selectedChipColors(),
                     selected = selectedFilter == filter,
                     onClick = {
                         selectedFilter = filter

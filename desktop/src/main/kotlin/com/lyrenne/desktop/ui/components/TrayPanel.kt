@@ -26,6 +26,7 @@ import coil3.compose.AsyncImage
 import com.lyrenne.desktop.playback.DesktopPlayer
 import com.lyrenne.desktop.playback.RepeatMode
 import com.lyrenne.desktop.settings.PreferencesManager
+import com.lyrenne.desktop.ui.theme.LocalLyrenneExtras
 import com.lyrenne.desktop.ui.theme.LyrenneTokens
 import com.lyrenne.desktop.ui.theme.rememberArtTint
 import kotlinx.coroutines.launch
@@ -62,6 +63,7 @@ fun TrayPanel(
     val song = state.currentSong
     val colors = MaterialTheme.colorScheme
     val artTint = rememberArtTint(song?.thumbnailUrl)
+    val washAlpha = LocalLyrenneExtras.current.artWashAlpha
 
     // The card hugs its content and sits at the bottom; the gap above stays transparent.
     // Clicking that empty strip dismisses, the way clicking outside a menu does.
@@ -90,7 +92,7 @@ fun TrayPanel(
                     val tint = artTint.value
                     if (tint.alpha > 0f) drawRect(
                         Brush.verticalGradient(
-                            0f to tint.copy(alpha = tint.alpha * LyrenneTokens.artWashAlpha * 1.3f),
+                            0f to tint.copy(alpha = tint.alpha * washAlpha),
                             1f to Color.Transparent
                         )
                     )

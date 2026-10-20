@@ -40,6 +40,7 @@ import com.lyrenne.desktop.ui.components.Tip
 import com.lyrenne.desktop.ui.components.select
 import com.lyrenne.desktop.ui.theme.rememberArtTint
 import com.lyrenne.desktop.ui.components.UpdateBadge
+import com.lyrenne.desktop.ui.theme.LocalLyrenneExtras
 import com.lyrenne.desktop.ui.theme.LyrenneTokens
 
 enum class Screen(val title: String, val icon: ImageVector, val selectedIcon: ImageVector) {
@@ -244,7 +245,7 @@ fun App(player: DesktopPlayer) {
                     modifier = Modifier
                         .fillMaxHeight()
                         .width(LyrenneTokens.navigationRailWidth),
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                    containerColor = LocalLyrenneExtras.current.railColor,
                     header = {
                         Spacer(Modifier.height(8.dp))
                         AccountButton(
@@ -329,11 +330,12 @@ fun App(player: DesktopPlayer) {
                 // dock. Read in the draw phase only, so a track change redraws, never recomposes.
                 val artUrl by player.select { it.currentSong?.thumbnailUrl }
                 val artTint = rememberArtTint(artUrl)
+                val washAlpha = LocalLyrenneExtras.current.artWashAlpha
                 Column(modifier = Modifier.fillMaxSize().drawBehind {
                     val tint = artTint.value
                     if (tint.alpha > 0f) drawRect(
                         Brush.verticalGradient(
-                            0f to tint.copy(alpha = tint.alpha * LyrenneTokens.artWashAlpha),
+                            0f to tint.copy(alpha = tint.alpha * washAlpha),
                             1f to Color.Transparent,
                             endY = 340.dp.toPx()
                         ),

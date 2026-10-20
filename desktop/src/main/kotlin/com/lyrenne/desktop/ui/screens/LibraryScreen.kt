@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.ui.screens
 
+import com.lyrenne.desktop.ui.theme.selectedChipColors
 import com.lyrenne.desktop.ui.components.select
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -329,6 +330,7 @@ private fun SortControls(
         Text("Sort:", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         SortMode.entries.forEach { mode ->
             FilterChip(
+                colors = selectedChipColors(),
                 shape = RoundedCornerShape(50),
                 selected = sortMode == mode,
                 onClick = { onSortModeChange(mode) },
@@ -397,12 +399,14 @@ private fun SongsTab(
             verticalAlignment = Alignment.CenterVertically
         ) {
             FilterChip(
+                colors = selectedChipColors(),
                 shape = RoundedCornerShape(50),
                 selected = !showLikedOnly,
                 onClick = { showLikedOnly = false },
                 label = { Text("All (${songs.size})") }
             )
             FilterChip(
+                colors = selectedChipColors(),
                 shape = RoundedCornerShape(50),
                 selected = showLikedOnly,
                 onClick = { showLikedOnly = true },

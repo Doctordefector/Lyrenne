@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.ui.screens
 
+import com.lyrenne.desktop.ui.theme.selectedChipColors
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -1500,6 +1501,7 @@ private fun ProxyConfigCard(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 com.lyrenne.desktop.settings.ProxyType.entries.forEach { proxyType ->
                     FilterChip(
+                        colors = selectedChipColors(),
                         selected = editType == proxyType,
                         onClick = { editType = proxyType },
                         label = { Text(proxyType.name) }

@@ -34,6 +34,7 @@ import com.lyrenne.desktop.playback.RepeatMode
 import com.lyrenne.desktop.playback.SleepTimerState
 import com.lyrenne.desktop.settings.PreferencesManager
 import com.lyrenne.desktop.sync.YouTubeWrites
+import com.lyrenne.desktop.ui.theme.LocalLyrenneExtras
 import com.lyrenne.desktop.ui.theme.LyrenneTokens
 import kotlinx.coroutines.launch
 
@@ -94,6 +95,7 @@ fun MiniPlayer(
     // with the cover's colour. The wash is read in the draw phase, so a track change only redraws.
     val dockShape = RoundedCornerShape(LyrenneTokens.dockRadius)
     val dockColor = MaterialTheme.colorScheme.surfaceContainer
+    val washAlpha = LocalLyrenneExtras.current.artWashAlpha
     Box(
         modifier = modifier
             .padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 10.dp)
@@ -102,7 +104,7 @@ fun MiniPlayer(
             .drawBehind {
                 drawRect(dockColor)
                 val tint = artTint.value
-                if (tint.alpha > 0f) drawRect(tint.copy(alpha = tint.alpha * LyrenneTokens.artWashAlpha))
+                if (tint.alpha > 0f) drawRect(tint.copy(alpha = tint.alpha * washAlpha))
             }
             .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, dockShape)
     ) {

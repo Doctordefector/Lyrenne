@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.ui.screens
 
+import com.lyrenne.desktop.ui.theme.selectedChipColors
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -112,6 +113,7 @@ fun StatsScreen(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             StatPeriod.entries.forEach { period ->
                 FilterChip(
+                    colors = selectedChipColors(),
                     selected = selectedPeriod == period,
                     onClick = { selectedPeriod = period },
                     label = { Text(period.label) }

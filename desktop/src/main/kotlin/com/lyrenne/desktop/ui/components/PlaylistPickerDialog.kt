@@ -65,20 +65,22 @@ fun PlaylistPickerDialog(
                             modifier = Modifier.weight(1f).suppressMediaKeys()
                         )
                         Spacer(Modifier.width(8.dp))
-                        IconButton(
-                            onClick = {
-                                if (newName.isNotBlank()) {
-                                    scope.launch {
-                                        // Creates the playlist on YouTube first when signed in,
-                                        // so the song added next has somewhere to mirror to.
-                                        val id = YouTubeWrites.createPlaylist(newName.trim())
-                                        addToPlaylist(id)
+                        Tip("Create") {
+                            IconButton(
+                                onClick = {
+                                    if (newName.isNotBlank()) {
+                                        scope.launch {
+                                            // Creates the playlist on YouTube first when signed in,
+                                            // so the song added next has somewhere to mirror to.
+                                            val id = YouTubeWrites.createPlaylist(newName.trim())
+                                            addToPlaylist(id)
+                                        }
                                     }
-                                }
-                            },
-                            enabled = newName.isNotBlank()
-                        ) {
-                            Icon(Icons.Default.Check, "Create")
+                                },
+                                enabled = newName.isNotBlank()
+                            ) {
+                                Icon(Icons.Default.Check, "Create")
+                            }
                         }
                     }
                 } else {

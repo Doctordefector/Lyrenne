@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.ui.screens
 
+import com.lyrenne.desktop.ui.components.Tip
 import com.metrolist.innertube.pages.SearchSummary
 import com.lyrenne.desktop.ui.components.select
 import com.lyrenne.desktop.ui.components.rememberMenuAnchor
@@ -176,14 +177,16 @@ fun SearchScreen(
             leadingIcon = { Icon(Icons.Default.Search, "Search") },
             trailingIcon = {
                 if (query.isNotEmpty()) {
-                    IconButton(onClick = {
-                        query = ""
-                        searchResults = emptyList()
-                        summaries = emptyList()
-                        searchError = null
-                        suggestions = emptyList()
-                    }) {
-                        Icon(Icons.Default.Clear, "Clear")
+                    Tip("Clear") {
+                        IconButton(onClick = {
+                            query = ""
+                            searchResults = emptyList()
+                            summaries = emptyList()
+                            searchError = null
+                            suggestions = emptyList()
+                        }) {
+                            Icon(Icons.Default.Clear, "Clear")
+                        }
                     }
                 }
             },
@@ -331,12 +334,14 @@ fun SearchScreen(
                                         headlineContent = { Text(historyQuery) },
                                         leadingContent = { Icon(Icons.Default.History, null) },
                                         trailingContent = {
-                                            IconButton(onClick = {
-                                                scope.launch(Dispatchers.IO) {
-                                                    DatabaseHelper.deleteSearchHistory(historyQuery)
+                                            Tip("Remove") {
+                                                IconButton(onClick = {
+                                                    scope.launch(Dispatchers.IO) {
+                                                        DatabaseHelper.deleteSearchHistory(historyQuery)
+                                                    }
+                                                }) {
+                                                    Icon(Icons.Default.Close, "Remove", modifier = Modifier.size(18.dp))
                                                 }
-                                            }) {
-                                                Icon(Icons.Default.Close, "Remove", modifier = Modifier.size(18.dp))
                                             }
                                         },
                                         modifier = Modifier.clickable {

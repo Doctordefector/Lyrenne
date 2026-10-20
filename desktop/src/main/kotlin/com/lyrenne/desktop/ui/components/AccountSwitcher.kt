@@ -88,8 +88,10 @@ fun AccountSwitcher(onAddAccount: () -> Unit) {
                                 Text("Switch")
                             }
                         }
-                        IconButton(onClick = { removing = account }, enabled = switching == null) {
-                            Icon(Icons.Default.Close, "Remove this account")
+                        Tip("Remove this account") {
+                            IconButton(onClick = { removing = account }, enabled = switching == null) {
+                                Icon(Icons.Default.Close, "Remove this account")
+                            }
                         }
                     }
                 },

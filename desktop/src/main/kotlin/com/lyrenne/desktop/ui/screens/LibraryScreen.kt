@@ -189,11 +189,13 @@ fun LibraryScreen(
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.bodySmall
                     )
-                    IconButton(onClick = {
-                        LibrarySync.clearError()
-                        YouTubeWrites.clearError()
-                    }) {
-                        Icon(Icons.Default.Close, "Dismiss")
+                    Tip("Dismiss") {
+                        IconButton(onClick = {
+                            LibrarySync.clearError()
+                            YouTubeWrites.clearError()
+                        }) {
+                            Icon(Icons.Default.Close, "Dismiss")
+                        }
                     }
                 }
             }
@@ -854,8 +856,10 @@ private fun PlaylistsTab(
                 trailingContent = {
                     if (isLocal) {
                         Box {
-                            IconButton(onClick = { showMenu = true }) {
-                                Icon(Icons.Default.MoreVert, "More options")
+                            Tip("More options") {
+                                IconButton(onClick = { showMenu = true }) {
+                                    Icon(Icons.Default.MoreVert, "More options")
+                                }
                             }
                             DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                                 DropdownMenuItem(
@@ -1045,13 +1049,17 @@ private fun DownloadsTab(
                         }
 
                         if (download.status == DownloadStatus.ERROR) {
-                            IconButton(onClick = { DownloadManager.retryDownload(download.songId) }) {
-                                Icon(Icons.Default.Refresh, "Retry")
+                            Tip("Retry") {
+                                IconButton(onClick = { DownloadManager.retryDownload(download.songId) }) {
+                                    Icon(Icons.Default.Refresh, "Retry")
+                                }
                             }
                         }
 
-                        IconButton(onClick = { DownloadManager.cancelDownload(download.songId) }) {
-                            Icon(Icons.Default.Close, "Cancel")
+                        Tip("Cancel") {
+                            IconButton(onClick = { DownloadManager.cancelDownload(download.songId) }) {
+                                Icon(Icons.Default.Close, "Cancel")
+                            }
                         }
                     }
                 }

@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.ui.screens
 
+import com.lyrenne.desktop.ui.components.Tip
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -56,8 +57,10 @@ fun ListenTogetherScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (onBack != null) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                Tip("Back") {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                    }
                 }
             }
             Text(
@@ -405,8 +408,10 @@ private fun RoomView(
                         trailingContent = {
                             if (role == RoomRole.HOST && !user.isHost) {
                                 Box {
-                                    IconButton(onClick = { showUserMenu = true }) {
-                                        Icon(Icons.Default.MoreVert, "Actions", modifier = Modifier.size(20.dp))
+                                    Tip("Actions") {
+                                        IconButton(onClick = { showUserMenu = true }) {
+                                            Icon(Icons.Default.MoreVert, "Actions", modifier = Modifier.size(20.dp))
+                                        }
                                     }
                                     DropdownMenu(
                                         expanded = showUserMenu,

@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.ui.screens
 
+import com.lyrenne.desktop.ui.components.Tip
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -81,11 +82,13 @@ fun RecognitionScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (onBack != null) {
-                IconButton(onClick = {
-                    stopRecognition()
-                    onBack()
-                }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                Tip("Back") {
+                    IconButton(onClick = {
+                        stopRecognition()
+                        onBack()
+                    }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                    }
                 }
             }
             Text(
@@ -234,19 +237,21 @@ private fun ReadyState(
                         },
                         trailingContent = {
                             if (rec.videoId != null && player != null) {
-                                IconButton(onClick = {
-                                    scope.launch {
-                                        player.playSong(
-                                            SongInfo(
-                                                id = rec.videoId,
-                                                title = rec.title,
-                                                artist = rec.artist,
-                                                thumbnailUrl = rec.thumbnailUrl
+                                Tip("Play") {
+                                    IconButton(onClick = {
+                                        scope.launch {
+                                            player.playSong(
+                                                SongInfo(
+                                                    id = rec.videoId,
+                                                    title = rec.title,
+                                                    artist = rec.artist,
+                                                    thumbnailUrl = rec.thumbnailUrl
+                                                )
                                             )
-                                        )
+                                        }
+                                    }) {
+                                        Icon(Icons.Default.PlayArrow, "Play")
                                     }
-                                }) {
-                                    Icon(Icons.Default.PlayArrow, "Play")
                                 }
                             }
                         }

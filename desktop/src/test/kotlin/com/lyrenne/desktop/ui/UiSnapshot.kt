@@ -33,7 +33,7 @@ import java.io.File
  * Output: build/snapshots/<name>.png. Steps come from build/snapshots/steps.txt, one per line:
  * `size W H`, `theme dark|light`, `wait MS`, `click X Y`, `rclick X Y`, `scroll X Y DY`, `shot NAME`.
  */
-@OptIn(ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalComposeUiApi::class, androidx.compose.ui.InternalComposeUiApi::class)
 class UiSnapshot {
     @Test
     fun render() {
@@ -91,6 +91,33 @@ class UiSnapshot {
                         scrollDelta = Offset(0f, p[3].toFloat())
                     )
                     pump(400)
+                }
+                "type", "key" -> {
+                    // AWT key events, as a real window would deliver them. `key` takes a VK name.
+                    val src = java.awt.Canvas()
+                    fun send(id: Int, code: Int, ch: Char) {
+                        val awt = java.awt.event.KeyEvent(src, id, System.currentTimeMillis(), 0, code, ch)
+                        scene!!.sendKeyEvent(
+                            androidx.compose.ui.input.key.KeyEvent(
+                                key = androidx.compose.ui.input.key.Key(code),
+                                type = when (id) {
+                                    java.awt.event.KeyEvent.KEY_PRESSED -> androidx.compose.ui.input.key.KeyEventType.KeyDown
+                                    java.awt.event.KeyEvent.KEY_RELEASED -> androidx.compose.ui.input.key.KeyEventType.KeyUp
+                                    else -> androidx.compose.ui.input.key.KeyEventType.Unknown
+                                },
+                                codePoint = if (ch == java.awt.event.KeyEvent.CHAR_UNDEFINED) 0 else ch.code,
+                                nativeEvent = awt
+                            )
+                        )
+                    }
+                    if (p[0] == "key") {
+                        val code = java.awt.event.KeyEvent::class.java.getField("VK_" + p[1].uppercase()).getInt(null)
+                        send(java.awt.event.KeyEvent.KEY_PRESSED, code, java.awt.event.KeyEvent.CHAR_UNDEFINED)
+                        send(java.awt.event.KeyEvent.KEY_RELEASED, code, java.awt.event.KeyEvent.CHAR_UNDEFINED)
+                    } else for (ch in line.substringAfter(' ')) {
+                        send(java.awt.event.KeyEvent.KEY_TYPED, java.awt.event.KeyEvent.VK_UNDEFINED, ch)
+                    }
+                    pump(300)
                 }
                 "shot" -> {
                     val data = frame().encodeToData(EncodedImageFormat.PNG) ?: error("encode failed")

@@ -1,5 +1,7 @@
 package com.lyrenne.desktop.ui.screens
 
+import com.lyrenne.desktop.ui.components.ScreenTitle
+import com.lyrenne.desktop.ui.components.MediaTile
 import androidx.compose.foundation.shape.CircleShape
 import com.lyrenne.desktop.ui.components.squareCropFriendly
 import androidx.compose.foundation.background
@@ -201,12 +203,7 @@ fun HomeScreen(
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
-                    item {
-                        Text(
-                            "Home",
-                            style = MaterialTheme.typography.headlineSmall
-                        )
-                    }
+                    item { ScreenTitle("Home") }
 
                     if (picks.isNotEmpty()) {
                         item {
@@ -270,8 +267,9 @@ private fun HomeSection(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(items) { item ->
-                HomeSectionItem(
+                MediaTile(
                     item = item,
+                    player = player,
                     onClick = {
                         when (item) {
                             is SongItem -> {
@@ -295,85 +293,9 @@ private fun HomeSection(
     }
 }
 
-@Composable
-private fun HomeSectionItem(
-    item: YTItem,
-    onClick: () -> Unit
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isHovered by interactionSource.collectIsHoveredAsState()
-    val isFocused by interactionSource.collectIsFocusedAsState()
-    val tileShape = RoundedCornerShape(LyrenneTokens.panelRadius)
-
-    Column(
-        modifier = Modifier
-            .width(172.dp)
-            .clip(tileShape)
-            .background(
-                if (isHovered || isFocused) MaterialTheme.colorScheme.surfaceContainerLow
-                else Color.Transparent
-            )
-            .border(
-                width = if (isFocused) 1.dp else 0.dp,
-                color = if (isFocused) MaterialTheme.colorScheme.primary else Color.Transparent,
-                shape = tileShape
-            )
-            .clickable(
-                interactionSource = interactionSource,
-                indication = LocalIndication.current,
-                onClick = onClick
-            )
-            .padding(6.dp)
-    ) {
-        AsyncImage(
-            model = squareCropFriendly(item.thumbnail),
-            // The surrounding clickable tile merges its title text into one accessible label.
-            contentDescription = null,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(160.dp)
-                .clip(if (item is ArtistItem) CircleShape else RoundedCornerShape(LyrenneTokens.artworkRadius)),
-            contentScale = ContentScale.Crop
-        )
-
-        Column(modifier = Modifier.padding(horizontal = 2.dp, vertical = 8.dp)) {
-            Text(
-                text = item.title,
-                style = MaterialTheme.typography.titleSmall,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            val subtitle = when (item) {
-                is SongItem -> item.artists.joinToString { it.name }
-                is AlbumItem -> item.artists?.joinToString { it.name } ?: ""
-                is ArtistItem -> "Artist"
-                is PlaylistItem -> item.author?.name ?: ""
-                is PodcastItem -> item.author?.name ?: "Podcast"
-                else -> ""
-            }
-
-            if (subtitle.isNotEmpty()) {
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-    }
-}
-
 fun YTItem.toSongInfo(): SongInfo? {
     return when (this) {
-        is SongItem -> SongInfo(
-            id = id,
-            title = title,
-            artist = artists.joinToString { it.name },
-            thumbnailUrl = thumbnail
-        )
+        is SongItem -> toDesktopSongInfo()
         else -> null
     }
 }

@@ -1,5 +1,15 @@
 package com.lyrenne.desktop.ui.screens
 
+import com.metrolist.innertube.pages.SearchSummary
+import com.lyrenne.desktop.ui.components.select
+import com.lyrenne.desktop.ui.components.rememberMenuAnchor
+import com.lyrenne.desktop.ui.components.contextMenu
+import com.lyrenne.desktop.ui.components.SongMenu
+import com.lyrenne.desktop.ui.components.SecondaryAction
+import com.lyrenne.desktop.ui.components.PrimaryAction
+import com.lyrenne.desktop.ui.components.ScrollableRow
+import com.lyrenne.desktop.ui.components.MediaTile
+import com.lyrenne.desktop.ui.components.TrackRow
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import com.lyrenne.desktop.ui.components.ConfirmDialog
@@ -65,6 +75,10 @@ fun SearchScreen(
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
     var searchResults by remember { mutableStateOf<List<YTItem>>(emptyList()) }
+    // "All" shows YouTube's sectioned summary (top result, songs, artists, albums...); the other
+    // filters show one flat list. All used to quietly search songs only.
+    var summaries by remember { mutableStateOf<List<SearchSummary>>(emptyList()) }
+    var searchError by remember { mutableStateOf<String?>(null) }
     var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     var selectedFilter by remember { mutableStateOf(SearchFilter.All) }
@@ -82,21 +96,45 @@ fun SearchScreen(
                     try { DatabaseHelper.addSearchHistory(searchQuery.trim()) } catch (_: Exception) {}
                 }
             }
+            searchError = null
+            val hideExplicit = PreferencesManager.preferences.value.hideExplicit
             try {
-                val filter = if (selectedFilter == SearchFilter.All) {
-                    YouTube.SearchFilter.FILTER_SONG
+                if (selectedFilter == SearchFilter.All) {
+                    YouTube.searchSummary(searchQuery).onSuccess { page ->
+                        summaries = page.filterExplicit(hideExplicit).summaries
+                        searchResults = emptyList()
+                    }.onFailure {
+                        summaries = emptyList()
+                        searchError = friendlyErrorMessage(it, "Search failed")
+                    }
                 } else {
-                    YouTube.SearchFilter(selectedFilter.value)
-                }
-                YouTube.search(searchQuery, filter).onSuccess { result ->
-                    val hideExplicit = PreferencesManager.preferences.value.hideExplicit
-                    searchResults = if (hideExplicit) result.items.filterNot { it.explicit } else result.items
-                }.onFailure {
-                    searchResults = emptyList()
+                    YouTube.search(searchQuery, YouTube.SearchFilter(selectedFilter.value)).onSuccess { result ->
+                        searchResults = if (hideExplicit) result.items.filterNot { it.explicit } else result.items
+                        summaries = emptyList()
+                    }.onFailure {
+                        // A connection failure is not "no results": say what happened, offer Retry.
+                        searchResults = emptyList()
+                        searchError = friendlyErrorMessage(it, "Search failed")
+                    }
                 }
             } finally {
                 isLoading = false
             }
+        }
+    }
+
+    fun openItem(item: YTItem) {
+        when (item) {
+            is SongItem -> scope.launch { player.playSong(item.toDesktopSongInfo()) }
+            is AlbumItem -> onAlbumClick(item.browseId)
+            is ArtistItem -> onArtistClick(item.id)
+            is PlaylistItem -> onPlaylistClick(item.id)
+            is PodcastItem -> onPodcastClick(item.id)
+            is EpisodeItem -> scope.launch {
+                val songInfo = item.asSongItem()?.toDesktopSongInfo()
+                if (songInfo != null) player.playSong(songInfo)
+            }
+            else -> {}
         }
     }
 
@@ -141,6 +179,8 @@ fun SearchScreen(
                     IconButton(onClick = {
                         query = ""
                         searchResults = emptyList()
+                        summaries = emptyList()
+                        searchError = null
                         suggestions = emptyList()
                     }) {
                         Icon(Icons.Default.Clear, "Clear")
@@ -166,7 +206,7 @@ fun SearchScreen(
                     selected = selectedFilter == filter,
                     onClick = {
                         selectedFilter = filter
-                        if (searchResults.isNotEmpty()) {
+                        if (searchResults.isNotEmpty() || summaries.isNotEmpty() || searchError != null) {
                             performSearch()
                         }
                     },
@@ -199,35 +239,34 @@ fun SearchScreen(
                         modifier = Modifier.align(Alignment.Center)
                     )
                 }
-                searchResults.isNotEmpty() -> {
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                searchError != null -> {
+                    Column(
+                        modifier = Modifier.align(Alignment.Center).padding(horizontal = 32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
+                        Icon(
+                            Icons.Default.CloudOff, null,
+                            modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text(searchError!!, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+                        Spacer(Modifier.height(12.dp))
+                        SecondaryAction("Retry", Icons.Default.Refresh, onClick = { performSearch() })
+                    }
+                }
+                summaries.isNotEmpty() -> {
+                    SearchSummaryView(
+                        summaries = summaries,
+                        player = player,
+                        open = ::openItem,
+                        onSeeAll = { filter -> selectedFilter = filter; performSearch() }
+                    )
+                }
+                searchResults.isNotEmpty() -> {
+                    LazyColumn {
                         items(searchResults) { item ->
-                            SearchResultItem(
-                                item = item,
-                                player = player,
-                                onClick = {
-                                    when (item) {
-                                        is SongItem -> {
-                                            scope.launch {
-                                                player.playSong(item.toSongInfo() ?: return@launch)
-                                            }
-                                        }
-                                        is AlbumItem -> onAlbumClick(item.browseId)
-                                        is ArtistItem -> onArtistClick(item.id)
-                                        is PlaylistItem -> onPlaylistClick(item.id)
-                                        is PodcastItem -> onPodcastClick(item.id)
-                                        is EpisodeItem -> {
-                                            scope.launch {
-                                                val songInfo = item.asSongItem()?.toDesktopSongInfo()
-                                                if (songInfo != null) player.playSong(songInfo)
-                                            }
-                                        }
-                                        else -> {}
-                                    }
-                                }
-                            )
+                            SearchResultItem(item = item, player = player, onClick = { openItem(item) })
                         }
                     }
                 }
@@ -339,10 +378,24 @@ private fun SearchResultItem(
     player: DesktopPlayer,
     onClick: () -> Unit
 ) {
-    var showMenu by remember { mutableStateOf(false) }
-    var showPlaylistPicker by remember { mutableStateOf(false) }
-    val songInfo = remember(item) { item.toSongInfo() }
-    val scope = rememberCoroutineScope()
+    val songInfo = remember(item) {
+        when (item) {
+            is SongItem -> item.toDesktopSongInfo()
+            is EpisodeItem -> item.asSongItem()?.toDesktopSongInfo()
+            else -> null
+        }
+    }
+    if (songInfo != null) {
+        val playingId by player.select { it.currentSong?.id }
+        TrackRow(
+            song = songInfo,
+            player = player,
+            isPlaying = playingId == songInfo.id,
+            subtitle = itemSubtitle(item),
+            onClick = onClick
+        )
+        return
+    }
 
     ListItem(
         headlineContent = {
@@ -353,37 +406,8 @@ private fun SearchResultItem(
             )
         },
         supportingContent = {
-            // Every branch used to interpolate a nullable straight into the string with `?: ""`,
-            // which left a dangling "Artist • " whenever the trailing half was missing. Music
-            // videos carry no album, so that was every single video result.
-            fun parts(vararg segments: String?) =
-                segments.filterNot { it.isNullOrBlank() }.joinToString(" • ")
-
-            val subtitle = when (item) {
-                // Search returns music videos as SongItem, because SongItem is the only
-                // track-shaped result type there is. Without saying so, a video was
-                // indistinguishable from the audio track of the same song, which made the
-                // Videos filter look like it did nothing at all.
-                is SongItem -> parts(
-                    if (item.isVideoSong) "Video" else null,
-                    item.artists.joinToString { it.name },
-                    item.album?.name
-                )
-                is AlbumItem -> parts(
-                    item.artists?.joinToString { it.name } ?: "Unknown",
-                    item.year?.toString()
-                )
-                is ArtistItem -> "Artist"
-                is PlaylistItem -> item.author?.name ?: "Playlist"
-                is PodcastItem -> parts(item.author?.name ?: "Podcast", item.episodeCountText)
-                is EpisodeItem -> parts(
-                    item.author?.name ?: item.podcast?.name ?: "Episode",
-                    item.publishDateText
-                )
-                else -> ""
-            }
             Text(
-                subtitle,
+                itemSubtitle(item),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -393,7 +417,7 @@ private fun SearchResultItem(
                 model = squareCropFriendly(item.thumbnail),
                 contentDescription = null,
                 modifier = Modifier
-                    .size(56.dp)
+                    .size(48.dp)
                     .clip(
                         if (item is ArtistItem) RoundedCornerShape(50)
                         else RoundedCornerShape(4.dp)
@@ -401,78 +425,124 @@ private fun SearchResultItem(
                 contentScale = ContentScale.Crop
             )
         },
-        trailingContent = {
-            if (songInfo != null) {
-                Box {
-                    IconButton(onClick = { showMenu = true }) {
-                        Icon(Icons.Default.MoreVert, "More options")
-                    }
-                    DropdownMenu(
-                        expanded = showMenu,
-                        onDismissRequest = { showMenu = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Play Next") },
-                            onClick = {
-                                player.addToQueueNext(songInfo)
-                                showMenu = false
-                            },
-                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistPlay, null) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Add to Queue") },
-                            onClick = {
-                                player.addToQueue(songInfo)
-                                showMenu = false
-                            },
-                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, null) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Start Radio") },
-                            onClick = {
-                                showMenu = false
-                                scope.launch { player.startRadio(songInfo) }
-                            },
-                            leadingIcon = { Icon(Icons.Default.Radio, null) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Add to Playlist") },
-                            onClick = {
-                                showMenu = false
-                                showPlaylistPicker = true
-                            },
-                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null) }
-                        )
-                        HorizontalDivider()
-                        DropdownMenuItem(
-                            text = { Text("Download") },
-                            onClick = {
-                                DownloadManager.queueDownload(songInfo)
-                                showMenu = false
-                            },
-                            leadingIcon = { Icon(Icons.Default.Download, null) }
-                        )
-                    }
-                }
-                if (showPlaylistPicker) {
-                    val playlists by remember { DatabaseHelper.getAllPlaylists() }.collectAsState(initial = emptyList())
-                    PlaylistPickerDialog(
-                        song = songInfo,
-                        playlists = playlists,
-                        onDismiss = { showPlaylistPicker = false }
-                    )
-                }
-            } else {
-                val icon = when (item) {
-                    is AlbumItem -> Icons.Default.Album
-                    is ArtistItem -> Icons.Default.Person
-                    is PlaylistItem -> Icons.AutoMirrored.Filled.QueueMusic
-                    is PodcastItem -> Icons.Default.Mic
-                    else -> Icons.Default.MusicNote
-                }
-                Icon(icon, contentDescription = null)
-            }
-        },
-        modifier = Modifier.clickable(onClick = onClick)
+        colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
+        modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick)
     )
+}
+
+// Every branch used to interpolate a nullable straight into the string with `?: ""`, which left a
+// dangling "Artist • " whenever the trailing half was missing. Music videos carry no album, so
+// that was every single video result.
+private fun parts(vararg segments: String?) = segments.filterNot { it.isNullOrBlank() }.joinToString(" • ")
+
+private fun itemSubtitle(item: YTItem): String = when (item) {
+    // Search returns music videos as SongItem, because SongItem is the only track-shaped result
+    // type there is. Without saying so, a video was indistinguishable from the audio track of the
+    // same song, which made the Videos filter look like it did nothing at all.
+    is SongItem -> parts(if (item.isVideoSong) "Video" else null, item.artists.joinToString { it.name })
+    is AlbumItem -> parts("Album", item.artists?.joinToString { it.name }, item.year?.toString())
+    is ArtistItem -> "Artist"
+    is PlaylistItem -> parts("Playlist", item.author?.name)
+    is PodcastItem -> parts(item.author?.name ?: "Podcast", item.episodeCountText)
+    is EpisodeItem -> parts(item.author?.name ?: item.podcast?.name ?: "Episode", item.publishDateText)
+    else -> ""
+}
+
+/** Which flat filter a summary section's "See all" opens. Matched on YouTube's English titles. */
+// ponytail: English titles only; under another `hl` the sections simply have no See all.
+private fun seeAllFilter(title: String): SearchFilter? = when (title.lowercase()) {
+    "songs" -> SearchFilter.Songs
+    "videos" -> SearchFilter.Videos
+    "albums" -> SearchFilter.Albums
+    "artists" -> SearchFilter.Artists
+    "community playlists", "featured playlists", "playlists" -> SearchFilter.Playlists
+    else -> null
+}
+
+@Composable
+private fun SearchSummaryView(
+    summaries: List<SearchSummary>,
+    player: DesktopPlayer,
+    open: (YTItem) -> Unit,
+    onSeeAll: (SearchFilter) -> Unit
+) {
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        summaries.forEachIndexed { index, summary ->
+            item(key = "h$index") {
+                Row(
+                    Modifier.fillMaxWidth().padding(top = if (index == 0) 0.dp else 16.dp, bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(summary.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                    seeAllFilter(summary.title)?.let { filter ->
+                        TextButton(onClick = { onSeeAll(filter) }) { Text("See all") }
+                    }
+                }
+            }
+            val tracks = summary.items.all { it is SongItem || it is EpisodeItem }
+            when {
+                // YouTube leads with one top result card; any songs under it list as rows.
+                index == 0 -> {
+                    item(key = "top") { TopResultCard(summary.items.first(), player, open) }
+                    items(summary.items.drop(1)) { item ->
+                        SearchResultItem(item, player, onClick = { open(item) })
+                    }
+                }
+                tracks -> items(summary.items.take(5)) { item ->
+                    SearchResultItem(item, player, onClick = { open(item) })
+                }
+                else -> item(key = "shelf$index") {
+                    ScrollableRow {
+                        items(summary.items) { item -> MediaTile(item, player, onClick = { open(item) }) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TopResultCard(item: YTItem, player: DesktopPlayer, open: (YTItem) -> Unit) {
+    val anchor = rememberMenuAnchor()
+    val song = remember(item) { (item as? SongItem)?.toDesktopSongInfo() }
+    Box(if (song != null) Modifier.contextMenu(anchor) else Modifier) {
+        Surface(
+            onClick = { open(item) },
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth()
+        ) {
+            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                AsyncImage(
+                    model = squareCropFriendly(item.thumbnail),
+                    contentDescription = null,
+                    modifier = Modifier.size(112.dp)
+                        .clip(if (item is ArtistItem) RoundedCornerShape(50) else RoundedCornerShape(8.dp)),
+                    contentScale = ContentScale.Crop
+                )
+                Spacer(Modifier.width(20.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        item.title,
+                        style = MaterialTheme.typography.headlineSmall,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        itemSubtitle(item),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (song != null) {
+                        Spacer(Modifier.height(12.dp))
+                        PrimaryAction("Play", Icons.Default.PlayArrow, onClick = { open(item) })
+                    }
+                }
+            }
+        }
+        if (song != null) SongMenu(anchor, song, player)
+    }
 }

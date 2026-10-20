@@ -1,6 +1,7 @@
 package com.lyrenne.desktop.ui.screens
 
 import com.lyrenne.desktop.ui.components.Tip
+import com.lyrenne.desktop.ui.components.TrackRow
 import com.lyrenne.desktop.ui.components.ConfirmDialog
 import com.lyrenne.desktop.ui.components.select
 import androidx.compose.foundation.background
@@ -52,6 +53,8 @@ fun QueueScreen(
             onDismiss = { confirmClear = false }
         )
     }
+
+    val rowHeightPx = with(androidx.compose.ui.platform.LocalDensity.current) { 56.dp.toPx() }
 
     // Drag-to-reorder state
     var draggedIndex by remember { mutableStateOf<Int?>(null) }
@@ -231,8 +234,7 @@ fun QueueScreen(
             LazyColumn(
                 state = listState,
                 modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
             ) {
                 itemsIndexed(
                     items = upNextItems,
@@ -247,7 +249,7 @@ fun QueueScreen(
                         }
                         QueueItem(
                             song = song,
-                            index = queueIndex,
+                            player = player,
                             isDragged = isDragged,
                             isDropTarget = isTarget,
                             dragOffsetY = if (isDragged) dragOffsetY else 0f,
@@ -265,9 +267,8 @@ fun QueueScreen(
                             },
                             onDrag = { deltaY ->
                                 dragOffsetY += deltaY
-                                // Calculate target position based on drag offset
-                                val itemHeight = 72 // approximate item height in dp
-                                val draggedItems = (dragOffsetY / itemHeight).toInt()
+                                // Rows are TrackRows, 56 dp each; the drag offset is in pixels
+                                val draggedItems = (dragOffsetY / rowHeightPx).toInt()
                                 val newTarget = (displayIndex + draggedItems).coerceIn(0, upNextItems.size - 1)
                                 targetIndex = if (newTarget != displayIndex) newTarget else null
                             },
@@ -349,7 +350,7 @@ private fun AutoplayHeader() {
 @Composable
 private fun QueueItem(
     song: SongInfo,
-    index: Int,
+    player: DesktopPlayer,
     isDragged: Boolean,
     isDropTarget: Boolean,
     dragOffsetY: Float,
@@ -359,113 +360,58 @@ private fun QueueItem(
     onDrag: (Float) -> Unit,
     onDragEnd: () -> Unit
 ) {
-    var showMenu by remember { mutableStateOf(false) }
-
-    val elevation = if (isDragged) 8.dp else 0.dp
     val bgColor = when {
         isDragged -> MaterialTheme.colorScheme.surfaceContainerHigh
-        isDropTarget -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
-        else -> MaterialTheme.colorScheme.surface
+        isDropTarget -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+        else -> androidx.compose.ui.graphics.Color.Transparent
     }
-
-    ListItem(
-        headlineContent = {
-            Text(
-                song.title,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+    TrackRow(
+        song = song,
+        player = player,
+        onClick = onPlay,
+        subtitle = if (song.suggested) "Suggested · ${song.artist}" else song.artist,
+        leading = {
+            // A dedicated handle: drag starts at once, no long press.
+            Icon(
+                Icons.Default.DragHandle,
+                contentDescription = "Drag to reorder",
+                modifier = Modifier
+                    .size(24.dp)
+                    .pointerInput(Unit) {
+                        detectDragGestures(
+                            onDragStart = { onDragStart() },
+                            onDrag = { change, offset ->
+                                change.consume()
+                                onDrag(offset.y)
+                            },
+                            onDragEnd = { onDragEnd() },
+                            onDragCancel = { onDragEnd() }
+                        )
+                    },
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
-        },
-        supportingContent = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (song.suggested) {
-                    Icon(
-                        Icons.Default.AutoAwesome,
-                        contentDescription = "Suggested by Smart Shuffle",
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(Modifier.width(4.dp))
-                }
-                Text(
-                    if (song.suggested) "Suggested · ${song.artist}" else song.artist,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        },
-        leadingContent = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // Drag handle
-                Icon(
-                    Icons.Default.DragHandle,
-                    contentDescription = "Drag to reorder",
-                    modifier = Modifier
-                        .size(24.dp)
-                        .pointerInput(Unit) {
-                            detectDragGestures(
-                                onDragStart = { onDragStart() },
-                                onDrag = { change, offset ->
-                                    change.consume()
-                                    onDrag(offset.y)
-                                },
-                                onDragEnd = { onDragEnd() },
-                                onDragCancel = { onDragEnd() }
-                            )
-                        },
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.width(8.dp))
-                AsyncImage(
-                    model = song.thumbnailUrl,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(4.dp)),
-                    contentScale = ContentScale.Crop
-                )
-            }
-        },
-        trailingContent = {
-            Box {
-                IconButton(onClick = { showMenu = true }) {
-                    Icon(Icons.Default.MoreVert, "More options")
-                }
-                DropdownMenu(
-                    expanded = showMenu,
-                    onDismissRequest = { showMenu = false }
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Play Now") },
-                        onClick = {
-                            onPlay()
-                            showMenu = false
-                        },
-                        leadingIcon = { Icon(Icons.Default.PlayArrow, null) }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Remove from Queue") },
-                        onClick = {
-                            onRemove()
-                            showMenu = false
-                        },
-                        leadingIcon = { Icon(Icons.Default.RemoveCircleOutline, null) }
-                    )
-                }
-            }
+            Spacer(Modifier.width(8.dp))
         },
         modifier = Modifier
             .then(
                 if (isDragged) {
                     Modifier
                         .graphicsLayer { translationY = dragOffsetY }
-                        .shadow(elevation, RoundedCornerShape(8.dp))
-                } else {
-                    Modifier
-                }
+                        .shadow(8.dp, RoundedCornerShape(8.dp))
+                } else Modifier
             )
             .background(bgColor, RoundedCornerShape(8.dp))
-            .clickable(onClick = onPlay),
-        colors = ListItemDefaults.colors(containerColor = bgColor)
-    )
+    ) { close ->
+        HorizontalDivider()
+        DropdownMenuItem(
+            text = { Text("Play now") },
+            onClick = { onPlay(); close() },
+            leadingIcon = { Icon(Icons.Default.PlayArrow, null) }
+        )
+        DropdownMenuItem(
+            text = { Text("Remove from queue") },
+            onClick = { onRemove(); close() },
+            leadingIcon = { Icon(Icons.Default.RemoveCircleOutline, null) }
+        )
+    }
 }

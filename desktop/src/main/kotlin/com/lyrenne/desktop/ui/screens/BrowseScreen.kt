@@ -1,5 +1,9 @@
 package com.lyrenne.desktop.ui.screens
 
+import com.lyrenne.desktop.ui.theme.LyrenneTokens
+import com.lyrenne.desktop.ui.components.DetailTopBar
+import com.lyrenne.desktop.ui.components.ScreenTitle
+import com.lyrenne.desktop.ui.components.MediaTile
 import com.lyrenne.desktop.ui.components.squareCropFriendly
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -73,23 +77,12 @@ fun BrowseScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        // Header
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-            }
-            Text(
-                result?.title ?: title,
-                style = MaterialTheme.typography.headlineMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
+    Column(modifier = Modifier.fillMaxSize()) {
+        DetailTopBar(onBack, result?.title ?: title, collapsed = false)
+        ScreenTitle(result?.title ?: title, Modifier.padding(horizontal = LyrenneTokens.contentPadding))
+        Spacer(Modifier.height(12.dp))
 
-        Spacer(Modifier.height(8.dp))
-
-        Box(modifier = Modifier.fillMaxSize()) {
+        Box(modifier = Modifier.fillMaxSize().padding(horizontal = LyrenneTokens.contentPadding)) {
             when {
                 isLoading -> {
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
@@ -116,8 +109,9 @@ fun BrowseScreen(
                                     }
                                     ScrollableRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                         items(section.items) { item ->
-                                            BrowseItemCard(
+                                            MediaTile(
                                                 item = item,
+                                                player = player,
                                                 onClick = {
                                                     when (item) {
                                                         is SongItem -> scope.launch {
@@ -143,49 +137,3 @@ fun BrowseScreen(
     }
 }
 
-@Composable
-private fun BrowseItemCard(
-    item: YTItem,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier.width(160.dp).clickable(onClick = onClick),
-        shape = RoundedCornerShape(8.dp)
-    ) {
-        Column {
-            AsyncImage(
-                model = squareCropFriendly(item.thumbnail),
-                contentDescription = item.title,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(160.dp)
-                    .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)),
-                contentScale = ContentScale.Crop
-            )
-            Column(modifier = Modifier.padding(10.dp)) {
-                Text(
-                    item.title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                val subtitle = when (item) {
-                    is SongItem -> item.artists.joinToString { it.name }
-                    is AlbumItem -> item.artists?.joinToString { it.name } ?: ""
-                    is ArtistItem -> "Artist"
-                    is PlaylistItem -> item.author?.name ?: "Playlist"
-                    else -> ""
-                }
-                if (subtitle.isNotEmpty()) {
-                    Text(
-                        subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-        }
-    }
-}

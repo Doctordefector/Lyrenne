@@ -43,7 +43,13 @@ import com.metrolist.innertube.models.YTItem
  * song menu on right-click, so "Play next" works from Home too.
  */
 @Composable
-fun MediaTile(item: YTItem, player: DesktopPlayer, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun MediaTile(
+    item: YTItem,
+    player: DesktopPlayer,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    subtitle: String = item.subtitle()
+) {
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
     val isFocused by interactionSource.collectIsFocusedAsState()
@@ -89,7 +95,6 @@ fun MediaTile(item: YTItem, player: DesktopPlayer, onClick: () -> Unit, modifier
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                val subtitle = item.subtitle()
                 if (subtitle.isNotEmpty()) {
                     Text(
                         text = subtitle,

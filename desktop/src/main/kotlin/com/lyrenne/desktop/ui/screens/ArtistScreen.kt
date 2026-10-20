@@ -1,5 +1,13 @@
 package com.lyrenne.desktop.ui.screens
 
+import androidx.compose.foundation.lazy.rememberLazyListState
+import com.lyrenne.desktop.ui.theme.LyrenneTokens
+import com.lyrenne.desktop.ui.components.headerScrolledAway
+import com.lyrenne.desktop.ui.components.DetailTopBar
+import com.lyrenne.desktop.ui.components.DetailHeader
+import com.lyrenne.desktop.ui.components.subtitle
+import com.lyrenne.desktop.ui.components.MediaTile
+import com.lyrenne.desktop.ui.components.TrackRow
 import com.lyrenne.desktop.ui.components.select
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -57,21 +65,16 @@ fun ArtistScreen(
         isLoading = false
     }
 
+    val listState = rememberLazyListState()
+    val collapsed by remember { derivedStateOf { listState.headerScrolledAway() } }
+    // Play and Shuffle take the first section, which is the artist's top songs.
+    val topSongs = remember(artistPage) {
+        artistPage?.sections?.firstOrNull()?.items?.filterIsInstance<SongItem>()?.map { it.toDesktopSongInfo() }.orEmpty()
+    }
+    val playTop = { if (topSongs.isNotEmpty()) scope.launch { player.playQueue(topSongs, 0) }; Unit }
+
     Column(modifier = Modifier.fillMaxSize()) {
-        // Top bar
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-            }
-            Text(
-                "Artist",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(start = 8.dp)
-            )
-        }
+        DetailTopBar(onBack, artistPage?.artist?.title.orEmpty(), collapsed, onPlay = if (topSongs.isNotEmpty()) playTop else null)
 
         when {
             isLoading -> {
@@ -100,93 +103,20 @@ fun ArtistScreen(
                 val page = artistPage!!
 
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    state = listState,
+                    modifier = Modifier.fillMaxSize().padding(horizontal = LyrenneTokens.contentPadding)
                 ) {
-                    // Artist header
                     item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(24.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            AsyncImage(
-                                model = page.artist.thumbnail,
-                                contentDescription = page.artist.title,
-                                modifier = Modifier
-                                    .size(160.dp)
-                                    .clip(CircleShape),
-                                contentScale = ContentScale.Crop
-                            )
-
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Text(
-                                    page.artist.title,
-                                    style = MaterialTheme.typography.headlineLarge,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-
-                                page.subscriberCountText?.let {
-                                    Text(
-                                        it,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-
-                                page.monthlyListenerCount?.let {
-                                    Text(
-                                        it,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-
-                                // Play/Shuffle buttons
-                                Spacer(Modifier.height(8.dp))
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Button(
-                                        onClick = {
-                                            scope.launch {
-                                                // Play first section songs
-                                                val songs = page.sections.firstOrNull()?.items
-                                                    ?.filterIsInstance<SongItem>()
-                                                    ?.map { it.toDesktopSongInfo() }
-                                                if (!songs.isNullOrEmpty()) {
-                                                    player.playQueue(songs, 0)
-                                                }
-                                            }
-                                        }
-                                    ) {
-                                        Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp))
-                                        Spacer(Modifier.width(4.dp))
-                                        Text("Play")
-                                    }
-
-                                    OutlinedButton(
-                                        onClick = {
-                                            scope.launch {
-                                                val songs = page.sections.firstOrNull()?.items
-                                                    ?.filterIsInstance<SongItem>()
-                                                    ?.map { it.toDesktopSongInfo() }
-                                                    ?.shuffled()
-                                                if (!songs.isNullOrEmpty()) {
-                                                    player.playQueue(songs, 0)
-                                                }
-                                            }
-                                        }
-                                    ) {
-                                        Icon(Icons.Default.Shuffle, null, Modifier.size(18.dp))
-                                        Spacer(Modifier.width(4.dp))
-                                        Text("Shuffle")
-                                    }
-                                }
-                            }
-                        }
+                        DetailHeader(
+                            thumbnail = page.artist.thumbnail,
+                            kind = "Artist",
+                            title = page.artist.title,
+                            meta = listOfNotNull(page.subscriberCountText, page.monthlyListenerCount).joinToString(" • "),
+                            onPlay = playTop,
+                            onShuffle = { if (topSongs.isNotEmpty()) scope.launch { player.playQueue(topSongs.shuffled(), 0) } },
+                            onDownload = null,
+                            circleArt = true
+                        )
                     }
 
                     // Description
@@ -212,55 +142,42 @@ fun ArtistScreen(
                     // Sections (Songs, Albums, Singles, etc.)
                     page.sections.forEach { section ->
                         item {
-                            Spacer(Modifier.height(8.dp))
                             Text(
                                 section.title,
                                 style = MaterialTheme.typography.titleLarge,
-                                modifier = Modifier.padding(bottom = 12.dp)
+                                modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
                             )
                         }
 
-                        // Check if section has songs (list view) or other items (carousel)
                         val songItems = section.items.filterIsInstance<SongItem>()
                         if (songItems.isNotEmpty() && section.title.contains("song", ignoreCase = true)) {
-                            // Song list view
-                            songItems.forEach { song ->
+                            val songInfos = songItems.map { it.toDesktopSongInfo() }
+                            songItems.forEachIndexed { idx, song ->
                                 item {
-                                    ArtistSongItem(
-                                        song = song,
+                                    TrackRow(
+                                        song = songInfos[idx],
+                                        player = player,
+                                        explicit = song.explicit,
                                         isPlaying = playingId == song.id,
-                                        onClick = {
-                                            scope.launch {
-                                                val songInfos = songItems.map { it.toDesktopSongInfo() }
-                                                val idx = songItems.indexOf(song)
-                                                player.playQueue(songInfos, idx)
-                                            }
-                                        },
-                                        onAddToQueue = {
-                                            player.addToQueue(song.toDesktopSongInfo())
-                                        }
+                                        onClick = { scope.launch { player.playQueue(songInfos, idx) } }
                                     )
                                 }
                             }
                         } else {
-                            // Carousel view for albums, singles, playlists, related artists
+                            // Shelf for albums, singles, playlists, related artists
                             item {
-                                ScrollableRow(
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
+                                ScrollableRow {
                                     items(section.items) { ytItem ->
-                                        ArtistSectionCard(
+                                        MediaTile(
                                             item = ytItem,
+                                            player = player,
+                                            subtitle = (ytItem as? AlbumItem)?.year?.toString() ?: ytItem.subtitle(),
                                             onClick = {
                                                 when (ytItem) {
                                                     is AlbumItem -> onAlbumClick(ytItem.browseId)
                                                     is ArtistItem -> onArtistClick(ytItem.id)
                                                     is PlaylistItem -> onPlaylistClick(ytItem.id)
-                                                    is SongItem -> {
-                                                        scope.launch {
-                                                            player.playSong(ytItem.toDesktopSongInfo())
-                                                        }
-                                                    }
+                                                    is SongItem -> scope.launch { player.playSong(ytItem.toDesktopSongInfo()) }
                                                     else -> {}
                                                 }
                                             }
@@ -271,110 +188,8 @@ fun ArtistScreen(
                         }
                     }
 
-                    // Bottom padding
                     item { Spacer(Modifier.height(16.dp)) }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ArtistSongItem(
-    song: SongItem,
-    isPlaying: Boolean,
-    onClick: () -> Unit,
-    onAddToQueue: () -> Unit
-) {
-    ListItem(
-        headlineContent = {
-            Text(
-                song.title,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                color = if (isPlaying) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.onSurface
-            )
-        },
-        supportingContent = {
-            Text(
-                song.artists.joinToString { it.name },
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        },
-        leadingContent = {
-            Box {
-                AsyncImage(
-                    model = song.thumbnail,
-                    contentDescription = null,
-                    modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)),
-                    contentScale = ContentScale.Crop
-                )
-                if (isPlaying) {
-                    Icon(
-                        Icons.Default.GraphicEq,
-                        contentDescription = "Playing",
-                        modifier = Modifier.size(48.dp).padding(12.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-        },
-        trailingContent = {
-            IconButton(onClick = onAddToQueue) {
-                Icon(Icons.Default.AddToQueue, "Add to queue")
-            }
-        },
-        modifier = Modifier.clickable(onClick = onClick)
-    )
-}
-
-@Composable
-private fun ArtistSectionCard(
-    item: YTItem,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .width(160.dp)
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(8.dp)
-    ) {
-        Column {
-            AsyncImage(
-                model = item.thumbnail,
-                contentDescription = item.title,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(160.dp)
-                    .clip(
-                        if (item is ArtistItem) RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
-                        else RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
-                    ),
-                contentScale = ContentScale.Crop
-            )
-            Column(modifier = Modifier.padding(8.dp)) {
-                Text(
-                    item.title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                val subtitle = when (item) {
-                    is AlbumItem -> item.year?.toString() ?: "Album"
-                    is ArtistItem -> "Artist"
-                    is PlaylistItem -> item.author?.name ?: "Playlist"
-                    is SongItem -> item.artists.joinToString { it.name }
-                    else -> ""
-                }
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
             }
         }
     }

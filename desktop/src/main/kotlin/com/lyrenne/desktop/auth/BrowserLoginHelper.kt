@@ -256,6 +256,12 @@ object BrowserLoginHelper {
             "--disable-default-apps",
             // Linux: keep cookies out of the desktop keyring, under the fixed v10 key instead.
             "--password-store=basic".takeIf { Platform.isLinux },
+            // Device Bound Session Credentials (Chrome 146+ on Windows, Edge with it) tie Google's
+            // session cookies to a TPM key only this browser holds, and keep them short-lived so
+            // the binding is re-proved every few minutes. Copied into credentials.json they cannot
+            // be refreshed, and the session died within a day: the "sign in every morning" bug.
+            // Unknown feature names are ignored, so listing both spellings is safe.
+            "--disable-features=EnableBoundSessionCredentials,DeviceBoundSessions",
             "https://music.youtube.com"
         )
     }

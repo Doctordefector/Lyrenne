@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.ui.screens
 
+import com.lyrenne.desktop.ui.components.select
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -42,7 +43,7 @@ fun AlbumScreen(
     var albumPage by rememberSaveable { mutableStateOf<AlbumPage?>(null) }
     var isLoading by rememberSaveable { mutableStateOf(true) }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
-    val playerState by player.state.collectAsState()
+    val playingId by player.select { it.currentSong?.id }
 
     LaunchedEffect(browseId) {
         if (albumPage != null) return@LaunchedEffect // restored from the back stack
@@ -239,7 +240,7 @@ fun AlbumScreen(
                         AlbumSongItem(
                             song = song,
                             trackNumber = index + 1,
-                            isPlaying = playerState.currentSong?.id == song.id,
+                            isPlaying = playingId == song.id,
                             onClick = {
                                 scope.launch {
                                     val songInfos = songs.map { it.toDesktopSongInfo() }

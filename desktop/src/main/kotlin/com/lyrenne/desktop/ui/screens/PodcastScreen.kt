@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.ui.screens
 
+import com.lyrenne.desktop.ui.components.select
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -41,7 +42,7 @@ fun PodcastScreen(
     var allEpisodes by rememberSaveable { mutableStateOf<List<EpisodeItem>>(emptyList()) }
     var isLoading by rememberSaveable { mutableStateOf(true) }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
-    val playerState by player.state.collectAsState()
+    val playingId by player.select { it.currentSong?.id }
 
     LaunchedEffect(podcastId) {
         if (podcastPage != null) return@LaunchedEffect // restored from the back stack
@@ -196,7 +197,7 @@ fun PodcastScreen(
                     itemsIndexed(allEpisodes) { index, episode ->
                         EpisodeListItem(
                             episode = episode,
-                            isPlaying = playerState.currentSong?.id == episode.id,
+                            isPlaying = playingId == episode.id,
                             onClick = {
                                 scope.launch {
                                     val songInfos = allEpisodes.map { it.toSongInfo() }

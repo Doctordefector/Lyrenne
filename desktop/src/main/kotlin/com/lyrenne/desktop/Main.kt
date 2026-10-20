@@ -296,6 +296,41 @@ private fun runApp() {
         val player = remember { DesktopPlayer() }
         var windowVisible by remember { mutableStateOf(true) }
         var trayPanelAt by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+        val trayPanelState = rememberWindowState(
+            width = TRAY_PANEL_WIDTH.dp,
+            height = TRAY_PANEL_HEIGHT.dp
+        )
+
+        /**
+         * Quit, from every exit path (tray panel, window close, tray callback).
+         *
+         * The releases used to run on the UI thread and end in `exitApplication()`. Any one that
+         * blocked (VLC teardown, closing the Discord pipe while its reader is mid-read) froze the
+         * tray panel with Quit apparently doing nothing, and even a clean `exitApplication()`
+         * left the JVM running on VLC's non-daemon threads. So the windows go away at once, the
+         * releases run off the UI thread, and the process exits regardless after 3 s.
+         */
+        val quit: () -> Unit = {
+            trayPanelAt = null
+            windowVisible = false
+            kotlin.concurrent.thread(name = "shutdown") {
+                // ponytail: fixed 3 s watchdog, halt skips anything unfinished (queue is saved first in player.release)
+                kotlin.concurrent.thread(isDaemon = true) {
+                    Thread.sleep(3_000)
+                    Runtime.getRuntime().halt(0)
+                }
+                // Queue save lives in player.release, so it goes first.
+                listOf(
+                    player::release,
+                    DesktopNotification::release,
+                    LastFmManager::release,
+                    DiscordRPC::release,
+                    SystemMediaSession::release,
+                    MediaKeyHandler::release
+                ).forEach { runCatching { it() }.onFailure { e -> Timber.e("Release failed on quit: ${e.message}") } }
+                exitProcess(0)
+            }
+        }
 
         // Initialize VLC, auth, media keys, queue restore, and integrations off the main thread
         LaunchedEffect(player) {
@@ -362,18 +397,16 @@ private fun runApp() {
             DesktopNotification.onShowWindow = {
                 windowVisible = true
             }
-            DesktopNotification.onTrayMenu = { x, y ->
+            DesktopNotification.onTrayMenu = { clickX, clickY ->
+                val screen = java.awt.Toolkit.getDefaultToolkit().screenSize
+                // Anchor above-left of the cursor (the tray sits bottom-right), clamped on screen.
+                // Moved before it is shown, so it never flashes at the last spot.
+                val x = (clickX - TRAY_PANEL_WIDTH / 2).coerceIn(8, screen.width - TRAY_PANEL_WIDTH - 8)
+                val y = (clickY - TRAY_PANEL_HEIGHT - 16).coerceIn(8, screen.height - TRAY_PANEL_HEIGHT - 8)
+                trayPanelState.position = WindowPosition(x.dp, y.dp)
                 trayPanelAt = x to y
             }
-            DesktopNotification.onExitApp = {
-                DesktopNotification.release()
-                LastFmManager.release()
-                DiscordRPC.release()
-                SystemMediaSession.release()
-                MediaKeyHandler.release()
-                player.release()
-                exitApplication()
-            }
+            DesktopNotification.onExitApp = quit
         }
 
         val prefs by PreferencesManager.preferences.collectAsState()
@@ -397,14 +430,7 @@ private fun runApp() {
                     // Minimize to tray instead of exiting
                     windowVisible = false
                 } else {
-                    // Actually exit
-                    DesktopNotification.release()
-                    LastFmManager.release()
-                    DiscordRPC.release()
-                    SystemMediaSession.release()
-                    MediaKeyHandler.release()
-                    player.release()
-                    exitApplication()
+                    quit()
                 }
             },
             visible = windowVisible,
@@ -583,19 +609,13 @@ private fun runApp() {
         }
 
         // Tray popup — replaces AWT's unthemeable native PopupMenu.
-        trayPanelAt?.let { (clickX, clickY) ->
-            val screen = java.awt.Toolkit.getDefaultToolkit().screenSize
-            // Anchor above-left of the cursor (the tray sits bottom-right), clamped on screen.
-            val x = (clickX - TRAY_PANEL_WIDTH / 2).coerceIn(8, screen.width - TRAY_PANEL_WIDTH - 8)
-            val y = (clickY - TRAY_PANEL_HEIGHT - 16).coerceIn(8, screen.height - TRAY_PANEL_HEIGHT - 8)
-
+        // The window is created once and only shown/hidden: building a transparent window on
+        // every right-click took seconds, the same cost the floating player hit.
+        if (DesktopNotification.trayActive || trayPanelAt != null) {
             Window(
                 onCloseRequest = { trayPanelAt = null },
-                state = rememberWindowState(
-                    width = TRAY_PANEL_WIDTH.dp,
-                    height = TRAY_PANEL_HEIGHT.dp,
-                    position = WindowPosition(x.dp, y.dp)
-                ),
+                state = trayPanelState,
+                visible = trayPanelAt != null,
                 undecorated = true,
                 transparent = true,
                 resizable = false,
@@ -614,24 +634,22 @@ private fun runApp() {
                         }
                     }
                     window.addWindowFocusListener(listener)
-                    window.toFront()
-                    window.requestFocus()
                     onDispose { window.removeWindowFocusListener(listener) }
                 }
+                LaunchedEffect(trayPanelAt) {
+                    if (trayPanelAt != null) {
+                        window.toFront()
+                        window.requestFocus()
+                    }
+                }
 
-                LyrenneTheme(themeMode = prefs.themeMode) {
+                // Content only while open, so the hidden window does not recompose on every
+                // position tick.
+                if (trayPanelAt != null) LyrenneTheme(themeMode = prefs.themeMode) {
                     TrayPanel(
                         player = player,
                         onOpenWindow = { windowVisible = true },
-                        onQuit = {
-                            DesktopNotification.release()
-                            LastFmManager.release()
-                            DiscordRPC.release()
-                            SystemMediaSession.release()
-                            MediaKeyHandler.release()
-                            player.release()
-                            exitApplication()
-                        },
+                        onQuit = quit,
                         onDismiss = { trayPanelAt = null }
                     )
                 }

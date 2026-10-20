@@ -15,6 +15,8 @@ import androidx.compose.material.icons.automirrored.filled.VolumeDown
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.Lyrics
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -300,72 +302,28 @@ fun MiniPlayer(
                     if (showSecondaryControls) {
                         PlayerIconButton(
                             onClick = onLyricsClick,
-                            icon = Icons.Default.MusicNote,
+                            icon = Icons.Outlined.Lyrics,
                             contentDescription = if (lyricsActive) "Close lyrics" else "Open lyrics",
                             selected = lyricsActive,
                             shortcut = "Ctrl+L"
                         )
                     }
 
-                    // Playback speed button
-                    if (showExtendedControls) {
-                        Box {
-                            PlayerIconButton(
-                                onClick = { showSpeedMenu = true },
-                                icon = Icons.Default.Speed,
-                                contentDescription = "Playback speed: ${playbackSpeedLabel(prefs.playbackSpeed)}",
-                                selected = prefs.playbackSpeed != 1f
-                            )
-                            PlaybackSpeedMenu(
-                                expanded = showSpeedMenu,
-                                currentSpeed = prefs.playbackSpeed,
-                                onDismissRequest = { showSpeedMenu = false },
-                                onSpeedSelected = { speed ->
-                                    player.setPlaybackSpeed(speed)
-                                    showSpeedMenu = false
-                                }
-                            )
-                        }
-                    }
-
-                    // Sleep timer button
-                    if (showExtendedControls) {
-                        Box {
-                            PlayerIconButton(
-                                onClick = { showSleepMenu = true },
-                                icon = Icons.Default.Bedtime,
-                                contentDescription = if (sleepTimer != null) "Sleep timer active" else "Sleep timer",
-                                selected = sleepTimer != null
-                            )
-                            SleepTimerMenu(
-                                expanded = showSleepMenu,
-                                sleepTimer = sleepTimer,
-                                onDismissRequest = { showSleepMenu = false },
-                                onCancel = {
-                                    player.cancelSleepTimer()
-                                    showSleepMenu = false
-                                },
-                                onMinutesSelected = { minutes ->
-                                    player.startSleepTimer(minutes)
-                                    showSleepMenu = false
-                                },
-                                onEndOfTrack = {
-                                    player.setSleepEndOfTrack()
-                                    showSleepMenu = false
-                                }
-                            )
-                        }
-                    }
-
-                    // Keep actions removed by the responsive layout available from one overflow.
-                    if (!showExtendedControls) {
+                    // Speed and sleep timer are rare, so they always live here, plus whatever the
+                    // responsive layout dropped from the row. One overflow, at every width.
+                    run {
                         Box {
                             Tip("More playback controls") {
                                 IconButton(
                                     onClick = { showMoreMenu = true },
                                     modifier = Modifier.size(40.dp)
                                 ) {
-                                    Icon(Icons.Default.MoreVert, "More playback controls")
+                                    // Tinted while a speed or sleep timer is set, so that state stays visible.
+                                    Icon(
+                                        Icons.Default.MoreVert, "More playback controls",
+                                        tint = if (sleepTimer != null || prefs.playbackSpeed != 1f)
+                                            MaterialTheme.colorScheme.primary else LocalContentColor.current
+                                    )
                                 }
                             }
                             DropdownMenu(
@@ -415,7 +373,7 @@ fun MiniPlayer(
                                             onLyricsClick()
                                             showMoreMenu = false
                                         },
-                                        leadingIcon = { Icon(Icons.Default.MusicNote, null) },
+                                        leadingIcon = { Icon(Icons.Outlined.Lyrics, null) },
                                         trailingIcon = {
                                             if (lyricsActive) Icon(Icons.Default.Check, null)
                                         }
@@ -438,7 +396,7 @@ fun MiniPlayer(
                                         showMoreMenu = false
                                         showSleepMenu = true
                                     },
-                                    leadingIcon = { Icon(Icons.Default.Bedtime, null) },
+                                    leadingIcon = { Icon(Icons.Outlined.Timer, null) },
                                     trailingIcon = {
                                         if (sleepTimer != null) Icon(Icons.Default.Check, null)
                                     }

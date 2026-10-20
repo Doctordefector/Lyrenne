@@ -1,5 +1,7 @@
 package com.lyrenne.desktop.ui.screens
 
+import com.lyrenne.desktop.ui.theme.LyrenneTokens
+import com.lyrenne.desktop.ui.components.SkeletonShelf
 import com.lyrenne.desktop.ui.components.ScreenTitle
 import com.lyrenne.desktop.ui.components.MediaTile
 import androidx.compose.foundation.background
@@ -82,10 +84,13 @@ fun ExploreScreen(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+    Box(modifier = Modifier.fillMaxSize().padding(LyrenneTokens.contentPadding)) {
         when {
             isLoading -> {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                    ScreenTitle("Explore")
+                    repeat(2) { SkeletonShelf() }
+                }
             }
             error != null -> {
                 Column(

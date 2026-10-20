@@ -29,7 +29,8 @@ import java.awt.datatransfer.StringSelection
 @Composable
 fun ListenTogetherScreen(
     player: DesktopPlayer,
-    onBack: () -> Unit
+    /** Null when the screen was opened from the rail: it is a destination, not a step down. */
+    onBack: (() -> Unit)? = null
 ) {
     val scope = rememberCoroutineScope()
     val connectionState by ListenTogetherClient.connectionState.collectAsState()
@@ -51,16 +52,18 @@ fun ListenTogetherScreen(
     Column(modifier = Modifier.fillMaxSize()) {
         // Top bar
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+            if (onBack != null) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                }
             }
             Text(
                 "Listen Together",
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.weight(1f).padding(start = 8.dp)
+                style = MaterialTheme.typography.headlineMedium,
+                modifier = Modifier.weight(1f).padding(start = if (onBack != null) 8.dp else 0.dp)
             )
 
             // Connection status indicator

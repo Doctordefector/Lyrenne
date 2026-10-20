@@ -363,6 +363,7 @@ fun App(player: DesktopPlayer) {
                         // Screen content
                         Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                             val currentDetail = detailStack.lastOrNull()
+                            val toolBack: (() -> Unit)? = if (detailStack.size > 1) ::navigateBack else null
                             stateHolder.SaveableStateProvider(detailKeys.lastOrNull() ?: "screen:${currentScreen.name}") {
                             if (currentDetail != null) {
                                 when (currentDetail) {
@@ -412,20 +413,22 @@ fun App(player: DesktopPlayer) {
                                         player = player,
                                         onBack = ::navigateBack
                                     )
+                                    // Tools opened from the rail are destinations, so no Back arrow;
+                                    // reached from somewhere deeper, Back returns there.
                                     is DetailScreen.ListenTogether -> ListenTogetherScreen(
                                         player = player,
-                                        onBack = ::navigateBack
+                                        onBack = toolBack
                                     )
                                     is DetailScreen.Recognition -> RecognitionScreen(
                                         player = player,
-                                        onBack = ::navigateBack
+                                        onBack = toolBack
                                     )
                                     is DetailScreen.Equalizer -> EqualizerScreen(
                                         player = player,
-                                        onBack = ::navigateBack
+                                        onBack = toolBack
                                     )
                                     is DetailScreen.Stats -> StatsScreen(
-                                        onBack = ::navigateBack,
+                                        onBack = toolBack,
                                         onArtistClick = ::navigateToArtist,
                                         onAlbumClick = ::navigateToAlbum,
                                         player = player

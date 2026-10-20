@@ -29,7 +29,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun RecognitionScreen(
     player: DesktopPlayer,
-    onBack: () -> Unit
+    /** Null when the screen was opened from the rail: it is a destination, not a step down. */
+    onBack: (() -> Unit)? = null
 ) {
     val scope = rememberCoroutineScope()
     var status by remember { mutableStateOf<RecognitionStatus>(RecognitionStatus.Ready) }
@@ -79,16 +80,18 @@ fun RecognitionScreen(
             modifier = Modifier.fillMaxWidth().padding(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = {
-                stopRecognition()
-                onBack()
-            }) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+            if (onBack != null) {
+                IconButton(onClick = {
+                    stopRecognition()
+                    onBack()
+                }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                }
             }
             Text(
                 "Identify song",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(start = 8.dp)
+                style = MaterialTheme.typography.headlineMedium,
+                modifier = Modifier.padding(start = if (onBack != null) 8.dp else 0.dp)
             )
         }
 

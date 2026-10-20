@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.ui.screens
 
+import com.lyrenne.desktop.ui.components.PillTab
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.material.icons.automirrored.filled.Sort
@@ -294,33 +295,6 @@ fun LibraryScreen(
     }
 }
 
-@Composable
-private fun PillTab(label: String, count: Int, selected: Boolean, onClick: () -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    val shape = RoundedCornerShape(50)
-    Row(
-        Modifier
-            .clip(shape)
-            .then(
-                if (selected) Modifier.background(colors.primary)
-                else Modifier.border(1.dp, colors.outline.copy(alpha = 0.5f), shape)
-            )
-            .clickable(role = Role.Tab, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        val fg = if (selected) colors.onPrimary else colors.onSurface
-        Text(label, style = MaterialTheme.typography.labelLarge, color = fg)
-        if (count > 0) {
-            Spacer(Modifier.width(6.dp))
-            Text(
-                count.toString(),
-                style = MaterialTheme.typography.labelMedium,
-                color = if (selected) colors.onPrimary else colors.onSurfaceVariant
-            )
-        }
-    }
-}
 
 /** One sort button ("Date added ▾"); the modes and the direction live in its menu. */
 @Composable

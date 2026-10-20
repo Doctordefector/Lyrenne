@@ -1,5 +1,7 @@
 package com.lyrenne.desktop.ui.screens
 
+import androidx.compose.foundation.shape.CircleShape
+import com.lyrenne.desktop.ui.components.squareCropFriendly
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -324,13 +326,13 @@ private fun HomeSectionItem(
             .padding(6.dp)
     ) {
         AsyncImage(
-            model = item.thumbnail,
+            model = squareCropFriendly(item.thumbnail),
             // The surrounding clickable tile merges its title text into one accessible label.
             contentDescription = null,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(160.dp)
-                .clip(RoundedCornerShape(LyrenneTokens.artworkRadius)),
+                .clip(if (item is ArtistItem) CircleShape else RoundedCornerShape(LyrenneTokens.artworkRadius)),
             contentScale = ContentScale.Crop
         )
 

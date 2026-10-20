@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.ui.screens
 
+import com.lyrenne.desktop.ui.components.squareCropFriendly
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -153,7 +154,7 @@ private fun BrowseItemCard(
     ) {
         Column {
             AsyncImage(
-                model = item.thumbnail,
+                model = squareCropFriendly(item.thumbnail),
                 contentDescription = item.title,
                 modifier = Modifier
                     .fillMaxWidth()

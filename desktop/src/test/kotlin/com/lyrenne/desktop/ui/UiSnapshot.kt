@@ -31,7 +31,7 @@ import java.io.File
  *   ./gradlew :desktop:test --tests '*UiSnapshot*' -Psnapshots
  *
  * Output: build/snapshots/<name>.png. Steps come from build/snapshots/steps.txt, one per line:
- * `size W H`, `theme dark|light`, `wait MS`, `click X Y`, `rclick X Y`, `scroll X Y DY`, `shot NAME`.
+ * `size W H`, `theme dark|light`, `tray` (the tray panel alone), `wait MS`, `click X Y`, `rclick X Y`, `scroll X Y DY`, `shot NAME`.
  */
 @OptIn(ExperimentalComposeUiApi::class, androidx.compose.ui.InternalComposeUiApi::class)
 class UiSnapshot {
@@ -74,6 +74,19 @@ class UiSnapshot {
             when (p[0]) {
                 "size" -> { w = p[1].toInt(); h = p[2].toInt(); newScene(theme) }
                 "theme" -> { theme = if (p[1] == "light") ThemeMode.LIGHT else ThemeMode.DARK; newScene(theme) }
+                "tray" -> {
+                    // The tray panel on its own, at its window size
+                    scene?.close()
+                    scene = ImageComposeScene(
+                        com.lyrenne.desktop.ui.components.TRAY_PANEL_WIDTH,
+                        com.lyrenne.desktop.ui.components.TRAY_PANEL_HEIGHT, Density(1f)
+                    ) {
+                        LyrenneTheme(themeMode = theme) {
+                            com.lyrenne.desktop.ui.components.TrayPanel(player, {}, {}, {})
+                        }
+                    }
+                    frame()
+                }
                 "wait" -> pump(p[1].toLong())
                 "click", "rclick" -> {
                     val at = Offset(p[1].toFloat(), p[2].toFloat())

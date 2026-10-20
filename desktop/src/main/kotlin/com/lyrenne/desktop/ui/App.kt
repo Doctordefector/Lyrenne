@@ -2,6 +2,12 @@ package com.lyrenne.desktop.ui
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -30,6 +36,9 @@ import kotlinx.coroutines.launch
 import com.lyrenne.desktop.ui.components.AutoScroll
 import com.lyrenne.desktop.ui.components.LyricsPanel
 import com.lyrenne.desktop.ui.components.MiniPlayer
+import com.lyrenne.desktop.ui.components.Tip
+import com.lyrenne.desktop.ui.components.select
+import com.lyrenne.desktop.ui.theme.rememberArtTint
 import com.lyrenne.desktop.ui.components.UpdateBadge
 import com.lyrenne.desktop.ui.theme.LyrenneTokens
 
@@ -159,13 +168,6 @@ fun App(player: DesktopPlayer) {
         }
 
         AppScreen.Main -> {
-            val navigationColors = NavigationRailItemDefaults.colors(
-                selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-            )
             Row(modifier = Modifier.fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
                 // TUNNEL phase (parent-first): Escape + Ctrl shortcuts only.
@@ -282,79 +284,36 @@ fun App(player: DesktopPlayer) {
                     BoxWithConstraints(Modifier.weight(1f)) {
                         val available = maxHeight
                         Column(Modifier.verticalScroll(rememberScrollState())) {
-                            Column(Modifier.heightIn(min = available)) {
+                            Column(
+                                Modifier.fillMaxWidth().heightIn(min = available),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
                     Spacer(Modifier.height(8.dp))
 
                     Screen.entries.forEach { screen ->
-                        NavigationRailItem(
-                            icon = {
-                                Icon(
-                                    if (currentScreen == screen && detailStack.isEmpty()) screen.selectedIcon else screen.icon,
-                                    contentDescription = screen.title
-                                )
-                            },
-                            label = { Text(screen.title) },
-                            selected = currentScreen == screen && detailStack.isEmpty(),
-                            colors = navigationColors,
-                            onClick = {
-                                currentScreen = screen
-                                detailStack.clear()
-                            }
-                        )
+                        val selected = currentScreen == screen && detailStack.isEmpty()
+                        RailButton(if (selected) screen.selectedIcon else screen.icon, screen.title, selected) {
+                            currentScreen = screen
+                            detailStack.clear()
+                        }
                     }
 
                     Spacer(Modifier.weight(1f))
 
                     // Separates destinations above from tools below, which otherwise look identical.
-                    HorizontalDivider(Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+                    HorizontalDivider(Modifier.padding(horizontal = 18.dp, vertical = 8.dp))
 
-                    // Equalizer
-                    NavigationRailItem(
-                        icon = { Icon(Icons.Default.Equalizer, "Equalizer") },
-                        label = { Text("EQ") },
-                        selected = detailStack.lastOrNull() is DetailScreen.Equalizer,
-                        colors = navigationColors,
-                        onClick = {
+                    listOf(
+                        Triple(Icons.Default.Equalizer, "Equalizer", DetailScreen.Equalizer),
+                        Triple(Icons.Default.BarChart, "Stats", DetailScreen.Stats),
+                        Triple(Icons.Default.Mic, "Recognize music", DetailScreen.Recognition),
+                        Triple(Icons.Default.Group, "Listen Together", DetailScreen.ListenTogether),
+                    ).forEach { (icon, label, dest) ->
+                        RailButton(icon, label, detailStack.lastOrNull() == dest) {
                             detailStack.clear()
-                            detailStack.add(DetailScreen.Equalizer)
+                            detailStack.add(dest)
                         }
-                    )
-
-                    // Stats
-                    NavigationRailItem(
-                        icon = { Icon(Icons.Default.BarChart, "Stats") },
-                        label = { Text("Stats") },
-                        selected = detailStack.lastOrNull() is DetailScreen.Stats,
-                        colors = navigationColors,
-                        onClick = {
-                            detailStack.clear()
-                            detailStack.add(DetailScreen.Stats)
-                        }
-                    )
-
-                    // Music Recognition button
-                    NavigationRailItem(
-                        icon = { Icon(Icons.Default.Mic, "Recognize") },
-                        label = { Text("Recognize") },
-                        selected = detailStack.lastOrNull() is DetailScreen.Recognition,
-                        colors = navigationColors,
-                        onClick = {
-                            detailStack.clear()
-                            detailStack.add(DetailScreen.Recognition)
-                        }
-                    )
-
-                    // Listen Together button
-                    NavigationRailItem(
-                        icon = { Icon(Icons.Default.Group, "Listen Together") },
-                        label = { Text("Together") },
-                        selected = detailStack.lastOrNull() is DetailScreen.ListenTogether,
-                        colors = navigationColors,
-                        onClick = {
-                            detailStack.clear()
-                            detailStack.add(DetailScreen.ListenTogether)
-                        }
-                    )
+                    }
 
                     // Signing in lives in one place: the account button in the rail header.
 
@@ -366,8 +325,21 @@ fun App(player: DesktopPlayer) {
 
                 VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-                // Main content
-                Column(modifier = Modifier.fillMaxSize()) {
+                // Main content. The playing cover tints the top of every screen and the player
+                // dock. Read in the draw phase only, so a track change redraws, never recomposes.
+                val artUrl by player.select { it.currentSong?.thumbnailUrl }
+                val artTint = rememberArtTint(artUrl)
+                Column(modifier = Modifier.fillMaxSize().drawBehind {
+                    val tint = artTint.value
+                    if (tint.alpha > 0f) drawRect(
+                        Brush.verticalGradient(
+                            0f to tint.copy(alpha = tint.alpha * LyrenneTokens.artWashAlpha),
+                            1f to Color.Transparent,
+                            endY = 340.dp.toPx()
+                        ),
+                        size = size.copy(height = 340.dp.toPx())
+                    )
+                }) {
                     Row(
                         modifier = Modifier
                             .weight(1f)
@@ -536,7 +508,8 @@ fun App(player: DesktopPlayer) {
                         modifier = Modifier.fillMaxWidth(),
                         onQueueClick = { showQueueScreen = true },
                         onLyricsClick = { showLyricsPanel = !showLyricsPanel },
-                        lyricsActive = showLyricsPanel
+                        lyricsActive = showLyricsPanel,
+                        artTint = artTint
                     )
                 }
 
@@ -563,6 +536,33 @@ fun App(player: DesktopPlayer) {
                     }
                 )
             }
+        }
+    }
+}
+
+/**
+ * One rail destination: icon only, with the name in a hover tooltip. A filled rounded square
+ * marks the current one; that is the whole indicator, no animation to pay for.
+ */
+@Composable
+private fun RailButton(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Tip(label) {
+        Box(
+            Modifier
+                .padding(vertical = 3.dp)
+                .size(52.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(if (selected) colors.primaryContainer else Color.Transparent)
+                .clickable(role = Role.Tab, onClickLabel = label, onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                icon,
+                contentDescription = label,
+                tint = if (selected) colors.onPrimaryContainer else colors.onSurfaceVariant,
+                modifier = Modifier.size(28.dp)
+            )
         }
     }
 }

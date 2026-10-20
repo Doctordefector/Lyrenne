@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -14,13 +15,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.lyrenne.desktop.playback.DesktopPlayer
+import com.lyrenne.desktop.playback.RepeatMode
 import com.lyrenne.desktop.settings.PreferencesManager
+import com.lyrenne.desktop.ui.theme.LyrenneTokens
+import com.lyrenne.desktop.ui.theme.rememberArtTint
 import kotlinx.coroutines.launch
 
 /**
@@ -32,8 +39,8 @@ import kotlinx.coroutines.launch
  * Sizing the window to the content instead meant every tweak re-tuned a magic number and
  * either clipped the Open/Quit row or left dead space under it.
  */
-const val TRAY_PANEL_WIDTH = 272
-const val TRAY_PANEL_HEIGHT = 260
+const val TRAY_PANEL_WIDTH = 288
+const val TRAY_PANEL_HEIGHT = 320
 
 /**
  * The tray icon's context menu, replacing AWT's `PopupMenu`.
@@ -53,6 +60,8 @@ fun TrayPanel(
     val prefs by PreferencesManager.preferences.collectAsState()
     val scope = rememberCoroutineScope()
     val song = state.currentSong
+    val colors = MaterialTheme.colorScheme
+    val artTint = rememberArtTint(song?.thumbnailUrl)
 
     // The card hugs its content and sits at the bottom; the gap above stays transparent.
     // Clicking that empty strip dismisses, the way clicking outside a menu does.
@@ -68,62 +77,76 @@ fun TrayPanel(
     ) {
     Surface(
         modifier = Modifier.fillMaxWidth().wrapContentHeight(),
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 3.dp,
+        shape = RoundedCornerShape(LyrenneTokens.dockRadius),
+        color = colors.surface,
+        border = BorderStroke(0.5.dp, colors.outlineVariant),
         shadowElevation = 8.dp
     ) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+        Column(
+            // The cover's colour washes down from the top: the same tint the main window's player
+            // dock carries, so the two read as one player. Draw phase only.
+            Modifier
+                .drawBehind {
+                    val tint = artTint.value
+                    if (tint.alpha > 0f) drawRect(
+                        Brush.verticalGradient(
+                            0f to tint.copy(alpha = tint.alpha * LyrenneTokens.artWashAlpha * 1.3f),
+                            1f to Color.Transparent
+                        )
+                    )
+                }
+                .padding(horizontal = 14.dp, vertical = 12.dp)
+        ) {
             if (song == null) {
                 Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
                     Text(
                         "Nothing playing",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = colors.onSurfaceVariant
                     )
                 }
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (song.thumbnailUrl != null) {
                         AsyncImage(
-                            model = song.thumbnailUrl,
+                            model = squareCropFriendly(song.thumbnailUrl),
                             contentDescription = null,
-                            modifier = Modifier.size(42.dp).clip(RoundedCornerShape(6.dp)),
+                            modifier = Modifier.size(52.dp).clip(RoundedCornerShape(10.dp)),
                             contentScale = ContentScale.Crop
                         )
                     } else {
                         Box(
-                            Modifier.size(42.dp).clip(RoundedCornerShape(6.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            Modifier.size(52.dp).clip(RoundedCornerShape(10.dp))
+                                .background(colors.surfaceVariant),
                             contentAlignment = Alignment.Center
-                        ) { Icon(Icons.Default.MusicNote, null, Modifier.size(20.dp)) }
+                        ) { Icon(Icons.Default.MusicNote, null, Modifier.size(22.dp)) }
                     }
-                    Spacer(Modifier.width(10.dp))
+                    Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
                             song.title,
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.titleSmall,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             song.artist,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = colors.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
 
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(10.dp))
 
                 // Seek bar. Duration is 0 until VLC reports it (restored queue, still loading),
                 // and dividing by a coerced 1ms made the bar read as 100% full at 0:01 / 0:00.
                 var scrubbing by remember { mutableStateOf<Float?>(null) }
                 val duration = state.duration
                 val known = duration > 0L
-                Slider(
+                PlayerSlider(
                     value = scrubbing
                         ?: if (known) (state.position.toFloat() / duration).coerceIn(0f, 1f) else 0f,
                     onValueChange = { if (known) scrubbing = it },
@@ -131,7 +154,6 @@ fun TrayPanel(
                         scrubbing?.let { player.seekTo((it * duration).toLong()) }
                         scrubbing = null
                     },
-                    enabled = known,
                     modifier = Modifier.fillMaxWidth().height(16.dp)
                         .wheelStep(
                             value = { player.state.value.position.toFloat() },
@@ -141,46 +163,57 @@ fun TrayPanel(
                         ) { player.seekTo(it.toLong()) }
                 )
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(formatMs(state.position), style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        formatMs(state.position),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.onSurfaceVariant
+                    )
                     Text(
                         if (known) formatMs(duration) else "--:--",
-                        style = MaterialTheme.typography.labelSmall
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.onSurfaceVariant
                     )
                 }
 
                 Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center,
+                    Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    TrayToggle(Icons.Default.Shuffle, "Shuffle", state.shuffleEnabled, player::toggleShuffle)
                     IconButton(
                         onClick = { scope.launch { player.playPrevious() } },
-                        modifier = Modifier.size(32.dp)
-                    ) { Icon(Icons.Default.SkipPrevious, "Previous", Modifier.size(20.dp)) }
-                    Spacer(Modifier.width(10.dp))
+                        modifier = Modifier.size(36.dp)
+                    ) { Icon(Icons.Default.SkipPrevious, "Previous", Modifier.size(22.dp)) }
                     FilledIconButton(
                         onClick = { player.togglePlayPause() },
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(44.dp),
+                        shape = CircleShape
                     ) {
                         Icon(
                             if (state.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                             if (state.isPlaying) "Pause" else "Play",
-                            Modifier.size(20.dp)
+                            Modifier.size(24.dp)
                         )
                     }
-                    Spacer(Modifier.width(10.dp))
                     IconButton(
                         onClick = { scope.launch { player.playNext() } },
-                        modifier = Modifier.size(32.dp)
-                    ) { Icon(Icons.Default.SkipNext, "Next", Modifier.size(20.dp)) }
+                        modifier = Modifier.size(36.dp)
+                    ) { Icon(Icons.Default.SkipNext, "Next", Modifier.size(22.dp)) }
+                    TrayToggle(
+                        if (state.repeatMode == RepeatMode.ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
+                        "Repeat",
+                        state.repeatMode != RepeatMode.OFF,
+                        player::toggleRepeat
+                    )
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         Icons.AutoMirrored.Filled.VolumeUp,
                         null,
-                        Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        Modifier.size(16.dp),
+                        tint = colors.onSurfaceVariant
                     )
                     Spacer(Modifier.width(8.dp))
                     val onVolume: (Float) -> Unit = {
@@ -200,16 +233,12 @@ fun TrayPanel(
                         modifier = Modifier.weight(1f).height(16.dp)
                             .wheelStep({ PreferencesManager.preferences.value.volume }, 0.05f, onChange = onVolume)
                     )
-                    // The leading icon and its spacer inset the volume bar by 22dp, putting its
-                    // midpoint 11dp right of the axis the seek bar and transport buttons sit on,
-                    // which reads as the buttons being off-centre. Mirror the inset on the right.
-                    Spacer(Modifier.width(22.dp))
                 }
             }
 
-            HorizontalDivider(Modifier.padding(vertical = 6.dp))
+            Spacer(Modifier.height(10.dp))
 
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TrayAction(Icons.Default.Launch, "Open", Modifier.weight(1f)) {
                     onDismiss(); onOpenWindow()
                 }
@@ -217,7 +246,7 @@ fun TrayPanel(
                     Icons.Default.PowerSettingsNew,
                     "Quit",
                     Modifier.weight(1f),
-                    tint = MaterialTheme.colorScheme.error
+                    tint = colors.error
                 ) { onQuit() }
             }
         }
@@ -225,9 +254,21 @@ fun TrayPanel(
     }
 }
 
+/** Shuffle and repeat: gold when on, quiet when off. */
+@Composable
+private fun TrayToggle(icon: ImageVector, label: String, on: Boolean, onClick: () -> Unit) =
+    IconButton(onClick = onClick, modifier = Modifier.size(36.dp)) {
+        Icon(
+            icon,
+            contentDescription = if (on) "$label on" else "$label off",
+            modifier = Modifier.size(18.dp),
+            tint = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+
 @Composable
 private fun TrayAction(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     label: String,
     modifier: Modifier = Modifier,
     tint: Color = MaterialTheme.colorScheme.onSurface,
@@ -235,12 +276,14 @@ private fun TrayAction(
 ) {
     Row(
         modifier
-            .clip(RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, null, Modifier.size(14.dp), tint = tint)
+        Icon(icon, null, Modifier.size(16.dp), tint = tint)
         Spacer(Modifier.width(6.dp))
         Text(label, style = MaterialTheme.typography.bodySmall, color = tint)
     }

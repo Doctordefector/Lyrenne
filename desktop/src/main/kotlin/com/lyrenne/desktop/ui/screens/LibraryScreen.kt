@@ -1,7 +1,13 @@
 package com.lyrenne.desktop.ui.screens
 
 import com.lyrenne.desktop.ui.components.select
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -135,7 +141,7 @@ fun LibraryScreen(
                         )
                     } else {
                         TextButton(
-                            onClick = { LibrarySync.syncLibrary() }
+                            onClick = { LibrarySync.syncLibrary(full = true) }
                         ) {
                             Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(4.dp))
@@ -213,7 +219,7 @@ fun LibraryScreen(
             value = searchQuery,
             onValueChange = { searchQuery = it },
             modifier = Modifier.fillMaxWidth().suppressMediaKeys(),
-            placeholder = { Text("Search library...") },
+            placeholder = { Text("Search library") },
             leadingIcon = { Icon(Icons.Default.Search, null) },
             trailingIcon = {
                 if (searchQuery.isNotEmpty()) {
@@ -222,16 +228,22 @@ fun LibraryScreen(
                     }
                 }
             },
-            singleLine = true
+            singleLine = true,
+            // A filled pill: the outline only appears on focus.
+            shape = RoundedCornerShape(50),
+            colors = OutlinedTextFieldDefaults.colors(
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                unfocusedBorderColor = Color.Transparent
+            )
         )
 
         Spacer(Modifier.height(12.dp))
 
-        // Tab row
-        ScrollableTabRow(
-            selectedTabIndex = selectedTab.ordinal,
-            modifier = Modifier.fillMaxWidth(),
-            edgePadding = 0.dp
+        // Tabs as pills: the selected one filled gold, the rest outlined.
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             LibraryTab.entries.forEach { tab ->
                 val count = when (tab) {
@@ -241,23 +253,16 @@ fun LibraryScreen(
                     LibraryTab.Playlists -> playlists.size
                     LibraryTab.Downloads -> downloadedSongs.size + activeDownloads.size
                 }
-                Tab(
+                PillTab(
+                    label = tab.name,
+                    count = count,
                     selected = selectedTab == tab,
-                    onClick = { selectedTab = tab },
-                    text = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(tab.name)
-                            if (count > 0) {
-                                Spacer(Modifier.width(4.dp))
-                                Badge { Text(count.toString()) }
-                            }
-                        }
-                    }
+                    onClick = { selectedTab = tab }
                 )
             }
         }
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(12.dp))
 
         // Sort controls (for tabs that support sorting)
         if (selectedTab in listOf(LibraryTab.Songs, LibraryTab.Albums, LibraryTab.Artists)) {
@@ -283,6 +288,34 @@ fun LibraryScreen(
 }
 
 @Composable
+private fun PillTab(label: String, count: Int, selected: Boolean, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(50)
+    Row(
+        Modifier
+            .clip(shape)
+            .then(
+                if (selected) Modifier.background(colors.primary)
+                else Modifier.border(1.dp, colors.outline.copy(alpha = 0.5f), shape)
+            )
+            .clickable(role = Role.Tab, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        val fg = if (selected) colors.onPrimary else colors.onSurface
+        Text(label, style = MaterialTheme.typography.labelLarge, color = fg)
+        if (count > 0) {
+            Spacer(Modifier.width(6.dp))
+            Text(
+                count.toString(),
+                style = MaterialTheme.typography.labelMedium,
+                color = if (selected) colors.onPrimary else colors.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
 private fun SortControls(
     sortMode: SortMode,
     sortAscending: Boolean,
@@ -296,6 +329,7 @@ private fun SortControls(
         Text("Sort:", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         SortMode.entries.forEach { mode ->
             FilterChip(
+                shape = RoundedCornerShape(50),
                 selected = sortMode == mode,
                 onClick = { onSortModeChange(mode) },
                 label = { Text(mode.label, style = MaterialTheme.typography.labelSmall) },
@@ -363,11 +397,13 @@ private fun SongsTab(
             verticalAlignment = Alignment.CenterVertically
         ) {
             FilterChip(
+                shape = RoundedCornerShape(50),
                 selected = !showLikedOnly,
                 onClick = { showLikedOnly = false },
                 label = { Text("All (${songs.size})") }
             )
             FilterChip(
+                shape = RoundedCornerShape(50),
                 selected = showLikedOnly,
                 onClick = { showLikedOnly = true },
                 label = { Text("Liked (${likedSongs.size})") },
@@ -547,8 +583,8 @@ private fun SongListItem(
                     model = song.thumbnailUrl,
                     contentDescription = null,
                     modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(4.dp)),
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(8.dp)),
                     contentScale = ContentScale.Crop
                 )
                 if (isPlaying) {
@@ -556,8 +592,8 @@ private fun SongListItem(
                         Icons.Default.GraphicEq,
                         contentDescription = "Playing",
                         modifier = Modifier
-                            .size(48.dp)
-                            .padding(12.dp),
+                            .size(44.dp)
+                            .padding(11.dp),
                         tint = MaterialTheme.colorScheme.primary
                     )
                 }
@@ -653,7 +689,10 @@ private fun SongListItem(
                 }
             }
         },
-        modifier = Modifier.clickable(onClick = onClick)
+        // Flat rows rather than a stack of cards: the hover highlight is the only fill, and the
+        // row shows the art-tinted wash behind it instead of hiding it.
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick)
     )
 
     if (showPlaylistPicker) {

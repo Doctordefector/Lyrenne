@@ -35,8 +35,13 @@ private val LyrenneGold = Color(0xFFA37C43)
 private val LyrenneGoldLight = Color(0xFFDFBE8A)
 
 object LyrenneTokens {
-    val navigationRailWidth = 80.dp
+    // Icon-only rail: labels moved into hover tooltips.
+    val navigationRailWidth = 76.dp
     val playerHeight = 80.dp
+    // The player and tray panel are floating, rounded docks rather than edge-to-edge bars.
+    val dockRadius = 18.dp
+    // Strength of the cover-colour wash (see ArtColor). Low enough to leave text contrast alone.
+    const val artWashAlpha = 0.32f
     val artworkRadius = 4.dp
     val panelRadius = 8.dp
     val contentPadding = 20.dp

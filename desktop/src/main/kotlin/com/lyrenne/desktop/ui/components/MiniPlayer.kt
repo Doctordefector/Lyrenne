@@ -1,6 +1,9 @@
 package com.lyrenne.desktop.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -40,7 +43,8 @@ fun MiniPlayer(
     modifier: Modifier = Modifier,
     onQueueClick: () -> Unit = {},
     onLyricsClick: () -> Unit = {},
-    lyricsActive: Boolean = false
+    lyricsActive: Boolean = false,
+    artTint: State<Color> = remember { mutableStateOf(Color.Transparent) }
 ) {
     // Position is left out: it ticks five times a second, and only the seek bar and the time
     // readout draw it. They collect it themselves, so the rest of the bar stays still.
@@ -86,14 +90,25 @@ fun MiniPlayer(
         }
     }
 
-    Surface(
-        modifier = modifier.height(LyrenneTokens.playerHeight),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        tonalElevation = 0.dp
+    // A floating dock rather than an edge-to-edge bar: inset from the window, rounded, and washed
+    // with the cover's colour. The wash is read in the draw phase, so a track change only redraws.
+    val dockShape = RoundedCornerShape(LyrenneTokens.dockRadius)
+    val dockColor = MaterialTheme.colorScheme.surfaceContainer
+    Box(
+        modifier = modifier
+            .padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 10.dp)
+            .height(LyrenneTokens.playerHeight)
+            .clip(dockShape)
+            .drawBehind {
+                drawRect(dockColor)
+                val tint = artTint.value
+                if (tint.alpha > 0f) drawRect(tint.copy(alpha = tint.alpha * LyrenneTokens.artWashAlpha))
+            }
+            .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, dockShape)
     ) {
         Column {
             // Seekable progress bar
-            SeekBar(player, state.duration)
+            SeekBar(player, state.duration, Modifier.padding(horizontal = 10.dp))
 
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val responsiveLayout = miniPlayerResponsiveLayout(maxWidth)
@@ -111,8 +126,8 @@ fun MiniPlayer(
                         model = squareCropFriendly(song.thumbnailUrl),
                         contentDescription = "Album art",
                         modifier = Modifier
-                            .size(48.dp)
-                            .clip(RoundedCornerShape(LyrenneTokens.artworkRadius)),
+                            .size(46.dp)
+                            .clip(RoundedCornerShape(8.dp)),
                         contentScale = ContentScale.Crop
                     )
 
@@ -226,7 +241,9 @@ fun MiniPlayer(
 
                     Tip(if (state.isPlaying) "Pause (Space)" else "Play (Space)") {
                         FilledIconButton(
-                            onClick = { player.togglePlayPause() }
+                            onClick = { player.togglePlayPause() },
+                            modifier = Modifier.size(44.dp),
+                            shape = CircleShape
                         ) {
                             Icon(
                                 if (state.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
@@ -639,7 +656,7 @@ private fun formatTime(ms: Long): String {
 /** Hover tooltip for the icon-only player controls: the action, and its shortcut if it has one. */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun Tip(text: String, content: @Composable () -> Unit) {
+internal fun Tip(text: String, content: @Composable () -> Unit) {
     androidx.compose.foundation.TooltipArea(
         tooltip = {
             Surface(
@@ -674,12 +691,12 @@ internal fun squareCropFriendly(url: String?): String? {
 
 /** The seek bar. Reads the position itself so a tick recomposes only this. */
 @Composable
-private fun SeekBar(player: DesktopPlayer, duration: Long) {
+private fun SeekBar(player: DesktopPlayer, duration: Long, modifier: Modifier = Modifier) {
     val position by player.select { it.position }
     PlayerSlider(
         value = if (duration > 0) position.toFloat() / duration else 0f,
         onValueChange = { fraction -> player.seekTo((fraction * duration).toLong()) },
-        modifier = Modifier.fillMaxWidth().height(12.dp)
+        modifier = modifier.fillMaxWidth().height(12.dp)
             .wheelStep(
                 value = { player.state.value.position.toFloat() },
                 step = 5_000f,

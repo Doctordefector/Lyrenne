@@ -1,5 +1,9 @@
 package com.lyrenne.desktop.ui.screens
 
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.background
 import com.lyrenne.desktop.ui.theme.selectedChipColors
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -158,8 +162,24 @@ fun SettingsScreen(
     }
 
     var filter by remember { mutableStateOf("") }
-    val sections = remember {
-        listOf("Account", "Appearance", "Audio", "Playback", "Content", "Library", "Privacy", "Lyrics", "Network", "Windows", "Discord", "Last.fm", "System", "Storage", "Backup & Restore", "Updates", "About").filter { it != "Windows" || com.lyrenne.desktop.Platform.isWindows }
+    // Seven groups, not seventeen sections: several held one or two settings, and the index was
+    // louder than the settings. Sub-headings inside a group keep their keys, so deep links such
+    // as SETTINGS_SECTION_UPDATES still land.
+    val sections = SETTINGS_GROUPS
+
+    // The group being read: the last group header at or above the top of the list, or, when the
+    // first header in view sits lower down, the group before it.
+    var activeGroup by remember { mutableStateOf(sections.first()) }
+    LaunchedEffect(listState) {
+        snapshotFlow {
+            listState.layoutInfo.visibleItemsInfo
+                .mapNotNull { info -> (info.key as? String)?.takeIf { it.startsWith("group:") }?.let { it.removePrefix("group:") to info.offset } }
+        }.collect { headers ->
+            val first = headers.firstOrNull() ?: return@collect
+            activeGroup = headers.lastOrNull { it.second <= 120 }?.first
+                ?: sections.getOrNull(sections.indexOf(first.first) - 1)
+                ?: first.first
+        }
     }
 
     // Wide windows get a section index beside the list (click to jump). Every width gets the
@@ -168,7 +188,7 @@ fun SettingsScreen(
         val wide = maxWidth >= 900.dp
         Column(Modifier.fillMaxSize()) {
         Row(
-            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp),
+            Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
@@ -185,6 +205,12 @@ fun SettingsScreen(
                 placeholder = { Text("Filter settings") },
                 leadingIcon = { Icon(Icons.Default.Search, null) },
                 singleLine = true,
+                shape = RoundedCornerShape(50),
+                colors = OutlinedTextFieldDefaults.colors(
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    unfocusedBorderColor = Color.Transparent
+                ),
                 modifier = Modifier.width(260.dp).suppressMediaKeys()
             )
         }
@@ -192,15 +218,22 @@ fun SettingsScreen(
             if (wide) {
                 Column(
                     Modifier.width(200.dp).fillMaxHeight().verticalScroll(rememberScrollState())
-                        .padding(start = 16.dp, top = 8.dp, bottom = 16.dp)
+                        .padding(start = 16.dp, top = 12.dp, bottom = 16.dp)
                 ) {
                     sections.forEach { name ->
-                        TextButton(
-                            onClick = { scope.launch { scrollToKey("section:$name") } },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(name, modifier = Modifier.fillMaxWidth())
-                        }
+                        val active = name == activeGroup
+                        Text(
+                            name,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = if (active) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 1.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(if (active) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+                                .clickable { scope.launch { scrollToKey("group:$name") } }
+                                .padding(horizontal = 14.dp, vertical = 9.dp)
+                        )
                     }
                 }
             }
@@ -211,10 +244,10 @@ fun SettingsScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
 
-                // Account section
-                item(key = "section:Account") {
-                    SettingsSectionHeader("Account")
+                item(key = "group:Account") {
+                    SettingsGroupHeader("Account")
                 }
+
 
                 item {
                     if (authState.isLoggedIn && authState.accountInfo != null) {
@@ -339,49 +372,10 @@ fun SettingsScreen(
                     AccountSwitcher(onAddAccount = onLoginClick)
                 }
 
-                // Appearance section
-                item(key = "section:Appearance") {
-                    SettingsSectionHeader("Appearance")
+                item(key = "group:Playback & audio") {
+                    SettingsGroupHeader("Playback & audio")
                 }
 
-                item {
-                    var expanded by remember { mutableStateOf(false) }
-                    SettingsItem(
-                        icon = Icons.Default.DarkMode,
-                        title = "Theme",
-                        subtitle = when (preferences.themeMode) {
-                            ThemeMode.DARK -> "Dark"
-                            ThemeMode.LIGHT -> "Light"
-                            ThemeMode.SYSTEM -> "System"
-                        },
-                        onClick = { expanded = true }
-                    ) {
-                        DropdownMenu(
-                            expanded = expanded,
-                            onDismissRequest = { expanded = false }
-                        ) {
-                            ThemeMode.entries.forEach { mode ->
-                                DropdownMenuItem(
-                                    text = { Text(mode.name.lowercase().replaceFirstChar { it.uppercase() }) },
-                                    onClick = {
-                                        PreferencesManager.setThemeMode(mode)
-                                        expanded = false
-                                    },
-                                    leadingIcon = {
-                                        if (preferences.themeMode == mode) {
-                                            Icon(Icons.Default.Check, null)
-                                        }
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // Audio section
-                item(key = "section:Audio") {
-                    SettingsSectionHeader("Audio")
-                }
 
                 item {
                     var expanded by remember { mutableStateOf(false) }
@@ -413,10 +407,6 @@ fun SettingsScreen(
                     }
                 }
 
-                // Playback section
-                item(key = "section:Playback") {
-                    SettingsSectionHeader("Playback")
-                }
 
                 item {
                     SettingsItem(
@@ -500,10 +490,74 @@ fun SettingsScreen(
                     )
                 }
 
-                // Content section
-                item(key = "section:Content") {
-                    SettingsSectionHeader("Content")
+                item(key = "group:Lyrics") {
+                    SettingsGroupHeader("Lyrics")
                 }
+
+
+                item {
+                    SettingsItem(
+                        icon = Icons.Default.FormatSize,
+                        title = "Lyrics Text Size",
+                        subtitle = "${preferences.lyricsTextSize.toInt()} pt",
+                        trailing = {
+                            Slider(
+                                value = preferences.lyricsTextSize,
+                                onValueChange = { PreferencesManager.setLyricsTextSize(it) },
+                                valueRange = 12f..32f,
+                                steps = 9,
+                                modifier = Modifier.width(160.dp)
+                                    .wheelStep({ PreferencesManager.preferences.value.lyricsTextSize }, 2f, 12f..32f) {
+                                        PreferencesManager.setLyricsTextSize(it)
+                                    }
+                            )
+                        }
+                    )
+                }
+
+                item {
+                    var expanded by remember { mutableStateOf(false) }
+                    SettingsItem(
+                        icon = Icons.Default.FormatAlignLeft,
+                        title = "Lyrics Alignment",
+                        subtitle = preferences.lyricsPosition.name.lowercase().replaceFirstChar { it.uppercase() },
+                        onClick = { expanded = true }
+                    ) {
+                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                            com.lyrenne.desktop.settings.LyricsPosition.entries.forEach { pos ->
+                                DropdownMenuItem(
+                                    text = { Text(pos.name.lowercase().replaceFirstChar { it.uppercase() }) },
+                                    onClick = {
+                                        PreferencesManager.setLyricsPosition(pos)
+                                        expanded = false
+                                    },
+                                    leadingIcon = {
+                                        if (preferences.lyricsPosition == pos) Icon(Icons.Default.Check, null)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    SettingsItem(
+                        icon = Icons.Default.TouchApp,
+                        title = "Click Lyrics to Seek",
+                        subtitle = "Jump to a line by clicking it",
+                        trailing = {
+                            Switch(
+                                checked = preferences.lyricsClickToSeek,
+                                onCheckedChange = { PreferencesManager.setLyricsClickToSeek(it) }
+                            )
+                        }
+                    )
+                }
+
+                item(key = "group:Library & content") {
+                    SettingsGroupHeader("Library & content")
+                }
+
 
                 item {
                     var expanded by remember { mutableStateOf(false) }
@@ -599,10 +653,6 @@ fun SettingsScreen(
                     )
                 }
 
-                // Library section
-                item(key = "section:Library") {
-                    SettingsSectionHeader("Library")
-                }
 
                 item {
                     SettingsItem(
@@ -632,7 +682,6 @@ fun SettingsScreen(
                     )
                 }
 
-                // Privacy section
                 item(key = "section:Privacy") {
                     SettingsSectionHeader("Privacy")
                 }
@@ -665,134 +714,41 @@ fun SettingsScreen(
                     )
                 }
 
-                // Lyrics section
-                item(key = "section:Lyrics") {
-                    SettingsSectionHeader("Lyrics")
+                item(key = "group:Appearance") {
+                    SettingsGroupHeader("Appearance")
                 }
 
+
                 item {
+                    // Three choices inline. A dropdown opened detached from its row, over the
+                    // account card.
                     SettingsItem(
-                        icon = Icons.Default.FormatSize,
-                        title = "Lyrics Text Size",
-                        subtitle = "${preferences.lyricsTextSize.toInt()} pt",
+                        icon = Icons.Default.DarkMode,
+                        title = "Theme",
+                        subtitle = "Follow the system, or always light or dark",
                         trailing = {
-                            Slider(
-                                value = preferences.lyricsTextSize,
-                                onValueChange = { PreferencesManager.setLyricsTextSize(it) },
-                                valueRange = 12f..32f,
-                                steps = 9,
-                                modifier = Modifier.width(160.dp)
-                                    .wheelStep({ PreferencesManager.preferences.value.lyricsTextSize }, 2f, 12f..32f) {
-                                        PreferencesManager.setLyricsTextSize(it)
+                            SingleChoiceSegmentedButtonRow {
+                                listOf(ThemeMode.SYSTEM to "System", ThemeMode.LIGHT to "Light", ThemeMode.DARK to "Dark")
+                                    .forEachIndexed { index, (mode, label) ->
+                                        SegmentedButton(
+                                            selected = preferences.themeMode == mode,
+                                            onClick = { PreferencesManager.setThemeMode(mode) },
+                                            shape = SegmentedButtonDefaults.itemShape(index, 3),
+                                            colors = SegmentedButtonDefaults.colors(
+                                                activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                                activeContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                            )
+                                        ) { Text(label) }
                                     }
-                            )
-                        }
-                    )
-                }
-
-                item {
-                    var expanded by remember { mutableStateOf(false) }
-                    SettingsItem(
-                        icon = Icons.Default.FormatAlignLeft,
-                        title = "Lyrics Alignment",
-                        subtitle = preferences.lyricsPosition.name.lowercase().replaceFirstChar { it.uppercase() },
-                        onClick = { expanded = true }
-                    ) {
-                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                            com.lyrenne.desktop.settings.LyricsPosition.entries.forEach { pos ->
-                                DropdownMenuItem(
-                                    text = { Text(pos.name.lowercase().replaceFirstChar { it.uppercase() }) },
-                                    onClick = {
-                                        PreferencesManager.setLyricsPosition(pos)
-                                        expanded = false
-                                    },
-                                    leadingIcon = {
-                                        if (preferences.lyricsPosition == pos) Icon(Icons.Default.Check, null)
-                                    }
-                                )
                             }
                         }
-                    }
-                }
-
-                item {
-                    SettingsItem(
-                        icon = Icons.Default.TouchApp,
-                        title = "Click Lyrics to Seek",
-                        subtitle = "Jump to a line by clicking it",
-                        trailing = {
-                            Switch(
-                                checked = preferences.lyricsClickToSeek,
-                                onCheckedChange = { PreferencesManager.setLyricsClickToSeek(it) }
-                            )
-                        }
                     )
                 }
 
-                // Network section
-                item(key = "section:Network") {
-                    SettingsSectionHeader("Network")
+                item(key = "group:Integrations") {
+                    SettingsGroupHeader("Integrations")
                 }
 
-                item {
-                    SettingsItem(
-                        icon = Icons.Default.VpnLock,
-                        title = "Use Proxy",
-                        subtitle = if (preferences.proxyEnabled)
-                            "${preferences.proxyType.name} ${preferences.proxyHost}:${preferences.proxyPort}"
-                        else
-                            "Route YouTube traffic through a proxy",
-                        trailing = {
-                            Switch(
-                                checked = preferences.proxyEnabled,
-                                onCheckedChange = {
-                                    PreferencesManager.setProxyEnabled(it)
-                                    com.lyrenne.desktop.applyNetworkPreferences()
-                                }
-                            )
-                        }
-                    )
-                }
-
-                if (preferences.proxyEnabled) {
-                    item {
-                        ProxyConfigCard(
-                            type = preferences.proxyType,
-                            host = preferences.proxyHost,
-                            port = preferences.proxyPort,
-                            username = preferences.proxyUsername,
-                            password = preferences.proxyPassword
-                        )
-                    }
-                }
-
-                // Windows section (the Start Menu shortcut means nothing elsewhere)
-                if (com.lyrenne.desktop.Platform.isWindows) item(key = "section:Windows") {
-                    SettingsSectionHeader("Windows")
-                }
-
-                if (com.lyrenne.desktop.Platform.isWindows) item {
-                    SettingsItem(
-                        icon = Icons.Default.PlayCircle,
-                        title = "Name Lyrenne in Windows media controls",
-                        subtitle = if (preferences.windowsMediaAppName)
-                            "Windows shows the Now Playing card as Lyrenne. Uses a Start Menu shortcut, " +
-                                "the only file Lyrenne writes outside its own folder."
-                        else
-                            "Windows shows the Now Playing card as \"Unknown app\"",
-                        trailing = {
-                            Switch(
-                                checked = preferences.windowsMediaAppName,
-                                onCheckedChange = {
-                                    PreferencesManager.setWindowsMediaAppName(it)
-                                    WindowsStartMenuShortcut.apply(it)
-                                }
-                            )
-                        }
-                    )
-                }
-
-                // Discord section
                 item(key = "section:Discord") {
                     SettingsSectionHeader("Discord")
                 }
@@ -814,7 +770,6 @@ fun SettingsScreen(
                     )
                 }
 
-                // Last.fm section
                 item(key = "section:Last.fm") {
                     SettingsSectionHeader("Last.fm")
                 }
@@ -845,7 +800,16 @@ fun SettingsScreen(
                     var loginStatus by remember { mutableStateOf<String?>(null) }
                     var isLoggingIn by remember { mutableStateOf(false) }
 
-                    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                    // The key fields used to sit on the page whether or not scrobbling was wanted.
+                    if (preferences.lastFmEnabled || preferences.lastFmSessionKey != null) Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                        if (preferences.lastFmSessionKey == null) {
+                            Text(
+                                "Last.fm needs an API key of your own: create one (free) with the link below, then sign in.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                        }
                         if (preferences.lastFmSessionKey != null) {
                             // Already authenticated
                             Card(
@@ -964,10 +928,35 @@ fun SettingsScreen(
                     }
                 }
 
-                // System section
-                item(key = "section:System") {
-                    SettingsSectionHeader("System")
+                if (com.lyrenne.desktop.Platform.isWindows) item(key = "section:Windows") {
+                    SettingsSectionHeader("Windows")
                 }
+
+                if (com.lyrenne.desktop.Platform.isWindows) item {
+                    SettingsItem(
+                        icon = Icons.Default.PlayCircle,
+                        title = "Name Lyrenne in Windows media controls",
+                        subtitle = if (preferences.windowsMediaAppName)
+                            "Windows shows the Now Playing card as Lyrenne. Uses a Start Menu shortcut, " +
+                                "the only file Lyrenne writes outside its own folder."
+                        else
+                            "Windows shows the Now Playing card as \"Unknown app\"",
+                        trailing = {
+                            Switch(
+                                checked = preferences.windowsMediaAppName,
+                                onCheckedChange = {
+                                    PreferencesManager.setWindowsMediaAppName(it)
+                                    WindowsStartMenuShortcut.apply(it)
+                                }
+                            )
+                        }
+                    )
+                }
+
+                item(key = "group:System") {
+                    SettingsGroupHeader("System")
+                }
+
 
                 // No tray (GNOME): hiding the window would leave no way back, so the option is not offered.
                 if (com.lyrenne.desktop.notification.DesktopNotification.trayActive) item {
@@ -1022,7 +1011,42 @@ fun SettingsScreen(
                     )
                 }
 
-                // Cache section
+                item(key = "section:Network") {
+                    SettingsSectionHeader("Network")
+                }
+
+                item {
+                    SettingsItem(
+                        icon = Icons.Default.VpnLock,
+                        title = "Use Proxy",
+                        subtitle = if (preferences.proxyEnabled)
+                            "${preferences.proxyType.name} ${preferences.proxyHost}:${preferences.proxyPort}"
+                        else
+                            "Route YouTube traffic through a proxy",
+                        trailing = {
+                            Switch(
+                                checked = preferences.proxyEnabled,
+                                onCheckedChange = {
+                                    PreferencesManager.setProxyEnabled(it)
+                                    com.lyrenne.desktop.applyNetworkPreferences()
+                                }
+                            )
+                        }
+                    )
+                }
+
+                if (preferences.proxyEnabled) {
+                    item {
+                        ProxyConfigCard(
+                            type = preferences.proxyType,
+                            host = preferences.proxyHost,
+                            port = preferences.proxyPort,
+                            username = preferences.proxyUsername,
+                            password = preferences.proxyPassword
+                        )
+                    }
+                }
+
                 item(key = "section:Storage") {
                     SettingsSectionHeader("Storage")
                 }
@@ -1122,7 +1146,6 @@ fun SettingsScreen(
                     )
                 }
 
-                // Backup & Restore section
                 item(key = "section:Backup & Restore") {
                     SettingsSectionHeader("Backup & Restore")
                 }
@@ -1183,7 +1206,7 @@ fun SettingsScreen(
                 }
 
                 // Updates section. Keyed so the update badge can deep-link here; see the LaunchedEffect
-                // above. Removing or renaming this key silently breaks that jump.
+
                 item(key = SETTINGS_SECTION_UPDATES) {
                     SettingsSectionHeader("Updates")
                 }
@@ -1342,7 +1365,6 @@ fun SettingsScreen(
                     }
                 }
 
-                // About section
                 item(key = "section:About") {
                     SettingsSectionHeader("About")
                 }
@@ -1432,15 +1454,31 @@ fun SettingsScreen(
     }
 }
 
+val SETTINGS_GROUPS = listOf(
+    "Account", "Playback & audio", "Lyrics", "Library & content", "Appearance", "Integrations", "System"
+)
+
 @Composable
-private fun SettingsSectionHeader(title: String) {
+private fun SettingsGroupHeader(title: String) {
     // While filtering, a header would mostly sit above nothing.
     if (LocalSettingsFilter.current.isNotBlank()) return
     Text(
         text = title,
-        style = MaterialTheme.typography.titleSmall,
+        style = MaterialTheme.typography.titleLarge,
         color = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.padding(vertical = 8.dp)
+        modifier = Modifier.padding(top = 20.dp, bottom = 4.dp)
+    )
+}
+
+/** A heading inside a group (Privacy, Last.fm, Updates). */
+@Composable
+private fun SettingsSectionHeader(title: String) {
+    if (LocalSettingsFilter.current.isNotBlank()) return
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 8.dp, start = 16.dp)
     )
 }
 

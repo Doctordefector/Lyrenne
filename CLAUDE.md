@@ -1174,7 +1174,7 @@ declarations that must match, and shipping a build that thinks it is older than 
 user in a permanent update loop. Verify with `git show HEAD:<file>`, not just the working tree.
 
 Clicking the badge deep-links to the Updates section rather than dropping the user at the top of a
-16-section list, which is barely better than not navigating. The jump finds its target **by key**
+long list (7 groups, Updates near the end), which is barely better than not navigating. The jump finds its target **by key**
 (`SETTINGS_SECTION_UPDATES` on that `item`), never by index: Settings is 57 items and someone will
 eventually insert a section above Updates, at which point an index constant would silently land
 people on the wrong setting. A `LazyColumn` only knows about composed items, so the effect walks

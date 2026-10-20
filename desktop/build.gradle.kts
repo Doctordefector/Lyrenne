@@ -372,7 +372,10 @@ tasks.register("signPortableZip") {
 tasks.withType<Test>().configureEach {
     if (project.hasProperty("ci")) exclude("**/*SmokeTest*")
     // UiSnapshot renders the app headless to build/snapshots; a dev tool, off unless asked for.
-    if (project.hasProperty("snapshots")) systemProperty("snapshots", "1")
+    if (project.hasProperty("snapshots")) {
+        systemProperty("snapshots", "1")
+        outputs.upToDateWhen { false } // the step script is not a task input
+    }
 }
 
 sqldelight {

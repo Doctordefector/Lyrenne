@@ -604,7 +604,7 @@ internal fun miniPlayerResponsiveLayout(width: androidx.compose.ui.unit.Dp): Min
  * Without the hours branch a 90 minute mix rendered as "90:00" and a long set as "150:00".
  * Never wrong, just unreadable, and hour-plus uploads are common on YouTube Music.
  */
-private fun formatTime(ms: Long): String {
+internal fun formatTime(ms: Long): String {
     val totalSeconds = (ms / 1000).coerceAtLeast(0)
     val hours = totalSeconds / 3600
     val minutes = (totalSeconds % 3600) / 60

@@ -124,8 +124,10 @@ private val LyrenneTypography = Typography(
         lineHeight = 28.sp,
         letterSpacing = (-0.2).sp
     ),
+    // Section titles (Home shelves, artist sections, settings groups). Bold, so a section reads
+    // as a level above the SemiBold/Medium titles of the tiles and rows beneath it.
     titleLarge = TextStyle(
-        fontWeight = FontWeight.SemiBold,
+        fontWeight = FontWeight.Bold,
         fontSize = 19.sp,
         lineHeight = 25.sp
     ),

@@ -91,7 +91,8 @@ fun MediaTile(
             Column(modifier = Modifier.padding(horizontal = 2.dp, vertical = 8.dp)) {
                 Text(
                     text = item.title,
-                    style = MaterialTheme.typography.titleSmall,
+                    // Medium, not SemiBold: the section title above is the heavier one.
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )

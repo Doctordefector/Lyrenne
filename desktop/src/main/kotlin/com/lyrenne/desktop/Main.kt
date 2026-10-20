@@ -437,6 +437,8 @@ private fun runApp() {
             title = windowTitle,
             state = windowState,
             icon = appIcon,
+            onPreviewKeyEvent = { com.lyrenne.desktop.ui.AppShortcuts.preview(it) },
+            onKeyEvent = { com.lyrenne.desktop.ui.AppShortcuts.bubble(it) },
         ) {
             // Middle-click autoscroll. Registered on the toolkit rather than the window so it
             // fires wherever the pointer is inside the app — Compose consumes mouse events

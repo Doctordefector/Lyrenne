@@ -94,7 +94,7 @@ fun LyricsPanel(
         exit = slideOutHorizontally { it }
     ) {
         Surface(
-            modifier = modifier.width(350.dp).fillMaxHeight(),
+            modifier = modifier.fillMaxHeight(),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 2.dp
         ) {

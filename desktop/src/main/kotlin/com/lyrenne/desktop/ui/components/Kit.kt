@@ -1,5 +1,12 @@
 package com.lyrenne.desktop.ui.components
 
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -7,7 +14,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -62,5 +75,58 @@ fun ScreenTitle(text: String, modifier: Modifier = Modifier, actions: @Composabl
             modifier = Modifier.weight(1f)
         )
         actions()
+    }
+}
+
+/** A tool screen's title, with Back only when it was reached from somewhere deeper. */
+@Composable
+fun ToolHeader(title: String, onBack: (() -> Unit)?, actions: @Composable RowScope.() -> Unit = {}) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (onBack != null) {
+            Tip("Back (Esc)") {
+                IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
+            }
+            Spacer(Modifier.width(8.dp))
+        }
+        ScreenTitle(title, Modifier.weight(1f), actions)
+    }
+}
+
+/** Swallows clicks and drags (not the wheel) for content shown but not usable right now. */
+fun Modifier.blockPointerInput(): Modifier = pointerInput(Unit) {
+    awaitPointerEventScope {
+        while (true) {
+            val event = awaitPointerEvent(PointerEventPass.Initial)
+            if (event.type != PointerEventType.Scroll) event.changes.forEach { it.consume() }
+        }
+    }
+}
+
+/** A tab as a pill: filled when selected, outlined otherwise, with an optional count. */
+@Composable
+fun PillTab(label: String, selected: Boolean, onClick: () -> Unit, count: Int = 0) {
+    val colors = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(50)
+    Row(
+        Modifier
+            .clip(shape)
+            .then(
+                if (selected) Modifier.background(colors.primary)
+                else Modifier.border(1.dp, colors.outline.copy(alpha = 0.5f), shape)
+            )
+            .clickable(role = Role.Tab, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        val fg = if (selected) colors.onPrimary else colors.onSurface
+        Text(label, style = MaterialTheme.typography.labelLarge, color = fg)
+        if (count > 0) {
+            Spacer(Modifier.width(6.dp))
+            Text(
+                count.toString(),
+                style = MaterialTheme.typography.labelMedium,
+                color = if (selected) colors.onPrimary else colors.onSurfaceVariant
+            )
+        }
     }
 }

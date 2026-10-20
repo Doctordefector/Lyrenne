@@ -1,5 +1,13 @@
 package com.lyrenne.desktop.ui.screens
 
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.alpha
+import com.lyrenne.desktop.ui.theme.LyrenneTokens
+import com.lyrenne.desktop.ui.components.blockPointerInput
+import com.lyrenne.desktop.ui.components.ToolHeader
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -21,7 +29,8 @@ import com.lyrenne.desktop.ui.components.wheelStep
 @Composable
 fun EqualizerScreen(
     player: DesktopPlayer,
-    onBack: () -> Unit
+    /** Null when the screen was opened from the rail: it is a destination, not a step down. */
+    onBack: (() -> Unit)? = null
 ) {
     val prefs by PreferencesManager.preferences.collectAsState()
     val presets = remember { player.getEqualizerPresets() }
@@ -32,15 +41,16 @@ fun EqualizerScreen(
     var localPreamp by remember(prefs.eqPreamp) { mutableStateOf(prefs.eqPreamp) }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp)
+        modifier = Modifier.fillMaxSize().padding(LyrenneTokens.contentPadding)
     ) {
-        // Header
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Default.ArrowBack, "Back")
-            }
-            Text("Equalizer", style = MaterialTheme.typography.headlineMedium)
-            Spacer(Modifier.weight(1f))
+        ToolHeader("Equalizer", onBack) {
+            // Labelled, and the controls stay in view: an unlabelled switch over an empty page
+            // gave no hint what turning it on would do.
+            Text(
+                if (prefs.eqEnabled) "On" else "Off",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             Switch(
                 checked = prefs.eqEnabled,
                 onCheckedChange = { player.setEqualizerEnabled(it) }
@@ -50,17 +60,20 @@ fun EqualizerScreen(
         Spacer(Modifier.height(16.dp))
 
         if (!prefs.eqEnabled) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    "Enable the equalizer to customize your sound",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            return@Column
+            Text(
+                "Turn the equalizer on to apply these settings.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
         }
 
-        Column(Modifier.verticalScroll(rememberScrollState())) {
+        Column(
+            Modifier
+                .alpha(if (prefs.eqEnabled) 1f else 0.45f)
+                .then(if (prefs.eqEnabled) Modifier else Modifier.blockPointerInput())
+                .verticalScroll(rememberScrollState())
+        ) {
             // Preset selector
             if (presets.isNotEmpty()) {
                 Text("Preset", style = MaterialTheme.typography.titleSmall)
@@ -155,8 +168,9 @@ fun EqualizerScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
-                        // Vertical slider (rotated horizontal slider)
-                        // Using a Column with a vertical Slider
+                        // A horizontal Slider turned upright: rotated about its corner, with the
+                        // layout swapping width and height. It used to be a 48 dp horizontal
+                        // slider standing in for a vertical one.
                         Slider(
                             value = gain,
                             onValueChange = { newGain ->
@@ -168,7 +182,8 @@ fun EqualizerScreen(
                             valueRange = -20f..20f,
                             modifier = Modifier
                                 .weight(1f)
-                                .width(48.dp)
+                                .width(40.dp)
+                                .upright()
                                 .wheelStep({ PreferencesManager.preferences.value.eqBands.getOrElse(index) { 0f } }, 1f, -20f..20f) {
                                     localBands = localBands.toMutableList().also { bands -> bands[index] = it }
                                     player.setEqualizerBand(index, it)
@@ -203,6 +218,22 @@ fun EqualizerScreen(
         }
     }
 }
+
+/** Lays a horizontal control out vertically, low end at the bottom. */
+private fun Modifier.upright(): Modifier = this
+    .graphicsLayer {
+        rotationZ = 270f
+        transformOrigin = TransformOrigin(0f, 0f)
+    }
+    .layout { measurable, constraints ->
+        val placeable = measurable.measure(
+            Constraints(
+                minWidth = constraints.minHeight, maxWidth = constraints.maxHeight,
+                minHeight = constraints.minWidth, maxHeight = constraints.maxWidth
+            )
+        )
+        layout(placeable.height, placeable.width) { placeable.place(-placeable.width, 0) }
+    }
 
 private fun formatFreq(hz: Float): String {
     return if (hz >= 1000) "${(hz / 1000).toInt()}k" else "${hz.toInt()}"

@@ -1,5 +1,8 @@
 package com.lyrenne.desktop.ui.screens
 
+import com.lyrenne.desktop.ui.components.PillTab
+import com.lyrenne.desktop.ui.theme.LyrenneTokens
+import com.lyrenne.desktop.ui.components.ToolHeader
 import com.lyrenne.desktop.ui.theme.selectedChipColors
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -54,7 +57,8 @@ enum class StatPeriod(val label: String, val durationMs: Long) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatsScreen(
-    onBack: () -> Unit,
+    /** Null when the screen was opened from the rail: it is a destination, not a step down. */
+    onBack: (() -> Unit)? = null,
     onArtistClick: (String) -> Unit = {},
     onAlbumClick: (String) -> Unit = {},
     player: DesktopPlayer? = null
@@ -85,21 +89,15 @@ fun StatsScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        // Header
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Default.ArrowBack, "Back")
-            }
-            Text("Listening Stats", style = MaterialTheme.typography.headlineMedium)
-        }
+    Column(modifier = Modifier.fillMaxSize().padding(LyrenneTokens.contentPadding)) {
+        ToolHeader("Listening stats", onBack)
 
         Spacer(Modifier.height(16.dp))
 
-        // Stats / History tabs
-        TabRow(selectedTabIndex = selectedTab, modifier = Modifier.width(320.dp)) {
-            Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("Stats") })
-            Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("History") })
+        // Stats / History as the same pill tabs Library uses
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PillTab("Stats", selected = selectedTab == 0, onClick = { selectedTab = 0 })
+            PillTab("History", selected = selectedTab == 1, onClick = { selectedTab = 1 })
         }
 
         Spacer(Modifier.height(16.dp))
@@ -114,6 +112,7 @@ fun StatsScreen(
             StatPeriod.entries.forEach { period ->
                 FilterChip(
                     colors = selectedChipColors(),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(50),
                     selected = selectedPeriod == period,
                     onClick = { selectedPeriod = period },
                     label = { Text(period.label) }

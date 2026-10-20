@@ -77,6 +77,17 @@ enum class AutoPlaylistType(val title: String) {
     MOST_PLAYED("Most Played")
 }
 
+/**
+ * The app's keyboard shortcuts, read by the window's own key handlers in Main.kt. Window level
+ * sees every key whether or not a composable has focus; App installs the handlers while the main
+ * screen is up and removes them when it leaves.
+ */
+object AppShortcuts {
+    var preview: (KeyEvent) -> Boolean = { false }
+    var bubble: (KeyEvent) -> Boolean = { false }
+    fun reset() { preview = { false }; bubble = { false } }
+}
+
 @Composable
 fun App(player: DesktopPlayer) {
     // Read once, not as state: preferences are already loaded by the time App composes, and
@@ -138,15 +149,6 @@ fun App(player: DesktopPlayer) {
         }
     }
 
-    // Queue screen overlay
-    if (showQueueScreen) {
-        QueueScreen(
-            player = player,
-            onDismiss = { showQueueScreen = false }
-        )
-        return
-    }
-
     when (currentAppScreen) {
         AppScreen.Onboarding -> {
             OnboardingScreen(
@@ -168,15 +170,18 @@ fun App(player: DesktopPlayer) {
         }
 
         AppScreen.Main -> {
-            Row(modifier = Modifier.fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                // TUNNEL phase (parent-first): Escape + Ctrl shortcuts only.
+            // Shortcuts are installed on the window (see AppShortcuts), not on this Row: a
+            // node's handler only sees keys while something inside it has focus, and a click on
+            // a list row or empty space leaves nothing focused.
+            DisposableEffect(Unit) {
+                // TUNNEL phase (before the focused node): Escape + Ctrl shortcuts only.
                 // These use modifier keys so they don't conflict with text input.
-                .onPreviewKeyEvent { event ->
-                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                AppShortcuts.preview = preview@{ event ->
+                    if (event.type != KeyEventType.KeyDown) return@preview false
                     when {
                         event.key == Key.Escape -> when {
                             AutoScroll.isActive -> { AutoScroll.stop(); true }
+                            showCommandPalette -> { showCommandPalette = false; true }
                             showQueueScreen -> { showQueueScreen = false; true }
                             showLyricsPanel -> { showLyricsPanel = false; true }
                             detailStack.isNotEmpty() -> { navigateBack(); true }
@@ -185,8 +190,8 @@ fun App(player: DesktopPlayer) {
                         event.isCtrlPressed -> when (event.key) {
                             // Navigation shortcuts stay global.
                             Key.F -> { currentScreen = Screen.Search; detailStack.clear(); true }
-                            Key.Q -> { showQueueScreen = !showQueueScreen; true }
-                            Key.L -> { showLyricsPanel = !showLyricsPanel; true }
+                            Key.Q -> { showQueueScreen = !showQueueScreen; if (showQueueScreen) showLyricsPanel = false; true }
+                            Key.L -> { showLyricsPanel = !showLyricsPanel; if (showLyricsPanel) showQueueScreen = false; true }
                             Key.K -> { showCommandPalette = !showCommandPalette; true }
                             // Player shortcuts must not steal Ctrl+Left/Right (word jump),
                             // Ctrl+S/P/R etc. while the user is typing in a text field.
@@ -216,13 +221,13 @@ fun App(player: DesktopPlayer) {
                         else -> false
                     }
                 }
-                // BUBBLE phase (child-first): Bare keys (Space, M, arrows).
+                // BUBBLE phase (after the focused node): bare keys (Space, M, arrows).
                 // Text fields consume these first (typing characters / moving cursor).
                 // Only reaches here if NO text field handled the event.
-                .onKeyEvent { event ->
-                    if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
-                    if (event.isCtrlPressed) return@onKeyEvent false // already handled in preview
-                    if (MediaKeyHandler.textInputActive) return@onKeyEvent false
+                AppShortcuts.bubble = bubble@{ event ->
+                    if (event.type != KeyEventType.KeyDown) return@bubble false
+                    if (event.isCtrlPressed) return@bubble false // already handled in preview
+                    if (MediaKeyHandler.textInputActive) return@bubble false
                     when (event.key) {
                         Key.Spacebar -> { player.togglePlayPause(); true }
                         Key.M -> { MediaKeyHandler.toggleMute(player); true }
@@ -238,6 +243,11 @@ fun App(player: DesktopPlayer) {
                         else -> false
                     }
                 }
+                onDispose { AppShortcuts.reset() }
+            }
+
+            Row(modifier = Modifier.fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
             ) {
                 // Side navigation rail
                 NavigationRail(
@@ -347,11 +357,9 @@ fun App(player: DesktopPlayer) {
                         size = size.copy(height = 340.dp.toPx())
                     )
                 }) {
-                    Row(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                    ) {
+                    BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                    val panelWidth = (maxWidth * 0.32f).coerceIn(280.dp, 420.dp)
+                    Row(Modifier.fillMaxSize()) {
                         // Screen content
                         Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                             val currentDetail = detailStack.lastOrNull()
@@ -502,20 +510,31 @@ fun App(player: DesktopPlayer) {
                             }
                         }
 
-                        // Lyrics panel (slides in from right)
+                        // Right-side panel: lyrics or the queue, never both, and never a
+                        // full-window takeover, so the player dock stays usable beside it.
                         LyricsPanel(
                             player = player,
-                            visible = showLyricsPanel,
-                            onDismiss = { showLyricsPanel = false }
+                            visible = showLyricsPanel && !showQueueScreen,
+                            onDismiss = { showLyricsPanel = false },
+                            modifier = Modifier.width(panelWidth)
                         )
+                        if (showQueueScreen) {
+                            VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                            QueueScreen(
+                                player = player,
+                                onDismiss = { showQueueScreen = false },
+                                modifier = Modifier.width(panelWidth.coerceAtLeast(340.dp)).fillMaxHeight()
+                            )
+                        }
+                    }
                     }
 
                     MiniPlayer(
                         player = player,
                         modifier = Modifier.fillMaxWidth(),
-                        onQueueClick = { showQueueScreen = true },
-                        onLyricsClick = { showLyricsPanel = !showLyricsPanel },
-                        lyricsActive = showLyricsPanel,
+                        onQueueClick = { showQueueScreen = !showQueueScreen; if (showQueueScreen) showLyricsPanel = false },
+                        onLyricsClick = { showLyricsPanel = !showLyricsPanel; if (showLyricsPanel) showQueueScreen = false },
+                        lyricsActive = showLyricsPanel && !showQueueScreen,
                         artTint = artTint
                     )
                 }
@@ -533,8 +552,8 @@ fun App(player: DesktopPlayer) {
                             is PaletteAction.GoSettings -> { currentScreen = Screen.Settings; detailStack.clear() }
                             is PaletteAction.GoEqualizer -> { detailStack.clear(); detailStack.add(DetailScreen.Equalizer) }
                             is PaletteAction.GoStats -> { detailStack.clear(); detailStack.add(DetailScreen.Stats) }
-                            is PaletteAction.GoQueue -> { showQueueScreen = true }
-                            is PaletteAction.GoLyrics -> { showLyricsPanel = !showLyricsPanel }
+                            is PaletteAction.GoQueue -> { showQueueScreen = true; showLyricsPanel = false }
+                            is PaletteAction.GoLyrics -> { showLyricsPanel = !showLyricsPanel; if (showLyricsPanel) showQueueScreen = false }
                             is PaletteAction.NextTrack -> scope.launch { player.playNext() }
                             is PaletteAction.PrevTrack -> scope.launch { player.playPrevious() }
                             is PaletteAction.PlaySong -> scope.launch { player.playSong(action.song) }

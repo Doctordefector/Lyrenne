@@ -164,7 +164,7 @@ Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop 
 | ui/screens/HomeScreen.kt | Home feed with continuations |
 | ui/screens/SearchScreen.kt | Search with filters + suggestions |
 | ui/screens/LibraryScreen.kt | Library tabs (Songs/Albums/Artists/Playlists/Downloads) |
-| ui/screens/QueueScreen.kt | Queue overlay with drag-to-reorder |
+| ui/screens/QueueScreen.kt | Queue side panel (shares the right slot with lyrics) with drag-to-reorder |
 | ui/screens/LoginScreen.kt | Login flow (browser sign-in) |
 | ui/screens/OnboardingScreen.kt | First-run setup wizard (7 steps) — see First-Run Onboarding |
 | ui/screens/SettingsScreen.kt | Settings + account display |
@@ -459,6 +459,8 @@ changes sync locking and cannot be validated without two real clients in a room.
 | Media keys | Play/Pause/Next/Prev/Stop | Yes (always work) |
 
 Text field suppression uses `Modifier.suppressMediaKeys()` on all OutlinedTextField instances + `MediaKeyHandler.textInputActive` check in both AWT KeyEventDispatcher and Compose `onPreviewKeyEvent`.
+
+The shortcuts live in `AppShortcuts` (App.kt) and run from the **window's** `onPreviewKeyEvent` / `onKeyEvent` in Main.kt. They used to sit on App's root Row, where they only saw keys while some node inside had focus: after a mouse click on a list row or empty space, Esc and Ctrl+L did nothing.
 
 ## Bundled binaries (VLC + ffmpeg)
 

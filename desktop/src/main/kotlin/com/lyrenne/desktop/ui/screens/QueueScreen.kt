@@ -34,7 +34,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun QueueScreen(
     player: DesktopPlayer,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     // No position: nothing here draws it, and it ticks five times a second.
     val state by player.select { it.copy(position = 0L) }
@@ -70,8 +71,9 @@ fun QueueScreen(
     }
 
     Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
+        modifier = modifier,
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 2.dp
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Header

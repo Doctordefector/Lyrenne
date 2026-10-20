@@ -1,5 +1,7 @@
 package com.lyrenne.desktop.ui.screens
 
+import com.lyrenne.desktop.ui.components.ScreenTitle
+import com.lyrenne.desktop.ui.components.MediaTile
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -109,9 +111,7 @@ fun ExploreScreen(
             }
             else -> {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(24.dp)) {
-                    item {
-                        Text("Explore", style = MaterialTheme.typography.headlineMedium)
-                    }
+                    item { ScreenTitle("Explore") }
 
                     // Charts shortcut
                     item {
@@ -163,10 +163,7 @@ fun ExploreScreen(
                                 )
                                 ScrollableRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     items(newReleases) { album ->
-                                        ExploreAlbumCard(
-                                            album = album,
-                                            onClick = { onAlbumClick(album.browseId) }
-                                        )
+                                        MediaTile(album, player, onClick = { onAlbumClick(album.browseId) })
                                     }
                                 }
                             }
@@ -247,43 +244,6 @@ fun ExploreScreen(
     }
 }
 
-@Composable
-private fun ExploreAlbumCard(
-    album: AlbumItem,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier.width(160.dp).clickable(onClick = onClick),
-        shape = RoundedCornerShape(8.dp)
-    ) {
-        Column {
-            AsyncImage(
-                model = album.thumbnail,
-                contentDescription = album.title,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(160.dp)
-                    .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)),
-                contentScale = ContentScale.Crop
-            )
-            Column(modifier = Modifier.padding(10.dp)) {
-                Text(
-                    album.title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    album.artists?.joinToString { it.name } ?: "",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-    }
-}
 
 @Composable
 private fun MoodChip(
@@ -291,8 +251,11 @@ private fun MoodChip(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    val stripeColor = remember(mood.stripeColor) {
-        Color(mood.stripeColor.toInt())
+    // YouTube's stripe hues are saturated (bright green, blue) and clashed with the copper and
+    // bronze palettes; halfway to the outline colour keeps them distinct but quiet.
+    val outline = MaterialTheme.colorScheme.outline
+    val stripeColor = remember(mood.stripeColor, outline) {
+        androidx.compose.ui.graphics.lerp(Color(mood.stripeColor.toInt()), outline, 0.5f)
     }
     Surface(
         modifier = modifier.height(48.dp).clickable(onClick = onClick),

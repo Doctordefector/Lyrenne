@@ -64,12 +64,16 @@ fun ListenTogetherScreen(
             )
 
             // Connection status indicator
-            val statusColor = when (connectionState) {
-                ConnectionState.CONNECTED -> MaterialTheme.colorScheme.primary
-                ConnectionState.CONNECTING, ConnectionState.RECONNECTING -> MaterialTheme.colorScheme.tertiary
+            // Not having joined anything yet is not an error: idle is neutral, red is for real drops.
+            val idle = roomState == null && connectionState == ConnectionState.DISCONNECTED
+            val statusColor = when {
+                idle -> MaterialTheme.colorScheme.onSurfaceVariant
+                connectionState == ConnectionState.CONNECTED -> MaterialTheme.colorScheme.secondary
+                connectionState == ConnectionState.CONNECTING ||
+                    connectionState == ConnectionState.RECONNECTING -> MaterialTheme.colorScheme.tertiary
                 else -> MaterialTheme.colorScheme.error
             }
-            val statusText = when (connectionState) {
+            val statusText = if (idle) "Not in a room" else when (connectionState) {
                 ConnectionState.CONNECTED -> "Connected"
                 ConnectionState.CONNECTING -> "Connecting..."
                 ConnectionState.RECONNECTING -> "Reconnecting..."

@@ -26,6 +26,12 @@ object LibrarySync {
     private const val MAX_LIBRARY_PAGES = 100
     private const val MAX_LIKED_SONG_PAGES = 200
 
+    /**
+     * Quick sync stops paging liked songs after this many already-synced songs in a row, provided
+     * YouTube's total also adds up. See [fetchLikedSongs].
+     */
+    private const val KNOWN_RUN_TO_STOP = 20
+
     /** songs, playlists, albums, artists. All four failing at once points at the session. */
     private const val TOTAL_SYNC_CATEGORIES = 4
 
@@ -50,14 +56,20 @@ object LibrarySync {
             resyncLock.withLock {
                 syncJob?.cancelAndJoin()
                 _syncState.value = SyncState()
-                syncLibrary()
+                // The local library is the previous account's, so a quick sync has nothing to go on.
+                syncLibrary(full = true)
             }
         }
     }
 
     private val resyncLock = Mutex()
 
-    fun syncLibrary() {
+    /**
+     * [full] pages through every liked song. Otherwise only the newest ones are fetched when that
+     * provably covers everything new (see [fetchLikedSongs]), and it falls back to full by itself.
+     * The Sync button asks for full.
+     */
+    fun syncLibrary(full: Boolean = false) {
         if (_syncState.value.isSyncing) return
 
         val authState = AuthManager.authState.value
@@ -66,10 +78,20 @@ object LibrarySync {
 
         syncJob = scope.launch {
             _syncState.value = SyncState(isSyncing = true, progress = "Syncing library...")
+            // Like edits made here from now on may postdate the snapshot about to be fetched.
+            val startedAt = System.currentTimeMillis()
+            fun editedHere(songId: String) = YouTubeWrites.likeEditedSince(songId, startedAt)
 
             try {
+                // Liked songs already mirrored from YouTube; quick sync stops once it reaches them.
+                val known = if (full) null else DatabaseHelper.getLikedSongsOnce()
+                    .filter { it.inLibrary != null }.mapTo(HashSet()) { it.id }
+
                 // Phase 1: Fetch all data from YouTube API (network-bound), in parallel
-                val songsDeferred = async { fetchAllLikedSongs() }
+                val songsDeferred = async {
+                    runCatching { fetchLikedSongs(known) }
+                        .onFailure { if (it !is CancellationException) Timber.e("Error fetching liked songs: ${it.message}") }
+                }
                 val playlistsDeferred = async { fetchLibraryItems("FEmusic_liked_playlists", "playlists") }
                 val albumsDeferred = async { fetchLibraryItems("FEmusic_liked_albums", "albums") }
                 val artistsDeferred = async { fetchLibraryItems("FEmusic_library_corpus_track_artists", "artists") }
@@ -83,13 +105,14 @@ object LibrarySync {
 
                 fun items(fetch: LibraryFetch) = (fetch as? LibraryFetch.Items)?.items.orEmpty()
 
-                val songs = songsResult.getOrDefault(emptyList())
+                val liked = songsResult.getOrNull()
+                val songs = liked?.songs.orEmpty()
                 val playlists = items(playlistsFetch).filterIsInstance<PlaylistItem>()
                 val albums = items(albumsFetch).filterIsInstance<AlbumItem>()
                 val artists = items(artistsFetch).filterIsInstance<ArtistItem>()
 
                 _syncState.update {
-                    it.copy(progress = "Saving ${songs.size} songs, ${albums.size} albums, ${artists.size} artists, ${playlists.size} playlists...")
+                    it.copy(progress = "Saving ${liked?.total ?: 0} songs, ${albums.size} albums, ${artists.size} artists, ${playlists.size} playlists...")
                 }
 
                 // Outside the transaction — it copies the database file off disk.
@@ -98,10 +121,14 @@ object LibrarySync {
                 // Phase 2: Write everything to DB in a single transaction
                 // This means: one disk sync, one flow notification, zero UI flicker
                 DatabaseHelper.transaction {
-                    val now = LocalDateTime.now().toString()
+                    val nowTime = LocalDateTime.now()
+                    val now = nowTime.toString()
 
-                    songs.forEach { song ->
-                        saveSongToDatabase(song, liked = true, now = now)
+                    songs.forEachIndexed { index, song ->
+                        if (editedHere(song.id)) return@forEachIndexed
+                        // YouTube lists likes newest first; a second apart keeps that order
+                        // for "Date liked". Only newly liked songs take it, see markSongLiked.
+                        saveLikedSong(song, likedDate = nowTime.minusSeconds(index.toLong()).toString(), now = now)
                     }
 
                     albums.forEach { album ->
@@ -122,7 +149,8 @@ object LibrarySync {
                     // Only ever prune from a fetch that actually returned a listing. A failure
                     // would read as "the remote has nothing" and empty the whole library, and an
                     // empty category is not solid enough evidence either — see LibraryFetch.
-                    if (songsResult.isSuccess) pruneSongs(songs)
+                    // A quick sync saw only the newest songs, so it must not prune.
+                    if (liked?.complete == true) pruneSongs(songs, ::editedHere)
                     if (albumsFetch is LibraryFetch.Items) pruneAlbums(albums)
                     if (artistsFetch is LibraryFetch.Items) pruneArtists(artists)
                     if (playlistsFetch is LibraryFetch.Items) prunePlaylists(playlists)
@@ -137,7 +165,7 @@ object LibrarySync {
 
                 _syncState.value = SyncState(
                     isSyncing = false,
-                    progress = "Synced ${songs.size} songs, ${albums.size} albums, ${artists.size} artists, ${playlists.size} playlists",
+                    progress = "Synced ${liked?.total ?: 0} songs, ${albums.size} albums, ${artists.size} artists, ${playlists.size} playlists",
                     error = failures.takeIf { it.isNotEmpty() }?.let { describeFailure(it) }
                 )
 
@@ -204,36 +232,90 @@ object LibrarySync {
         data class Failed(val cause: Throwable) : LibraryFetch
     }
 
+    /** One page of the Liked Music playlist. [remoteCount] is YouTube's total, first page only. */
+    internal class LikedPage(
+        val songs: List<SongItem>,
+        val continuation: String?,
+        val remoteCount: Int? = null
+    )
+
+    /** Seam for tests, like `DesktopPlayer.radioFor`. A null continuation asks for the first page. */
+    internal var likedPage: suspend (continuation: String?) -> LikedPage = { continuation ->
+        if (continuation == null) {
+            val page = YouTube.playlist("LM").getOrThrow()
+            LikedPage(page.songs, page.songsContinuation ?: page.continuation, parseSongCount(page.playlist.songCountText))
+        } else {
+            val page = YouTube.playlistContinuation(continuation).getOrThrow()
+            LikedPage(page.songs, page.continuation)
+        }
+    }
+
     /**
-     * All liked songs, paginated.
+     * [complete] means every remote liked song is in [songs], which is the only case pruning may
+     * run on. [total] is the remote count either way, for the status line.
+     */
+    internal class LikedSongs(val songs: List<SongItem>, val complete: Boolean, val total: Int)
+
+    /**
+     * Liked songs, newest first, paginated.
+     *
+     * With [known] (the ids of liked songs a previous sync already mirrored) this stops early,
+     * which is the point: a big library is up to [MAX_LIKED_SONG_PAGES] sequential requests, and
+     * a launch sync usually has nothing new past the first page. It stops only when both hold:
+     *
+     * - [KNOWN_RUN_TO_STOP] known songs in a row, so the new likes at the top are behind us.
+     * - YouTube's total equals known + new. Anything unliked on YouTube, or a new like hiding
+     *   further down, breaks the sum, and paging carries on to a full fetch that prunes.
+     *
+     * The one case that slips through is an unlike and a missed like cancelling out exactly;
+     * the next full sync (the Sync button, an account switch) catches it. An unparsable total
+     * never matches, so the worst case is a full fetch, never data loss.
      *
      * Any failed page fails the whole fetch rather than returning what arrived so far. A
      * partial list is indistinguishable from "you unliked the rest", and pruning would then
      * unlike every song that simply hadn't downloaded yet.
      */
-    private suspend fun fetchAllLikedSongs(): Result<List<SongItem>> = runCatching {
-        val allSongs = mutableListOf<SongItem>()
-        val playlist = YouTube.playlist("LM").getOrThrow()
+    internal suspend fun fetchLikedSongs(known: Set<String>?): LikedSongs {
+        val songs = mutableListOf<SongItem>()
+        var page = likedPage(null)
+        val remoteCount = page.remoteCount
+        var pages = 1
+        var knownRun = 0
+        var newCount = 0
+        while (true) {
+            for (song in page.songs) {
+                songs += song
+                if (known != null && song.id in known) knownRun++ else { knownRun = 0; newCount++ }
+            }
+            _syncState.update { it.copy(progress = "Fetching liked songs... (${songs.size})") }
 
-        allSongs.addAll(playlist.songs)
-        _syncState.update { it.copy(progress = "Fetching liked songs... (${allSongs.size})") }
-
-        var continuation = playlist.songsContinuation ?: playlist.continuation
-        var pageCount = 1
-
-        while (continuation != null && pageCount < MAX_LIKED_SONG_PAGES) {
-            val contPlaylist = YouTube.playlistContinuation(continuation).getOrThrow()
-            allSongs.addAll(contPlaylist.songs)
-            continuation = contPlaylist.continuation
-            pageCount++
-            _syncState.update { it.copy(progress = "Fetching liked songs... (${allSongs.size})") }
+            if (known != null && knownRun >= KNOWN_RUN_TO_STOP && remoteCount == known.size + newCount) {
+                Timber.i("Liked songs: quick sync, $pages page(s), $newCount new of $remoteCount")
+                return LikedSongs(songs, complete = false, total = remoteCount)
+            }
+            val continuation = page.continuation
+            if (continuation == null) {
+                if (!known.isNullOrEmpty()) {
+                    Timber.i("Liked songs: full fetch, YouTube says $remoteCount, had ${known.size} + $newCount new")
+                }
+                return LikedSongs(songs, complete = true, total = songs.size)
+            }
+            if (pages >= MAX_LIKED_SONG_PAGES) {
+                // Hit the cap with pages left: treat as incomplete so nothing gets pruned.
+                throw IllegalStateException("liked songs exceeded $MAX_LIKED_SONG_PAGES pages")
+            }
+            page = likedPage(continuation)
+            pages++
         }
-        if (continuation != null) {
-            // Hit the cap with pages left: treat as incomplete so nothing gets pruned.
-            throw IllegalStateException("liked songs exceeded $MAX_LIKED_SONG_PAGES pages")
-        }
-        allSongs
-    }.onFailure { Timber.e("Error fetching liked songs: ${it.message}") }
+    }
+
+    /**
+     * "1,234 songs", "1.234 Titel" -> 1234. Anything else (an abbreviated "1.2K", a locale
+     * whose separator is a space) comes out wrong or null, and a wrong total only costs a full
+     * fetch, see [fetchLikedSongs].
+     */
+    internal fun parseSongCount(text: String?): Int? =
+        text?.let { Regex("^[\\d.,]+").find(it.trim()) }?.value?.filter(Char::isDigit)?.toIntOrNull()
 
     /**
      * Fetch a library tab, following continuations to the end.
@@ -296,7 +378,7 @@ object LibrarySync {
 
     // ============ DB Writes (called inside transaction) ============
 
-    private fun saveSongToDatabase(song: SongItem, liked: Boolean = false, now: String) {
+    private fun saveLikedSong(song: SongItem, likedDate: String, now: String) {
         DatabaseHelper.insertSong(
             id = song.id,
             title = song.title,
@@ -305,17 +387,17 @@ object LibrarySync {
             albumId = song.album?.id,
             albumName = song.album?.name,
             explicit = song.explicit,
-            liked = liked,
-            likedDate = if (liked) now else null,
+            liked = true,
+            likedDate = likedDate,
             inLibrary = now
         )
+        // insertSong ignores rows that already exist, so without this a song played or
+        // downloaded before it was liked, or re-liked after an unlike, never showed as liked.
+        DatabaseHelper.markSongLiked(song.id, likedDate)
 
         song.artists.forEachIndexed { index, artist ->
             val artistId = artist.id ?: "unknown_${artist.name.hashCode()}"
-            DatabaseHelper.insertArtist(
-                id = artistId,
-                name = artist.name
-            )
+            DatabaseHelper.insertArtistIfMissing(id = artistId, name = artist.name)
             DatabaseHelper.insertSongArtistMap(
                 songId = song.id,
                 artistId = artistId,
@@ -353,14 +435,14 @@ object LibrarySync {
      * Unlike songs that are no longer in the remote Liked Music playlist.
      *
      * Restricted to songs with `inLibrary` set, which only a library sync ever writes. A song
-     * liked purely inside Metrolist has `inLibrary == null` and is left alone — liking here
-     * does not push to YouTube (LibraryScreen writes straight to the DB), so those would
-     * otherwise be unliked on the very next sync.
+     * liked here whose push to YouTube failed (or was made signed out) has `inLibrary == null`
+     * and is left alone, rather than silently unliked on the next sync. Songs whose like was
+     * changed here during this sync are skipped too: the snapshot may predate the push.
      */
-    private fun pruneSongs(remote: List<SongItem>) {
+    private fun pruneSongs(remote: List<SongItem>, editedHere: (String) -> Boolean) {
         val remoteIds = remote.mapTo(HashSet()) { it.id }
         val stale = DatabaseHelper.getLikedSongsOnce()
-            .filter { it.inLibrary != null && it.id !in remoteIds }
+            .filter { it.inLibrary != null && it.id !in remoteIds && !editedHere(it.id) }
         stale.forEach { DatabaseHelper.updateSongLiked(it.id, false) }
         if (stale.isNotEmpty()) Timber.i("Sync: unliked ${stale.size} songs removed on YouTube")
     }

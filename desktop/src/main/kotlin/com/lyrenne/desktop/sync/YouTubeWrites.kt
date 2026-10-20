@@ -77,8 +77,27 @@ object YouTubeWrites {
         }
     }
 
-    fun likeSong(videoId: String, liked: Boolean) =
-        push(if (liked) "like song" else "unlike song") { YouTube.likeVideo(videoId, liked) }
+    /**
+     * When each song's like push last settled, [Long.MAX_VALUE] while one is in flight. A sync
+     * whose snapshot was fetched before the push landed would otherwise undo the edit: re-like a
+     * song just unliked here, or prune one just liked. See [likeEditedSince].
+     */
+    private val likeSettledAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    /** True if this song's like was changed here at or after [since], or is still being pushed. */
+    fun likeEditedSince(videoId: String, since: Long) = (likeSettledAt[videoId] ?: 0L) >= since
+
+    fun likeSong(videoId: String, liked: Boolean) {
+        if (!isLoggedIn) return
+        likeSettledAt[videoId] = Long.MAX_VALUE
+        push(if (liked) "like song" else "unlike song") {
+            try {
+                YouTube.likeVideo(videoId, liked)
+            } finally {
+                likeSettledAt[videoId] = System.currentTimeMillis()
+            }
+        }
+    }
 
     fun renamePlaylist(playlistId: String, name: String) {
         if (!isRemote(playlistId)) return

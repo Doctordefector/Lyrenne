@@ -653,6 +653,32 @@ not `Items(emptyList())`:
 Matched on the exception message rather than patching the vendored InnerTube module. If upstream
 changes that string the symptom is the old spurious error returning, not data loss.
 
+## Library sync: writing what it fetched
+
+- **`insertSong` is INSERT OR IGNORE**, so it never sets `liked` on a row that exists. Through 2.15.1
+  a song played, downloaded or added to a playlist before being liked on YouTube, or re-liked after
+  an unlike, never showed as liked. Sync now follows it with `markSongLiked`, which only touches
+  unliked rows, so an existing like keeps its date. New likes get `now - index` seconds, so
+  "Date liked" follows YouTube's order.
+- **Song credits use `insertArtistIfMissing`**, never `insertArtist` (REPLACE). REPLACE reset a
+  subscribed artist's `bookmarkedAt` and thumbnail, and when the artists fetch failed nothing wrote
+  them back.
+- **A like changed here mid-sync is left alone** (`YouTubeWrites.likeEditedSince`). The snapshot may
+  predate the push, and applying it would re-like a song just unliked, or prune one just liked.
+- `updateSongMetadata` keeps the stored duration and year when a caller passes -1 / null.
+- `SyncQueriesTest` pins the SQL.
+
+### Quick sync of liked songs
+
+Liked songs were up to 200 sequential page requests on every launch. Launch and sign-in syncs are
+now quick: `fetchLikedSongs(known)` pages newest first and stops once it has seen 20 already-synced
+songs in a row **and** YouTube's total (`songCountText` on the first page) equals known + new. An
+unlike on YouTube or a new like further down breaks the sum, so it pages on to a full fetch, which
+is the only kind that prunes. An unparsable total never matches: worst case is the old full fetch.
+The Sync button and account switches always run full. The log says which path ran
+(`Liked songs: quick sync` / `full fetch, YouTube says ...`); if a real library always lands on full,
+the total YouTube reports does not match the songs it returns. `LikedSongsFetchTest` pins it.
+
 ## Icons: two artworks, picked by size
 
 - `icon.png` (512px source), the full mark with its gold ring. Every `.ico` entry at 64px and up.

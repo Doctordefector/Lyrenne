@@ -220,14 +220,19 @@ object DatabaseHelper {
         queries.updateSongMetadata(
             title = title,
             duration = duration.toLong(),
-            value = thumbnailUrl,
-            value_ = albumId,
-            value__ = albumName,
+            thumbnailUrl = thumbnailUrl,
+            albumId = albumId,
+            albumName = albumName,
             explicit = if (explicit) 1L else 0L,
             year = year?.toLong(),
-            value___ = inLibrary,
+            inLibrary = inLibrary,
             id = id
         )
+    }
+
+    /** Sync only: likes a song that already has a row. No-op if it is already liked. */
+    fun markSongLiked(id: String, likedDate: String) {
+        queries.markSongLiked(likedDate, id)
     }
 
     fun updateSongLiked(id: String, liked: Boolean) {
@@ -332,6 +337,11 @@ object DatabaseHelper {
             lastUpdateTime = LocalDateTime.now().toString(),
             bookmarkedAt = bookmarkedAt
         )
+    }
+
+    /** A song's artist credit: creates the row if missing, never touches an existing one. */
+    fun insertArtistIfMissing(id: String, name: String) {
+        queries.insertArtistIfMissing(id, name, LocalDateTime.now().toString())
     }
 
     fun updateArtistBookmarked(id: String, bookmarked: Boolean) {

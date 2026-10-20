@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.ui.components
 
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -128,7 +129,7 @@ fun TrayPanel(
                         Text(
                             song.title,
                             style = MaterialTheme.typography.titleSmall,
-                            maxLines = 1,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
@@ -156,6 +157,7 @@ fun TrayPanel(
                         scrubbing?.let { player.seekTo((it * duration).toLong()) }
                         scrubbing = null
                     },
+                    idleThumb = 0.dp,
                     modifier = Modifier.fillMaxWidth().height(16.dp)
                         .wheelStep(
                             value = { player.state.value.position.toFloat() },
@@ -171,7 +173,8 @@ fun TrayPanel(
                         color = colors.onSurfaceVariant
                     )
                     Text(
-                        if (known) formatMs(duration) else "--:--",
+                        // Same placeholder as the dock
+                        if (known) formatMs(duration) else "–:––",
                         style = MaterialTheme.typography.labelSmall,
                         color = colors.onSurfaceVariant
                     )
@@ -210,19 +213,27 @@ fun TrayPanel(
                     )
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.VolumeUp,
-                        null,
-                        Modifier.size(16.dp),
-                        tint = colors.onSurfaceVariant
-                    )
-                    Spacer(Modifier.width(8.dp))
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // Volume is a short slider beside the icon, so it no longer looks like a second seek
+            // bar; Open is the main action, Quit a quiet one at the end rather than a red twin.
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                if (song != null) {
                     val onVolume: (Float) -> Unit = {
                         if (PreferencesManager.preferences.value.isMuted) PreferencesManager.setMuted(false)
                         PreferencesManager.setVolume(it)
                         player.setVolume(it)
                     }
+                    Icon(
+                        if (prefs.isMuted || prefs.volume == 0f) Icons.AutoMirrored.Filled.VolumeOff
+                        else Icons.AutoMirrored.Filled.VolumeUp,
+                        "Volume",
+                        Modifier.size(16.dp),
+                        tint = colors.onSurfaceVariant
+                    )
+                    Spacer(Modifier.width(6.dp))
                     PlayerSlider(
                         value = prefs.volume,
                         // Dragging fires dozens of times a second: keep it in memory, write once on release.
@@ -232,40 +243,35 @@ fun TrayPanel(
                             player.setVolume(it)
                         },
                         onValueChangeFinished = { PreferencesManager.setVolume(PreferencesManager.preferences.value.volume) },
-                        modifier = Modifier.weight(1f).height(16.dp)
+                        modifier = Modifier.width(96.dp).height(16.dp)
                             .wheelStep({ PreferencesManager.preferences.value.volume }, 0.05f, onChange = onVolume)
                     )
                 }
-            }
-
-            Spacer(Modifier.height(10.dp))
-
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TrayAction(Icons.Default.Launch, "Open", Modifier.weight(1f)) {
-                    onDismiss(); onOpenWindow()
-                }
-                TrayAction(
-                    Icons.Default.PowerSettingsNew,
-                    "Quit",
-                    Modifier.weight(1f),
-                    tint = colors.error
-                ) { onQuit() }
+                Spacer(Modifier.weight(1f))
+                TrayAction(Icons.Default.Launch, "Open") { onDismiss(); onOpenWindow() }
+                TextButton(
+                    onClick = onQuit,
+                    contentPadding = PaddingValues(horizontal = 8.dp),
+                    colors = ButtonDefaults.textButtonColors(contentColor = colors.onSurfaceVariant)
+                ) { Text("Quit", style = MaterialTheme.typography.bodySmall) }
             }
         }
     }
     }
 }
 
-/** Shuffle and repeat: gold when on, quiet when off. */
+/** Shuffle and repeat: a filled pill when on, as on the dock, so state is not tint alone. */
 @Composable
 private fun TrayToggle(icon: ImageVector, label: String, on: Boolean, onClick: () -> Unit) =
-    IconButton(onClick = onClick, modifier = Modifier.size(36.dp)) {
-        Icon(
-            icon,
-            contentDescription = if (on) "$label on" else "$label off",
-            modifier = Modifier.size(18.dp),
-            tint = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier.size(36.dp),
+        colors = IconButtonDefaults.iconButtonColors(
+            containerColor = if (on) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+            contentColor = if (on) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
         )
+    ) {
+        Icon(icon, contentDescription = if (on) "$label on" else "$label off", modifier = Modifier.size(18.dp))
     }
 
 @Composable

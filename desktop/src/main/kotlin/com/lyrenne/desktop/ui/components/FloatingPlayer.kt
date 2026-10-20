@@ -157,7 +157,7 @@ fun WindowScope.FloatingPlayer(
             modifier = Modifier.align(Alignment.TopStart)
         ) {
             SmallRoundButton(onClick = onOpenMain) {
-                Icon(Icons.AutoMirrored.Filled.OpenInNew, "Open Lyrenne", modifier = Modifier.size(14.dp))
+                Icon(Icons.AutoMirrored.Filled.OpenInNew, "Open Lyrenne", modifier = Modifier.size(16.dp))
             }
         }
         AnimatedVisibility(
@@ -167,7 +167,7 @@ fun WindowScope.FloatingPlayer(
             modifier = Modifier.align(Alignment.TopEnd)
         ) {
             SmallRoundButton(onClick = onClose) {
-                Icon(Icons.Default.Close, "Hide the floating player", modifier = Modifier.size(14.dp))
+                Icon(Icons.Default.Close, "Hide the floating player", modifier = Modifier.size(16.dp))
             }
         }
     }
@@ -220,7 +220,8 @@ private fun SmallRoundButton(onClick: () -> Unit, content: @Composable () -> Uni
         color = MaterialTheme.colorScheme.surfaceContainerHighest,
         contentColor = MaterialTheme.colorScheme.onSurface,
         shadowElevation = 4.dp,
-        modifier = Modifier.padding(4.dp).size(26.dp)
+        // 32 dp: the corners of the window outside the disc fit it without touching the circle.
+        modifier = Modifier.padding(1.dp).size(32.dp)
     ) {
         Box(contentAlignment = Alignment.Center) { content() }
     }

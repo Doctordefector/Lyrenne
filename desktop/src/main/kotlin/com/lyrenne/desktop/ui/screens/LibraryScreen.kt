@@ -984,8 +984,9 @@ private fun DownloadsTab(
                 }
             }
 
-            // Keyed on the song id, a database primary key and unique across the map.
-            items(active, key = { it.songId }) { download ->
+            // Prefixed: a finished download stays here until cleared while the same song is
+            // already under Downloaded below, and one LazyColumn can't hold the same key twice.
+            items(active, key = { "active-${it.songId}" }) { download ->
                 Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(12.dp),
@@ -1085,7 +1086,7 @@ private fun DownloadsTab(
                 }
             }
 
-            itemsIndexed(filteredDownloaded, key = { _, s -> s.id }) { index, dbSong ->
+            itemsIndexed(filteredDownloaded, key = { _, s -> "done-${s.id}" }) { index, dbSong ->
                 val song = dbSong.toSongInfo(artistNamesMap)
                 TrackRow(
                     song = song,

@@ -232,6 +232,9 @@ fun main() {
 }
 
 private fun runApp() {
+    // Before the database opens: a second copy only wakes the first one up.
+    if (!SingleInstance.claim()) exitProcess(0)
+
     // Every remaining Swing dialog (folder pickers, backup/restore) defaults to the
     // cross-platform Metal look — grey 1990s widgets. The system L&F makes them render
     // as native Windows dialogs instead. Must be set before any Swing class loads.
@@ -404,6 +407,11 @@ private fun runApp() {
             // Set up tray callbacks for minimize-to-tray
             DesktopNotification.onShowWindow = {
                 windowVisible = true
+                windowState.isMinimized = false
+            }
+            // Launching again restores the window, the one way back if the tray icon is deaf.
+            SingleInstance.onActivate = {
+                java.awt.EventQueue.invokeLater { DesktopNotification.onShowWindow?.invoke() }
             }
             DesktopNotification.onTrayMenu = { clickX, clickY ->
                 val screen = java.awt.Toolkit.getDefaultToolkit().screenSize

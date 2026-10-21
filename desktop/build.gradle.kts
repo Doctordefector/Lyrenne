@@ -24,7 +24,7 @@ kotlin {
 }
 
 // The one version number. AutoUpdater reads it from the generated version.properties.
-val lyrenneVersion = "2.16.0"
+val lyrenneVersion = "2.16.1"
 
 // Compose packages for the OS it runs on, so per-OS build steps key off the host.
 val hostOs = System.getProperty("os.name").orEmpty()

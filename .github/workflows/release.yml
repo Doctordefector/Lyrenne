@@ -1,0 +1,102 @@
+name: release
+
+# Ask for a release by pushing a tag that matches lyrenneVersion (git tag v2.16.1 && git push origin v2.16.1),
+# or with "Run workflow" on the Actions tab, which tags the current commit. Builds the Windows portable
+# ZIP and the Linux .deb/.rpm and attaches them to a DRAFT release: write the notes and publish there.
+# Drafts are invisible to /releases/latest, so the updater never sees a release before it is published.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      v: ${{ steps.v.outputs.v }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          V=$(grep -oP 'val lyrenneVersion = "\K[^"]+' desktop/build.gradle.kts)
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$V" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match lyrenneVersion $V"; exit 1
+          fi
+          echo "v=$V" >> "$GITHUB_OUTPUT"
+
+  windows:
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Signs only if the LYRENNE_SIGNING_KEY secret exists. Without it the draft ships unsigned and the
+      # .sig is added from the offline key (CLAUDE.md, Release Process); never publish without it.
+      - name: Build portable ZIP
+        shell: bash
+        env:
+          KEY: ${{ secrets.LYRENNE_SIGNING_KEY }}
+        run: |
+          if [ -n "$KEY" ]; then
+            printf '%s' "$KEY" > "$RUNNER_TEMP/update-signing.key"
+            ./gradlew :desktop:signPortableZip "-PupdateSigningKey=$RUNNER_TEMP/update-signing.key"
+            rm "$RUNNER_TEMP/update-signing.key"
+          else
+            ./gradlew :desktop:packagePortableZip
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: desktop/build/compose/binaries/main/app/Lyrenne-*-portable.zip*
+
+  linux:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew :desktop:createDistributable
+      - name: Package .deb and .rpm
+        env:
+          LYRENNE_VERSION: ${{ needs.version.outputs.v }}
+        run: |
+          echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | sudo tee /etc/apt/sources.list.d/goreleaser.list
+          sudo apt-get update
+          sudo apt-get install -y nfpm
+          mkdir -p dist
+          nfpm package -f packaging/linux/nfpm.yaml -p deb -t dist/
+          nfpm package -f packaging/linux/nfpm.yaml -p rpm -t dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dist/
+
+  release:
+    needs: [version, windows, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ needs.version.outputs.v }}
+        run: |
+          ls -l dist
+          gh release create "v$V" dist/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --draft --title "Lyrenne v$V" --generate-notes

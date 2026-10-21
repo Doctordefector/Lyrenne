@@ -99,4 +99,4 @@ jobs:
         run: |
           ls -l dist
           gh release create "v$V" dist/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --draft --title "Lyrenne v$V" --generate-notes
+            --draft --title "Lyrenne v$V" --notes "Draft: write the notes, then publish."

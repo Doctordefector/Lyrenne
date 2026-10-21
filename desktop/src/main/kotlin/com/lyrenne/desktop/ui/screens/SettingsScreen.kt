@@ -921,7 +921,7 @@ fun SettingsScreen(
                             Spacer(Modifier.height(4.dp))
                             TextButton(onClick = {
                                 try {
-                                    Desktop.getDesktop().browse(URI("https://www.last.fm/api/account/create"))
+                                    com.lyrenne.desktop.Platform.open("https://www.last.fm/api/account/create")
                                 } catch (_: Exception) {}
                             }) {
                                 Text("Get API key from Last.fm")
@@ -1074,7 +1074,7 @@ fun SettingsScreen(
                                 IconButton(onClick = {
                                     try {
                                         val dir = PreferencesManager.getDownloadDirectory()
-                                        if (dir.exists()) Desktop.getDesktop().open(dir)
+                                        if (dir.exists()) com.lyrenne.desktop.Platform.open(dir.path)
                                     } catch (_: Exception) {}
                                 }) {
                                     Icon(Icons.Default.FolderOpen, "Open folder")
@@ -1118,7 +1118,7 @@ fun SettingsScreen(
                                     Tip("Open folder") {
                                         IconButton(onClick = {
                                             try {
-                                                if (done.outDir.exists()) Desktop.getDesktop().open(done.outDir)
+                                                if (done.outDir.exists()) com.lyrenne.desktop.Platform.open(done.outDir.path)
                                             } catch (_: Exception) {}
                                         }) {
                                             Icon(Icons.Default.FolderOpen, "Open folder")
@@ -1304,7 +1304,7 @@ fun SettingsScreen(
                                         }
                                         if (state.releaseUrl != null) {
                                             TextButton(onClick = {
-                                                try { Desktop.getDesktop().browse(URI(state.releaseUrl)) } catch (_: Exception) {}
+                                                com.lyrenne.desktop.Platform.open(state.releaseUrl)
                                             }) {
                                                 Text("View Release")
                                             }
@@ -1417,7 +1417,7 @@ fun SettingsScreen(
                         subtitle = "View on GitHub",
                         onClick = {
                             try {
-                                Desktop.getDesktop().browse(URI("https://github.com/Doctordefector/Lyrenne"))
+                                com.lyrenne.desktop.Platform.open("https://github.com/Doctordefector/Lyrenne")
                             } catch (e: Exception) {
                                 // Ignore
                             }
@@ -1432,7 +1432,7 @@ fun SettingsScreen(
                         subtitle = "Help improve the app",
                         onClick = {
                             try {
-                                Desktop.getDesktop().browse(URI("https://github.com/Doctordefector/Lyrenne/issues/new"))
+                                com.lyrenne.desktop.Platform.open("https://github.com/Doctordefector/Lyrenne/issues/new")
                             } catch (e: Exception) {
                                 // Ignore
                             }

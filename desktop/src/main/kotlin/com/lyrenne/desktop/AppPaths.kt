@@ -13,6 +13,20 @@ object Platform {
     val isWindows = osName.startsWith("windows")
     val isMac = osName.contains("mac") || osName.contains("darwin")
     val isLinux = osName.contains("linux")
+
+    /**
+     * Open a URL or folder in the user's default app. On Linux AWT's `Desktop` only works where
+     * the GNOME libraries it was built against are loadable, and elsewhere throws or silently does
+     * nothing (the "View Release" button did nothing on Fedora), so Linux goes through xdg-open.
+     */
+    fun open(target: String) {
+        runCatching {
+            if (isLinux) ProcessBuilder("xdg-open", target)
+                .redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start()
+            else if (File(target).isDirectory) java.awt.Desktop.getDesktop().open(File(target))
+            else java.awt.Desktop.getDesktop().browse(java.net.URI(target))
+        }.onFailure { Timber.w("Could not open $target: ${it.message}") }
+    }
 }
 
 /**

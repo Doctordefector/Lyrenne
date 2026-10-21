@@ -822,7 +822,7 @@ private fun IntegrationsStep() {
         }
         TextButton(onClick = {
             try {
-                Desktop.getDesktop().browse(URI("https://www.last.fm/api/account/create"))
+                com.lyrenne.desktop.Platform.open("https://www.last.fm/api/account/create")
             } catch (_: Exception) {
             }
         }) { Text("Get an API key") }

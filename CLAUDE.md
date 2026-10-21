@@ -323,8 +323,9 @@ the user.
 
 A published hash would only defend against a swapped asset, not a compromised account, since both
 come from the same origin. So releases are **signed**: Ed25519 over the ZIP's SHA-256 (pure Ed25519
-would need the 200 MB ZIP in a 512 MB heap). The private key lives offline
-(`./gradlew :desktop:generateUpdateSigningKey`, default `~/.lyrenne/update-signing.key`), the public key
+would need the 200 MB ZIP in a 512 MB heap). The private key
+(`./gradlew :desktop:generateUpdateSigningKey`, default `~/.lyrenne/update-signing.key`, also the
+`LYRENNE_SIGNING_KEY` Actions secret, see Release Process), the public key
 is `AutoUpdater.UPDATE_PUBLIC_KEY` (set since the Linux port). **Every release from then on must ship a
 `.sig`**, or builds carrying that key refuse the update. Releasing from another PC: copy
 `~/.lyrenne/update-signing.key` there (or point `LYRENNE_SIGNING_KEY` / `-PupdateSigningKey` at it).
@@ -1098,9 +1099,10 @@ the stream (`DesktopPlayer.streamFor`) both stubbed.
 
 **CI does it now** (`.github/workflows/release.yml`). Bump `lyrenneVersion`, commit, push, then
 `git tag vX.Y.Z && git push origin vX.Y.Z` (or Actions → release → Run workflow). It builds the ZIP on
-Windows and the .deb/.rpm on Ubuntu and attaches them to a **draft** release. The private key is not on
-GitHub unless the `LYRENNE_SIGNING_KEY` secret is set (it holds the key file's contents; that trades away
-the offline-key property above). Without it, sign the draft's ZIP before publishing:
+Windows and the .deb/.rpm on Ubuntu and attaches them to a **draft** release. Since 2.16.1 the
+`LYRENNE_SIGNING_KEY` Actions secret holds the key file's contents, so CI ships the `.sig` too. Chosen
+deliberately (the user releases from several PCs); the cost is that a compromised GitHub account can sign
+updates. If that secret is ever deleted, sign the draft's ZIP before publishing:
 ```
 gh release download vX.Y.Z --repo Doctordefector/Lyrenne -p "*.zip" -D build/rel
 ./gradlew :desktop:signPortableZip -PsignZip=build/rel/Lyrenne-X.Y.Z-portable.zip

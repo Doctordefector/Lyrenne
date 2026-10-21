@@ -38,8 +38,8 @@ jobs:
           java-version: "21"
       - uses: gradle/actions/setup-gradle@v4
 
-      # Signs only if the LYRENNE_SIGNING_KEY secret exists. Without it the draft ships unsigned and the
-      # .sig is added from the offline key (CLAUDE.md, Release Process); never publish without it.
+      # Signs with the LYRENNE_SIGNING_KEY secret. If it is deleted the draft ships unsigned and the .sig
+      # is added from the local key (CLAUDE.md, Release Process); never publish without it.
       - name: Build portable ZIP
         shell: bash
         env:

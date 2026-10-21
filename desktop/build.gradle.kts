@@ -319,8 +319,9 @@ tasks.register("packagePortableZip") {
 }
 
 /**
- * Update signing. The private key never goes in the repo or on GitHub: a compromised account
- * must not be able to ship code, and that only holds while the key is somewhere else (offline).
+ * Update signing. The private key never goes in the repo. Since 2.16.1 it is also the
+ * LYRENNE_SIGNING_KEY Actions secret so CI signs releases: a compromised GitHub account can now ship
+ * a signed update. Deleting that secret puts the key back offline (sign locally with -PsignZip).
  * Location: -PupdateSigningKey=<path>, else $LYRENNE_SIGNING_KEY, else ~/.lyrenne/update-signing.key.
  */
 fun signingKeyPath(): String =

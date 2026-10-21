@@ -175,11 +175,19 @@ private fun installCrashReporting(): File {
     } catch (e: Exception) {
         // Read-only folder or the file is locked by another instance — keep the default stderr.
     }
-    Thread.setDefaultUncaughtExceptionHandler { _, e -> reportFatal(e, log) }
+    Thread.setDefaultUncaughtExceptionHandler { _, e ->
+        // On the UI thread this is usually Compose throwing mid-measure, which leaves the scene
+        // broken: the window stays up showing a stale frame and never redraws. Close instead.
+        if (javax.swing.SwingUtilities.isEventDispatchThread()) {
+            reportFatal(e, log, "Lyrenne hit an error and has to close.")
+            exitProcess(1)
+        }
+        reportFatal(e, log)
+    }
     return log
 }
 
-private fun reportFatal(e: Throwable, log: File) {
+private fun reportFatal(e: Throwable, log: File, headline: String = "Lyrenne could not start.") {
     try {
         System.err.println("FATAL: ${e.stackTraceToString()}")
     } catch (ignored: Exception) {
@@ -187,7 +195,7 @@ private fun reportFatal(e: Throwable, log: File) {
     try {
         javax.swing.JOptionPane.showMessageDialog(
             null,
-            "Lyrenne could not start.\n\n${e::class.simpleName}: ${e.message}\n\nDetails: ${log.absolutePath}",
+            "$headline\n\n${e::class.simpleName}: ${e.message}\n\nDetails: ${log.absolutePath}",
             "Lyrenne",
             javax.swing.JOptionPane.ERROR_MESSAGE
         )

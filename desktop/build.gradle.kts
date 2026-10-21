@@ -347,8 +347,11 @@ tasks.register("generateUpdateSigningKey") {
  * the release next to the ZIP. AutoUpdater.verifySignature is the other half.
  */
 tasks.register("signPortableZip") {
-    dependsOn("packagePortableZip")
-    val zipFile = layout.buildDirectory.file("compose/binaries/main/app/Lyrenne-$lyrenneVersion-portable.zip").get().asFile
+    // -PsignZip=<path> signs a ZIP built elsewhere (the release workflow's draft) instead of building one.
+    val given = findProperty("signZip") as String?
+    if (given == null) dependsOn("packagePortableZip")
+    val zipFile = given?.let(::File)
+        ?: layout.buildDirectory.file("compose/binaries/main/app/Lyrenne-$lyrenneVersion-portable.zip").get().asFile
     val keyFile = File(signingKeyPath())
     doLast {
         if (!keyFile.exists()) throw GradleException("No signing key at ${keyFile.absolutePath}")

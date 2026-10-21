@@ -1095,6 +1095,20 @@ the stream (`DesktopPlayer.streamFor`) both stubbed.
   `version.properties`, which `AutoUpdater.CURRENT_VERSION` reads. `UpdateSignatureTest` pins that they agree
 
 ## Release Process (Step by Step)
+
+**CI does it now** (`.github/workflows/release.yml`). Bump `lyrenneVersion`, commit, push, then
+`git tag vX.Y.Z && git push origin vX.Y.Z` (or Actions → release → Run workflow). It builds the ZIP on
+Windows and the .deb/.rpm on Ubuntu and attaches them to a **draft** release. The private key is not on
+GitHub unless the `LYRENNE_SIGNING_KEY` secret is set (it holds the key file's contents; that trades away
+the offline-key property above). Without it, sign the draft's ZIP before publishing:
+```
+gh release download vX.Y.Z --repo Doctordefector/Lyrenne -p "*.zip" -D build/rel
+./gradlew :desktop:signPortableZip -PsignZip=build/rel/Lyrenne-X.Y.Z-portable.zip
+gh release upload vX.Y.Z build/rel/Lyrenne-X.Y.Z-portable.zip.sig --repo Doctordefector/Lyrenne
+```
+Then write the notes and publish the draft. Never publish without the `.sig`. The manual steps below
+still work if CI is down.
+
 1. **Bump version**: `lyrenneVersion` in build.gradle.kts
 2. **Build the portable distributable**:
    ```

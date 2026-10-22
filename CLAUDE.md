@@ -395,9 +395,9 @@ This is why Discord now also re-sends on a duration correction, not only on song
 That is not a reintroduction of the banned position-tick resend: `lengthChanged` fires about once
 per track and the send goes through the existing 700 ms debounce.
 
-## Listen Together: isSyncing is a latch, and leaking it is silent
+## Listen Together: the sync latch, and leaking it is silent
 
-`isSyncing` gates the player observer (`if (isSyncing || !isInRoom) return@collectLatest`). Leak it
+`isSyncing` gates the player observer (`if (isSyncing || !isInRoom || prev == null)`). Leak it
 and this client stops sending **any** playback change to the room, forever, with no error and no
 log. Only rejoining clears it. Two separate leaks existed before 2.10.1:
 
@@ -409,14 +409,49 @@ log. Only rejoining clears it. Two separate leaks existed before 2.10.1:
    cancelled**, so the reset below it never ran. `syncToTrack` cancels that job by design, so the
    cancelled path was the common one. It now uses `withContext(NonCancellable)`.
 
-Any future cleanup of this flag must run in a `finally`, and must not suspend outside
-`NonCancellable`. Rethrow `CancellationException` before the generic `catch` so cancellation still
-propagates.
+**It is a depth counter now, not a boolean.** `isSyncing` reads `syncDepth > 0`; every
+`beginSync()` is paired with an `endSync()` (or `endSyncSoon()`, 200 ms later) in a `finally`.
+Syncs overlap: `handlePlaybackSync` used to clear the boolean 200 ms after *any* message, including
+a heartbeat PLAY arriving while `applyPlaybackState` was still resolving a stream, which unmuted
+the observer mid-load. An end must never suspend outside `NonCancellable`, and rethrow
+`CancellationException` before the generic `catch` so cancellation still propagates. Queue edits
+(`QUEUE_EDITS`) take no latch: they move nothing the observer reports, and the host applies them.
 
-**Known remaining smell, deliberately left:** `applyPendingSyncIfReady` also sets `isSyncing` and
-clears it from a detached `scope.launch`, while being called from inside both functions that
-already own the flag. A boolean cannot express nesting. The correct fix is a depth counter, but it
-changes sync locking and cannot be validated without two real clients in a room.
+### Guests must not echo the room back
+
+Both roles send their own changes, so anything a sync does that the observer reads as local goes
+straight back to the room. Through 2.14.0 a guest re-sent **every track the host played**: the room
+then reset to paused at 0:00 and everyone rebuffered, once per guest per track. Three causes, all
+needed:
+
+- `markSynced()` records the room's track and play state in `lastSyncedTrackId` /
+  `lastSyncedIsPlaying` whenever a sync applies them. Without it the guest's track differed from
+  the last one *it* had sent, which is the observer's test for a track change.
+- `previousState` advances even while syncing. Skipping it left the comparison at the state from
+  before the sync, so the sync's own pause, play or seek looked like the user's.
+- PLAY is only sent when `lastSyncedIsPlaying != true`, PAUSE only when it is `true`, so VLC
+  reporting a sync's play after the latch has closed is not news to the room.
+
+The trade: a play, pause or seek the user makes inside the 200 ms after a sync is not sent. That
+is a far smaller loss than the echo.
+
+### Smaller rules
+
+- **The host applies queue edits too.** An approved suggestion reaches the host's own queue only
+  as a QUEUE_ADD the server sends to the whole room, so dropping every PlaybackSync on the host
+  meant approving a suggestion did nothing. Matches upstream. Desktop still has no UI that
+  *sends* a suggestion.
+- **A room track that will not load is reported buffered anyway**, the guest stays paused, and
+  `unavailableTrackId` stops the track-mismatch branch retrying it on every 5 s heartbeat.
+  `playQueue` returns whether anything started for this. Sync with Host retries.
+- **SYNC_QUEUE uses `DesktopPlayer.replaceQueue`**, which swaps the queue under the playing song.
+  `playQueue` restarted it from 0:00.
+- **Each WebSocket acts only while it is current** (`socketGeneration`). A socket closed by
+  `forceReconnect` finished its handshake after the new one opened and tore the new one down.
+- **`initialize()` runs once.** The screen calls it on every visit; it returns early after the
+  first, or role collectors stacked up per visit.
+- The persisted session stores the username, or rejoining after `session_not_found` never worked
+  across a restart.
 
 ## Listen Together System
 

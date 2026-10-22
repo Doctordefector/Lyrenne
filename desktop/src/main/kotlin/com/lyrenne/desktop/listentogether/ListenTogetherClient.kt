@@ -117,6 +117,11 @@ object ListenTogetherClient {
         .build()
 
     private var webSocket: WebSocket? = null
+    // Bumped whenever a socket is opened or let go. A socket only acts on its own callbacks while it
+    // is the current one: a socket closed by forceReconnect used to finish its close handshake after
+    // the new one opened, and its onClosed then cancelled the new socket's ping and opened a third.
+    @Volatile
+    private var socketGeneration = 0
     private var pingJob: Job? = null
     private var reconnectAttempts = 0
 
@@ -156,7 +161,10 @@ object ListenTogetherClient {
         val roomCode: String,
         val userId: String,
         val isHost: Boolean,
-        val timestamp: Long
+        val timestamp: Long,
+        // Needed to rejoin when the server has dropped the session. Files from before it was
+        // stored decode with "" and simply cannot rejoin, as before.
+        val username: String = ""
     )
 
     private fun loadPersistedSession() {
@@ -176,6 +184,7 @@ object ListenTogetherClient {
                 storedRoomCode = session.roomCode
                 _userId.value = session.userId.ifEmpty { null }
                 wasHost = session.isHost
+                storedUsername = session.username.ifEmpty { null }
                 sessionStartTime = session.timestamp
                 log(LogLevel.INFO, "Loaded persisted session", "Room: ${session.roomCode}, Host: ${session.isHost}")
             } else if (session.sessionToken.isNotEmpty()) {
@@ -195,7 +204,8 @@ object ListenTogetherClient {
                 roomCode = storedRoomCode ?: "",
                 userId = _userId.value ?: "",
                 isHost = wasHost,
-                timestamp = System.currentTimeMillis()
+                timestamp = System.currentTimeMillis(),
+                username = storedUsername ?: ""
             )
             val content = json.encodeToString(PersistedSession.serializer(), session)
             getSessionFile().writeText(content)
@@ -264,8 +274,15 @@ object ListenTogetherClient {
             .url(DEFAULT_SERVER_URL)
             .build()
 
+        val generation = ++socketGeneration
         webSocket = httpClient.newWebSocket(request, object : WebSocketListener() {
+            private val isCurrent get() = generation == socketGeneration
+
             override fun onOpen(webSocket: WebSocket, response: Response) {
+                if (!isCurrent) {
+                    webSocket.close(1000, null)
+                    return
+                }
                 log(LogLevel.INFO, "Connected to server")
                 _connectionState.value = ConnectionState.CONNECTED
                 reconnectAttempts = 0
@@ -282,6 +299,7 @@ object ListenTogetherClient {
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: okio.ByteString) {
+                if (!isCurrent) return
                 // Handle binary protobuf messages
                 handleMessage(bytes.toByteArray())
             }
@@ -293,12 +311,12 @@ object ListenTogetherClient {
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 log(LogLevel.INFO, "Connection closed", "Code: $code, Reason: $reason")
-                handleDisconnect()
+                if (isCurrent) handleDisconnect()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 log(LogLevel.ERROR, "Connection failure", t.message)
-                handleConnectionFailure(t)
+                if (isCurrent) handleConnectionFailure(t)
             }
         })
     }
@@ -326,6 +344,7 @@ object ListenTogetherClient {
         log(LogLevel.INFO, "Disconnecting from server")
         pingJob?.cancel()
         pingJob = null
+        socketGeneration++
         webSocket?.close(1000, "User disconnected")
         webSocket = null
         _connectionState.value = ConnectionState.DISCONNECTED
@@ -642,12 +661,15 @@ object ListenTogetherClient {
 
                     when (payload.code) {
                         "session_not_found" -> {
-                            if (storedRoomCode != null && storedUsername != null && !wasHost) {
+                            val room = storedRoomCode
+                            val name = storedUsername
+                            if (room != null && name != null && !wasHost) {
                                 log(LogLevel.WARNING, "Session expired on server",
-                                    "Attempting automatic rejoin to room: $storedRoomCode")
+                                    "Attempting automatic rejoin to room: $room")
                                 scope.launch {
                                     delay(500)
-                                    joinRoom(storedRoomCode!!, storedUsername!!)
+                                    // Leaving inside the delay clears the room; do not rejoin it then.
+                                    if (storedRoomCode == room) joinRoom(room, name)
                                 }
                             } else {
                                 clearPersistedSession()
@@ -933,6 +955,9 @@ object ListenTogetherClient {
     fun forceReconnect() {
         log(LogLevel.INFO, "Forcing reconnection to server")
         reconnectAttempts = 0
+        pingJob?.cancel()
+        pingJob = null
+        socketGeneration++
 
         if (webSocket != null) {
             try {

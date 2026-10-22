@@ -28,6 +28,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.lyrenne.desktop.playback.DesktopPlayer
+import com.lyrenne.desktop.ui.components.PlayerIcons
 import com.lyrenne.desktop.playback.RepeatMode
 import com.lyrenne.desktop.playback.SongInfo
 import kotlinx.coroutines.launch
@@ -115,7 +116,7 @@ fun QueueScreen(
                         onCheckedChange = { player.toggleShuffle() }
                     ) {
                         Icon(
-                            Icons.Default.Shuffle,
+                            PlayerIcons.Shuffle,
                             contentDescription = "Shuffle",
                             tint = if (state.shuffleEnabled)
                                 MaterialTheme.colorScheme.primary

@@ -781,6 +781,30 @@ VLC reports `stopped` between tracks with the song still loaded, so an immediate
 a paused entry and then a playing one on *every skip*: two pipe writes per track change. Rapid
 skipping is exactly what tripped the rate limit that rule 6 in `AGENTS.md` exists for.
 
+### Delivery: one locked send, a real timeout, and a retry
+
+Every send goes through `publish()`, which reads the player state **inside** `presenceMutex`, so a
+send queued behind another cannot publish something older than what went out first.
+
+- **`publish()` runs under `NonCancellable`, and must.** The collector calls it inline and
+  `collectLatest` cancels it on the next 200 ms position tick. Through 2.18.1 a song change that had
+  to wait for the lock (a pause or seek send still in flight) was cancelled there: B never went
+  out, the connection was closed, and Discord clears an activity when its connection closes.
+- **The reply wait is bounded by `awaitReply()`, not by `withTimeoutOrNull` around the read.**
+  `RandomAccessFile` reads block in native code and nothing interrupts them, and `withContext`
+  waits for its block before honouring cancellation, so the old 2 s and 5 s timeouts never fired:
+  a Discord that stopped answering held the lock, and every later update, forever. The read now
+  runs detached and only the wait is bounded; a timed-out connection is dropped and closed off
+  thread, because closing a synchronous pipe handle can block behind the read still pending on it.
+- **A failed send is retried** (`retryUntilDelivered`, 5 s doubling to 60 s), so Discord opened
+  mid-track gets the presence within seconds instead of at the next song. Nothing is written
+  while delivery works, and while Discord is closed each attempt fails at opening the pipe.
+
+`DiscordRpcSmokeTest` pins all three against a fake Discord served on its own named pipe, never
+the real one. Not covered: Discord restarting mid-track while the old connection still looks
+alive is noticed at the next update (pause, seek, track), since checking would mean a read, and
+a pending read on a synchronous pipe handle blocks writes on it.
+
 ## Development Notes
 - VLC must be installed on the system for playback to work (bundled VLC also supported)
 - Stream URLs fetched using InnerTube clients: ANDROID_VR_NO_AUTH → IOS → WEB_REMIX fallback

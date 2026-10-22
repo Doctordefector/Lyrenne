@@ -35,8 +35,11 @@ object DesktopNotification {
     var onTrayMenu: ((x: Int, y: Int) -> Unit)? = null
 
     fun initialize(player: DesktopPlayer) {
-        if (SystemTray.isSupported()) addTrayIcon()
-        else Timber.w("System tray not supported — tray minimize disabled")
+        // ponytail: no AWT tray on Linux. It is XEmbed-only: on Fedora/KDE the icon shows but gets
+        // no clicks, and displayMessage draws a Win95-style balloon. MPRIS covers media controls,
+        // notify-send covers notifications. A real StatusNotifierItem tray would need D-Bus work.
+        if (SystemTray.isSupported() && !Platform.isLinux) addTrayIcon()
+        else Timber.w("System tray not used — tray minimize disabled")
         // Without a tray, Linux still gets notifications through notify-send.
         if (trayIcon == null && !Platform.isLinux) return
 

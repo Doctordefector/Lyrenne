@@ -353,6 +353,13 @@ interpolate something; assign a new variable at the top of the script instead.
   cap cannot silently resize it.
 - **`-Xmx512m` is set in `build.gradle.kts`.** Without a ceiling the JVM takes a quarter of physical
   RAM (8 GB on a 32 GB machine), GC never has a reason to run, and a measured install sat at 455 MB.
+- **G1 and the JIT are trimmed too** (same `jvmArgs`, so Windows and the Linux packages both get
+  it): `-Xms32m`, heap free ratios 10/30, `G1PeriodicGCInterval=30000`, 2 parallel / 1 concurrent
+  GC threads, `CICompilerCount=3`. Idle on Home: private 513 -> 379 MB, WS 463 -> 360 MB, max GC
+  pause 13 ms. SerialGC measured 30 MB lower but froze the UI ~90 ms per full GC; do not use it.
+  What remains is ~200 MB of native memory outside the JVM (Skia render surfaces, AWT).
+  Measure with `JAVA_TOOL_OPTIONS=-XX:NativeMemoryTracking=summary` and
+  `jcmd <child Lyrenne.exe pid> VM.native_memory summary` (the launcher spawns a child JVM).
 - **Lazy list keys are deliberately partial.** The Library lists (songs, albums, artists, playlists,
   downloads) are keyed on database primary keys. The queue, local playlists, search suggestions and
   home rows are **not**, and must not be: Compose throws on duplicate keys, and those lists can

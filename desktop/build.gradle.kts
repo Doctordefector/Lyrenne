@@ -126,7 +126,23 @@ compose.desktop {
         // RSS for a music player. 512 MB is comfortably above what playback, the library and the
         // image cache actually need; Coil's caches are bounded separately in Main.kt so they no
         // longer scale off this number.
-        jvmArgs += listOf("-Xmx512m")
+        //
+        // The rest trims what G1 and the JIT size off the core count, measured idle on Home
+        // (Windows, NMT): private 513 -> 379 MB. G1's own bookkeeping was 65 MB, sized for 13
+        // refinement threads; 2 GC threads bring it to 39 MB. -Xms plus the free ratios let the
+        // heap follow the ~40 MB live set instead of sitting at the initial 512 MB, and the
+        // periodic GC hands memory back while idle. Pauses stayed at a 13 ms max.
+        // Do not switch to SerialGC: it saved 30 MB more but froze the UI for ~90 ms per full GC.
+        jvmArgs += listOf(
+            "-Xmx512m",
+            "-Xms32m",
+            "-XX:MinHeapFreeRatio=10",
+            "-XX:MaxHeapFreeRatio=30",
+            "-XX:G1PeriodicGCInterval=30000",
+            "-XX:ParallelGCThreads=2",
+            "-XX:ConcGCThreads=1",
+            "-XX:CICompilerCount=3",
+        )
 
         nativeDistributions {
             // No installer formats on purpose. Windows ships the portable ZIP built from

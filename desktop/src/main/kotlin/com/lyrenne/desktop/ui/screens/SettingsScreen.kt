@@ -1387,7 +1387,7 @@ fun SettingsScreen(
                             onDismissRequest = { showEasterEgg = false },
                             text = {
                                 Text(
-                                    "Billions must get well soon",
+                                    "Linus notice me",
                                     style = MaterialTheme.typography.titleMedium,
                                     textAlign = TextAlign.Center,
                                     modifier = Modifier.fillMaxWidth()

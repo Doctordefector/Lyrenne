@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Manager that bridges the Listen Together WebSocket client with the DesktopPlayer.
@@ -44,6 +45,11 @@ object ListenTogetherManager {
     private const val LONG_TRACK_THRESHOLD_MS = 600000L
     // Drift correction: consecutive small drifts in same direction trigger correction
     private const val DRIFT_CORRECTION_COUNT = 3
+    // How long the player gets to report what a sync did before the observer listens again
+    private const val SYNC_SETTLE_MS = 200L
+    // Queue edits the host applies as well as guests. An approved suggestion reaches the host's own
+    // queue only as a QUEUE_ADD the server sends to the whole room.
+    private val QUEUE_EDITS = setOf(PlaybackActions.QUEUE_ADD, PlaybackActions.QUEUE_REMOVE, PlaybackActions.QUEUE_CLEAR)
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private val client = ListenTogetherClient
@@ -51,12 +57,33 @@ object ListenTogetherManager {
     private var player: DesktopPlayer? = null
     private var eventCollectorJob: Job? = null
     private var playerObserverJob: Job? = null
+    private var roleObserverJob: Job? = null
     private var heartbeatJob: Job? = null
     private var guestResyncJob: Job? = null
 
-    // Whether we're currently syncing (to prevent feedback loops)
-    @Volatile
-    private var isSyncing = false
+    // How many syncs are applying room state right now. The player observer ignores the player
+    // while any are, so what a sync does is not sent back to the room as a local change. A count,
+    // not a flag, because syncs overlap: a PLAY arriving while a track loads used to clear the flag
+    // the loading sync still needed, and the guest then announced the room's own track as its pick.
+    // Every beginSync() is paired with an end in a finally. See CLAUDE.md before changing this.
+    private val syncDepth = AtomicInteger(0)
+    private val isSyncing: Boolean get() = syncDepth.get() > 0
+
+    private fun beginSync() {
+        syncDepth.incrementAndGet()
+    }
+
+    private fun endSync() {
+        syncDepth.updateAndGet { maxOf(0, it - 1) }
+    }
+
+    /** Ends a sync once the player has had [SYNC_SETTLE_MS] to report what it did. */
+    private fun endSyncSoon() {
+        scope.launch {
+            delay(SYNC_SETTLE_MS)
+            endSync()
+        }
+    }
 
     // Track the last state we synced to avoid duplicate events
     private var lastSyncedIsPlaying: Boolean? = null
@@ -84,6 +111,9 @@ object ListenTogetherManager {
     // Track if a buffer-complete arrived before the pending sync was ready
     private var bufferCompleteReceivedForTrack: String? = null
 
+    // The room's track when this client had neither a download nor a stream for it
+    private var unavailableTrackId: String? = null
+
     // Expose client state for UI
     val connectionState = client.connectionState
     val roomState = client.roomState
@@ -104,6 +134,9 @@ object ListenTogetherManager {
      * Should be called once at app start after the player is created.
      */
     fun initialize(desktopPlayer: DesktopPlayer) {
+        // The Listen Together screen calls this every time it opens. Re-running it stacked another
+        // role collector each visit and dropped room events while the event collector restarted.
+        if (player === desktopPlayer && eventCollectorJob?.isActive == true) return
         Timber.tag(TAG).d("Initializing ListenTogetherManager")
         player = desktopPlayer
         // Only the host may autoplay. A guest sends track changes too, so a guest that ran out of
@@ -127,7 +160,8 @@ object ListenTogetherManager {
         startPlayerObservation()
 
         // Observe role changes
-        scope.launch {
+        roleObserverJob?.cancel()
+        roleObserverJob = scope.launch {
             role.collectLatest { newRole ->
                 try {
                     if (newRole == RoomRole.HOST) {
@@ -152,12 +186,13 @@ object ListenTogetherManager {
             // Observe playback state changes — both host and guest send actions
             var previousState: PlaybackState? = null
             p.state.collectLatest { state ->
-                if (isSyncing || !isInRoom) return@collectLatest
-
+                // Advance even while syncing. Skipping this left prev at the state from before the
+                // sync, so the first tick after it read the sync's own pause, play or seek as the
+                // user's and sent it back to the room.
                 val prev = previousState
                 previousState = state
 
-                if (prev == null) return@collectLatest
+                if (isSyncing || !isInRoom || prev == null) return@collectLatest
 
                 // Detect track change
                 val currentTrackId = state.currentSong?.id
@@ -178,13 +213,14 @@ object ListenTogetherManager {
                     return@collectLatest
                 }
 
-                // Detect play/pause change
+                // Detect play/pause change. Compared against what the room was last told, so VLC
+                // reporting a sync's play late does not go back out as this client's PLAY.
                 if (prev.isPlaying != state.isPlaying) {
-                    if (state.isPlaying) {
+                    if (state.isPlaying && lastSyncedIsPlaying != true) {
                         Timber.tag(TAG).d("Sending PLAY at position ${state.position} (isHost=$isHost)")
                         client.sendPlaybackAction(PlaybackActions.PLAY, position = state.position)
                         lastSyncedIsPlaying = true
-                    } else if (lastSyncedIsPlaying == true) {
+                    } else if (!state.isPlaying && lastSyncedIsPlaying == true) {
                         Timber.tag(TAG).d("Sending PAUSE at position ${state.position} (isHost=$isHost)")
                         client.sendPlaybackAction(PlaybackActions.PAUSE, position = state.position)
                         lastSyncedIsPlaying = false
@@ -249,7 +285,7 @@ object ListenTogetherManager {
 
             is ListenTogetherEvent.PlaybackSync -> {
                 Timber.tag(TAG).d("PlaybackSync received: ${event.action.action}")
-                if (!isHost) {
+                if (!isHost || event.action.action in QUEUE_EDITS) {
                     handlePlaybackSync(event.action)
                 }
             }
@@ -394,10 +430,15 @@ object ListenTogetherManager {
     private fun cleanup() {
         stopHeartbeat()
         stopGuestResync()
+        // A sync still loading belongs to the room just left, and a pending one would be copied into
+        // the next room's first PLAY with this room's track. The cancelled job ends its own sync.
+        activeSyncJob?.cancel()
+        activeSyncJob = null
+        pendingSyncState = null
+        unavailableTrackId = null
         lastSyncedIsPlaying = null
         lastSyncedTrackId = null
         bufferingTrackId = null
-        isSyncing = false
         bufferCompleteReceivedForTrack = null
         lastSyncActionTime = 0L
         consecutiveDriftCount = 0
@@ -416,28 +457,27 @@ object ListenTogetherManager {
         val state = p.state.value
 
         Timber.tag(TAG).d("Applying pending sync: track=$pendingTrackId, pos=${pending.position}, play=${pending.isPlaying}")
-        isSyncing = true
+        beginSync()
+        try {
+            val targetPos = pending.position
+            val posDiff = kotlin.math.abs(state.position - targetPos)
+            val willPlay = pending.isPlaying
+            lastSyncedIsPlaying = willPlay
 
-        val targetPos = pending.position
-        val posDiff = kotlin.math.abs(state.position - targetPos)
-        val willPlay = pending.isPlaying
+            val tolerance = if (willPlay && state.isPlaying) PLAYBACK_POSITION_TOLERANCE_MS else POSITION_TOLERANCE_MS
 
-        val tolerance = if (willPlay && state.isPlaying) PLAYBACK_POSITION_TOLERANCE_MS else POSITION_TOLERANCE_MS
+            if (posDiff > tolerance) {
+                Timber.tag(TAG).d("Applying pending sync: seeking ${state.position} -> $targetPos")
+                p.seekTo(targetPos)
+            }
 
-        if (posDiff > tolerance) {
-            Timber.tag(TAG).d("Applying pending sync: seeking ${state.position} -> $targetPos")
-            p.seekTo(targetPos)
-        }
-
-        if (willPlay && !state.isPlaying) {
-            p.play()
-        } else if (!willPlay && state.isPlaying) {
-            p.pause()
-        }
-
-        scope.launch {
-            delay(200)
-            isSyncing = false
+            if (willPlay && !state.isPlaying) {
+                p.play()
+            } else if (!willPlay && state.isPlaying) {
+                p.pause()
+            }
+        } finally {
+            endSyncSoon()
         }
 
         bufferingTrackId = null
@@ -460,7 +500,13 @@ object ListenTogetherManager {
         val localTrackId = state.currentSong?.id
         if (roomTrackId != null && localTrackId != null && roomTrackId != localTrackId &&
             action.action in listOf(PlaybackActions.PLAY, PlaybackActions.PAUSE, PlaybackActions.SEEK)) {
-            Timber.tag(TAG).d("Track mismatch! Local=$localTrackId, Room=$roomTrackId — forcing full re-sync")
+            if (roomTrackId == unavailableTrackId) {
+                // Already failed to load here. Retrying on every 5 s heartbeat re-resolved the stream
+                // each time; Sync with Host and the next track change still try again.
+                Timber.tag(TAG).d("Room track $roomTrackId is unavailable here, staying paused")
+                return
+            }
+            Timber.tag(TAG).d("Track mismatch! Local=$localTrackId, Room=$roomTrackId, forcing full re-sync")
             val roomTrack = roomState.value?.currentTrack ?: return
             val roomQueue = roomState.value?.queue
             val roomPlaying = roomState.value?.isPlaying ?: false
@@ -475,11 +521,15 @@ object ListenTogetherManager {
             return
         }
 
-        isSyncing = true
+        // Queue edits move nothing the observer reports, and the host applies them too, so they must
+        // not mute its observer.
+        val latched = action.action !in QUEUE_EDITS
+        if (latched) beginSync()
 
         try {
             when (action.action) {
                 PlaybackActions.PLAY -> {
+                    lastSyncedIsPlaying = true
                     val basePos = action.position ?: 0L
                     val now = System.currentTimeMillis()
                     val adjustedPos = action.serverTime?.let { serverTime ->
@@ -549,6 +599,7 @@ object ListenTogetherManager {
                 }
 
                 PlaybackActions.PAUSE -> {
+                    lastSyncedIsPlaying = false
                     val pos = action.position ?: 0L
                     val now = System.currentTimeMillis()
 
@@ -681,19 +732,14 @@ object ListenTogetherManager {
                         val newIndex = if (currentId != null) songs.indexOfFirst { it.id == currentId } else -1
 
                         if (newIndex >= 0) {
-                            // Rebuild queue keeping current track position
-                            scope.launch {
-                                p.playQueue(songs, newIndex)
-                            }
+                            // Swap the queue under the playing song. playQueue restarted it from 0:00.
+                            p.replaceQueue(songs, newIndex)
                         }
                     }
                 }
             }
         } finally {
-            scope.launch {
-                delay(200)
-                isSyncing = false
-            }
+            if (latched) endSyncSoon()
         }
     }
 
@@ -726,6 +772,7 @@ object ListenTogetherManager {
 
         if (currentTrack == null) {
             Timber.tag(TAG).d("No track in state, pausing")
+            lastSyncedIsPlaying = false
             p.pause()
             pendingSyncState = null
             bufferingTrackId = null
@@ -734,14 +781,15 @@ object ListenTogetherManager {
         }
 
         bufferingTrackId = currentTrack.id
+        markSynced(currentTrack.id, isPlaying)
         val generation = ++currentTrackGeneration
 
         activeSyncJob = scope.launch {
             if (currentTrackGeneration != generation) return@launch
-            isSyncing = true
+            beginSync()
 
             try {
-                if (queue != null && queue.isNotEmpty()) {
+                val loaded = if (queue != null && queue.isNotEmpty()) {
                     val songs = queue.map { trackInfoToSongInfo(it) }
                     val startIndex = songs.indexOfFirst { it.id == currentTrack.id }.coerceAtLeast(0)
 
@@ -756,6 +804,12 @@ object ListenTogetherManager {
                 delay(500)
 
                 if (currentTrackGeneration != generation) return@launch
+
+                if (!loaded) {
+                    onTrackUnavailable(p, currentTrack.id, reportBuffered = !bypassBuffer)
+                    return@launch
+                }
+                unavailableTrackId = null
 
                 if (bypassBuffer) {
                     // Bypass buffer protocol: seek and apply play/pause immediately
@@ -788,13 +842,13 @@ object ListenTogetherManager {
                 Timber.tag(TAG).e(e, "Error applying playback state")
             } finally {
                 // NonCancellable is load-bearing, not defensive. `delay` in a finally throws
-                // immediately once the job is cancelled, which skipped the reset below and left
-                // isSyncing stuck true. The player observer is gated on that flag, so this client
+                // immediately once the job is cancelled, which skipped the end below and left
+                // the sync open forever. The player observer is gated on it, so this client
                 // silently stopped sending any playback change to the room until it rejoined.
                 // syncToTrack cancels this job by design, so the cancelled path is the common one.
                 withContext(NonCancellable) {
-                    delay(200)
-                    isSyncing = false
+                    delay(SYNC_SETTLE_MS)
+                    endSync()
                 }
             }
         }
@@ -804,23 +858,28 @@ object ListenTogetherManager {
         Timber.tag(TAG).d("syncToTrack: ${track.title}, play: $shouldPlay, pos: $position")
 
         bufferingTrackId = track.id
+        markSynced(track.id, shouldPlay)
         val generation = currentTrackGeneration
 
         activeSyncJob?.cancel()
         activeSyncJob = scope.launch {
+            if (currentTrackGeneration != generation) return@launch
+            val p = player ?: return@launch
+            beginSync()
+
             try {
-                if (currentTrackGeneration != generation) return@launch
-
-                val song = trackInfoToSongInfo(track)
-                val p = player ?: return@launch
-
-                isSyncing = true
-                p.playSong(song)
+                val loaded = p.playSong(trackInfoToSongInfo(track))
 
                 // Wait for player to be ready
                 delay(1000)
 
                 if (currentTrackGeneration != generation) return@launch
+
+                if (!loaded) {
+                    onTrackUnavailable(p, track.id, reportBuffered = true)
+                    return@launch
+                }
+                unavailableTrackId = null
 
                 p.pause()
 
@@ -840,13 +899,40 @@ object ListenTogetherManager {
             } catch (e: Exception) {
                 Timber.tag(TAG).e(e, "Error syncing to track")
             } finally {
-                // Every exit has to clear this, and the generation check above is a plain early
+                // Every exit has to end the sync, and the generation check above is a plain early
                 // return rather than an exception, so the old catch-only cleanup missed it. That
-                // left isSyncing true forever and wedged the player observer, which is gated on
+                // left the sync open forever and wedged the player observer, which is gated on
                 // it. Two sync messages arriving inside the 1s delay is all it took.
-                isSyncing = false
+                endSync()
             }
         }
+    }
+
+    /**
+     * Records the room's track and play state as already known, so the player observer does not
+     * announce them back once the sync settles. The guest used to skip this, saw the room's track
+     * as differing from the last one it had sent, and sent it to the room as its own pick, which
+     * reset everyone to paused at 0:00 on every track change.
+     */
+    private fun markSynced(trackId: String, isPlaying: Boolean) {
+        lastSyncedTrackId = trackId
+        lastSyncedIsPlaying = isPlaying
+    }
+
+    /**
+     * The room's track has neither a download nor a stream here. Stays paused rather than play the
+     * previous song at the room's position, and reports buffered anyway so one guest cannot hold
+     * the whole room waiting. Remembered so the track-mismatch resync does not retry it on every
+     * heartbeat.
+     */
+    private fun onTrackUnavailable(p: DesktopPlayer, trackId: String, reportBuffered: Boolean) {
+        Timber.tag(TAG).w("Room track $trackId could not be loaded here")
+        unavailableTrackId = trackId
+        p.pause()
+        pendingSyncState = null
+        bufferingTrackId = null
+        bufferCompleteReceivedForTrack = null
+        if (reportBuffered) client.sendBufferReady(trackId)
     }
 
     // --- Track info conversion ---

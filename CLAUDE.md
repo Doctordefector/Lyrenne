@@ -1091,7 +1091,7 @@ reached any other way, the Downloaded auto playlist included, was streamed, whic
 the stream (`DesktopPlayer.streamFor`) both stubbed.
 
 ## Version Management
-- **Current version**: v2.16.2
+- **Current version**: v2.16.3
 - **One place**: `desktop/build.gradle.kts` → `lyrenneVersion = "X.Y.Z"`. `processResources` expands it into
   `version.properties`, which `AutoUpdater.CURRENT_VERSION` reads. `UpdateSignatureTest` pins that they agree
 
@@ -1260,12 +1260,12 @@ Plan and rationale: `AUDIT_AND_LINUX_PLAN.md`. What is in place:
   cannot be used. Streaming prefers Opus there (Fedora's stock VLC may lack AAC).
 - **Sign-in**: Firefox first (plaintext cookies), then the Chromium family with `--password-store=basic`,
   then "Advanced: paste a cookie" (`PasteCookieSection`). Flatpak browsers are skipped.
-- **Tray**: GNOME has none. Minimize-to-tray only hides the window when `DesktopNotification.trayActive`,
-  and the switch is hidden otherwise. Without a tray, notifications go through `notify-send`.
-  On Fedora (KDE, or GNOME with the AppIndicator extension) the AWT XEmbed icon shows but gets no
-  clicks, so a hidden window is unreachable. `SingleInstance` (socket in the data dir) makes a
-  relaunch show the running copy's window instead of starting another. The real fix is an SNI icon
-  over dbus-java.
+- **Tray**: none on Linux, deliberately. The AWT tray is XEmbed only: on Fedora (KDE, or
+  GNOME with the AppIndicator extension) the icon showed but got no clicks, and `displayMessage`
+  drew a Win95-style balloon for every song change. So `trayActive` is false, the minimize-to-tray
+  switch is hidden, notifications go through `notify-send`, and MPRIS covers media controls.
+  `SingleInstance` (socket in the data dir) makes a relaunch show the running copy's window instead
+  of starting another. A real tray would be an SNI icon over dbus-java.
 - **Opening URLs/folders**: always `Platform.open()`. AWT `Desktop.browse` silently fails on Linux
   without the GNOME libs ("View Release" did nothing), so Linux uses `xdg-open`.
 - **Media**: `SystemMediaSession` (was WindowsMediaSession) publishes MPRIS via mediasession-kt.

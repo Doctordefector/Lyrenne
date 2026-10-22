@@ -1102,7 +1102,7 @@ the stream (`DesktopPlayer.streamFor`) both stubbed.
 Windows and the .deb/.rpm on Ubuntu and attaches them to a **draft** release. Since 2.16.1 the
 `LYRENNE_SIGNING_KEY` Actions secret holds the key file's contents, so CI ships the `.sig` too. Chosen
 deliberately (the user releases from several PCs); the cost is that a compromised GitHub account can sign
-updates. If that secret is ever deleted, sign the draft's ZIP before publishing:
+updates. If that secret is ever deleted, sign the draft's ZIP (and the .deb/.rpm the same way) before publishing:
 ```
 gh release download vX.Y.Z --repo Doctordefector/Lyrenne -p "*.zip" -D build/rel
 ./gradlew :desktop:signPortableZip -PsignZip=build/rel/Lyrenne-X.Y.Z-portable.zip
@@ -1272,7 +1272,9 @@ Plan and rationale: `AUDIT_AND_LINUX_PLAN.md`. What is in place:
   dbus-java is excluded only from Windows-host builds; `jdk.security.auth` is in the runtime for it.
 - **Discord**: Unix sockets go through `SocketChannel` (RandomAccessFile cannot open them), searching
   `$XDG_RUNTIME_DIR` incl. Flatpak/Snap Discord subdirs.
-- **Updater**: Linux only reports a new version and links the release page.
+- **Updater**: a copy the `lyrenne` package installed in /opt downloads the release's `.rpm`/`.deb`, checks its
+  `.sig`, installs it with `pkexec dnf|rpm -U|apt-get`, and restarts once the old process is gone (SingleInstance
+  would hand an earlier launch back to it). Anything else on Linux only links the release page. CI signs both packages.
 - **Packaging**: `packaging/linux/nfpm.yaml` builds .deb/.rpm from `createDistributable` with VLC as a
   dependency. CI: `.github/workflows/linux.yml` (`-Pci` skips the network smoke tests).
   `fetchFfmpeg` and `packagePortableZip` only run on a Windows host.

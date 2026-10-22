@@ -79,6 +79,18 @@ jobs:
           mkdir -p dist
           nfpm package -f packaging/linux/nfpm.yaml -p deb -t dist/
           nfpm package -f packaging/linux/nfpm.yaml -p rpm -t dist/
+      # The in-app updater installs these through pkexec, so they need a .sig like the ZIP.
+      - name: Sign .deb and .rpm
+        env:
+          KEY: ${{ secrets.LYRENNE_SIGNING_KEY }}
+        run: |
+          if [ -n "$KEY" ]; then
+            printf '%s' "$KEY" > "$RUNNER_TEMP/update-signing.key"
+            for f in dist/*.deb dist/*.rpm; do
+              ./gradlew :desktop:signPortableZip "-PsignZip=$PWD/$f" "-PupdateSigningKey=$RUNNER_TEMP/update-signing.key"
+            done
+            rm "$RUNNER_TEMP/update-signing.key"
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: linux

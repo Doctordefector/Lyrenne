@@ -1350,7 +1350,8 @@ fun SettingsScreen(
                                             style = MaterialTheme.typography.titleSmall
                                         )
                                         Text(
-                                            "The app will restart to apply the update",
+                                            if (com.lyrenne.desktop.Platform.isLinux) "Asks for your password, then restarts the app"
+                                            else "The app will restart to apply the update",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )

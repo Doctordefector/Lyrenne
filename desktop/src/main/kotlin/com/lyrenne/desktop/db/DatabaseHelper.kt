@@ -6,21 +6,33 @@ import app.cash.sqldelight.coroutines.mapToOneOrNull
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import timber.log.Timber
 import java.io.File
 import java.nio.file.Files
 import java.time.LocalDateTime
+import java.util.Properties
 
 object DatabaseHelper {
     private lateinit var database: LyrenneDatabase
+    private lateinit var driver: JdbcSqliteDriver
     private val queries get() = database.lyrenneQueries
 
     fun initialize() {
         val dbFile = getDatabaseFile()
         dbFile.parentFile?.toPath()?.let { Files.createDirectories(it) }
+        applyPendingRestore(dbFile)
+        val fresh = !dbFile.exists() || dbFile.length() == 0L
 
-        val driver = JdbcSqliteDriver("jdbc:sqlite:${dbFile.absolutePath}")
+        // WAL: readers never wait on a writer. Under the default rollback journal a library
+        // sync's commit (thousands of rows) locked out every reader, and a Library screen read
+        // that waited past sqlite-jdbc's 3 s busy timeout threw SQLITE_BUSY and closed the app.
+        // The timeout still matters for two writers at once, so it is raised too.
+        driver = JdbcSqliteDriver("jdbc:sqlite:${dbFile.absolutePath}", Properties().apply {
+            put("journal_mode", "WAL")
+            put("busy_timeout", "15000")
+        })
 
-        if (!dbFile.exists() || dbFile.length() == 0L) {
+        if (fresh) {
             LyrenneDatabase.Schema.create(driver)
         } else {
             // Migrate existing databases: ensure all tables exist
@@ -133,6 +145,31 @@ object DatabaseHelper {
     }
 
     private fun getDatabaseFile(): File = com.lyrenne.desktop.AppPaths.databaseFile
+
+    /** Where a restored database waits for the next start, see [applyPendingRestore]. */
+    fun pendingRestoreFile(): File = File(getDatabaseFile().path + ".restore")
+
+    /**
+     * Swaps in a database restored from a backup. It cannot be written over the live file:
+     * the open connections' WAL would be checkpointed back over it on exit, or replayed into
+     * it on the next open. Here nothing is open yet, so the old WAL is dropped with the old file.
+     */
+    private fun applyPendingRestore(dbFile: File) {
+        val restored = pendingRestoreFile()
+        if (!restored.exists()) return
+        for (suffix in listOf("-wal", "-shm")) File(dbFile.path + suffix).delete()
+        Files.move(restored.toPath(), dbFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        Timber.i("Applied restored database")
+    }
+
+    /**
+     * A consistent copy of the live database. Copying lyrenne.db itself would miss whatever
+     * is still in the WAL, and could catch a write half done.
+     */
+    fun snapshotTo(target: File) {
+        target.delete()
+        driver.execute(null, "VACUUM INTO '${target.absolutePath.replace("'", "''")}'", 0)
+    }
 
     // ============ Transaction Support ============
 

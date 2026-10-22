@@ -484,8 +484,10 @@ object LibrarySync {
      */
     private fun backupBeforeFirstPrune() {
         if (com.lyrenne.desktop.settings.PreferencesManager.preferences.value.syncPruneBackupDone) return
+        // An installed Linux copy's app dir is /opt, which the user cannot write.
+        val paths = com.lyrenne.desktop.AppPaths
         val target = java.io.File(
-            com.lyrenne.desktop.AppPaths.appDir,
+            if (paths.isPortable) paths.appDir else paths.dataDir,
             "Lyrenne-backup-before-sync-cleanup.zip"
         )
         com.lyrenne.desktop.backup.BackupManager.exportBackup(target)

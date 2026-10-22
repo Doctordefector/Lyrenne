@@ -42,7 +42,10 @@ class UiSnapshot {
         val steps = File(out, "steps.txt").takeIf { it.isFile }?.readLines()
             ?: listOf("theme dark", "wait 3000", "shot home-dark")
 
-        File("build/data").listFiles { f -> f.name == "lyrenne.db" || f.name == "preferences.properties" }
+        // The -wal holds the dev run's recent writes until a checkpoint. A stale one here
+        // would be replayed into the fresh copy, so it goes first.
+        File(AppPaths.dataDir, "lyrenne.db-wal").delete()
+        File("build/data").listFiles { f -> f.name == "lyrenne.db" || f.name == "lyrenne.db-wal" || f.name == "preferences.properties" }
             ?.forEach { it.copyTo(File(AppPaths.dataDir, it.name), overwrite = true) }
         DatabaseHelper.initialize()
         PreferencesManager.initialize()

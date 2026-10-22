@@ -28,6 +28,7 @@ import com.lyrenne.desktop.db.DatabaseHelper
 import com.lyrenne.desktop.media.MediaKeyHandler
 import com.lyrenne.desktop.media.suppressMediaKeys
 import com.lyrenne.desktop.playback.DesktopPlayer
+import com.lyrenne.desktop.ui.components.PlayerIcons
 import com.lyrenne.desktop.playback.SongInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -40,14 +41,14 @@ sealed class PaletteAction(val label: String, val icon: ImageVector, val categor
     data object GoSettings : PaletteAction("Go to Settings", Icons.Default.Settings, "Navigate")
     data object GoEqualizer : PaletteAction("Open Equalizer", Icons.Default.Equalizer, "Navigate")
     data object GoStats : PaletteAction("View Listening Stats", Icons.Default.BarChart, "Navigate")
-    data object GoQueue : PaletteAction("Open Queue", Icons.Default.QueueMusic, "Navigate")
-    data object GoLyrics : PaletteAction("Toggle Lyrics", Icons.Default.Lyrics, "Navigate")
+    data object GoQueue : PaletteAction("Open Queue", PlayerIcons.Queue, "Navigate")
+    data object GoLyrics : PaletteAction("Toggle Lyrics", PlayerIcons.Lyrics, "Navigate")
 
     // Playback
     data object PlayPause : PaletteAction("Play / Pause", Icons.Default.PlayArrow, "Playback")
     data object NextTrack : PaletteAction("Next Track", Icons.Default.SkipNext, "Playback")
     data object PrevTrack : PaletteAction("Previous Track", Icons.Default.SkipPrevious, "Playback")
-    data object ToggleShuffle : PaletteAction("Toggle Shuffle", Icons.Default.Shuffle, "Playback")
+    data object ToggleShuffle : PaletteAction("Toggle Shuffle", PlayerIcons.Shuffle, "Playback")
     data object ToggleRepeat : PaletteAction("Toggle Repeat", Icons.Default.Repeat, "Playback")
 
     // Songs from library

@@ -10,12 +10,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
-import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.automirrored.filled.VolumeDown
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.Lyrics
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -24,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
@@ -152,7 +151,7 @@ fun MiniPlayer(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     PlayerIconButton(
                         onClick = player::toggleShuffle,
-                        icon = Icons.Default.Shuffle,
+                        icon = PlayerIcons.Shuffle,
                         contentDescription = if (state.shuffleEnabled) "Disable shuffle" else "Enable shuffle",
                         selected = state.shuffleEnabled,
                         shortcut = "Ctrl+S"
@@ -205,16 +204,18 @@ fun MiniPlayer(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                PlayerIconButton(
+                LabeledPlayerButton(
                     onClick = onLyricsClick,
-                    icon = Icons.Outlined.Lyrics,
+                    icon = PlayerIcons.Lyrics,
+                    label = "Lyrics",
                     contentDescription = if (lyricsActive) "Close lyrics" else "Open lyrics",
                     selected = lyricsActive,
                     shortcut = "Ctrl+L"
                 )
-                PlayerIconButton(
+                LabeledPlayerButton(
                     onClick = onQueueClick,
-                    icon = Icons.AutoMirrored.Filled.QueueMusic,
+                    icon = PlayerIcons.Queue,
+                    label = "Queue",
                     contentDescription = if (queueActive) "Close queue" else "Open queue",
                     selected = queueActive,
                     shortcut = "Ctrl+Q"
@@ -343,6 +344,47 @@ private fun PlayerIconButton(
             imageVector = icon,
             contentDescription = contentDescription,
             modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+/**
+ * The panel toggles: icon in a pill over a small caption, like a navigation bar item. Same 40 dp
+ * width as [PlayerIconButton], so the right zone's budget in [dockLayout] is unchanged.
+ */
+@Composable
+private fun LabeledPlayerButton(
+    onClick: () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    contentDescription: String,
+    selected: Boolean,
+    shortcut: String
+) = Tip("$contentDescription ($shortcut)") {
+    val colors = MaterialTheme.colorScheme
+    Column(
+        Modifier.width(40.dp).clip(RoundedCornerShape(10.dp))
+            .clickable(role = Role.Button, onClickLabel = contentDescription, onClick = onClick)
+            .padding(vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            Modifier.size(36.dp, 24.dp)
+                .background(if (selected) colors.primaryContainer else Color.Transparent, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                icon, contentDescription, Modifier.size(20.dp),
+                tint = if (selected) colors.onPrimaryContainer else colors.onSurfaceVariant
+            )
+        }
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (selected) colors.onSurface else colors.onSurfaceVariant,
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier.padding(top = 2.dp)
         )
     }
 }

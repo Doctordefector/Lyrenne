@@ -185,7 +185,7 @@ fun TrayPanel(
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TrayToggle(Icons.Default.Shuffle, "Shuffle", state.shuffleEnabled, player::toggleShuffle)
+                    TrayToggle(PlayerIcons.Shuffle, "Shuffle", state.shuffleEnabled, player::toggleShuffle)
                     IconButton(
                         onClick = { scope.launch { player.playPrevious() } },
                         modifier = Modifier.size(36.dp)

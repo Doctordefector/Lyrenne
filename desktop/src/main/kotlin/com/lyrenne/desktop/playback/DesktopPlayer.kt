@@ -512,8 +512,9 @@ class DesktopPlayer {
         return true
     }
 
-    suspend fun playQueue(songs: List<SongInfo>, startIndex: Int = 0) {
-        if (songs.isEmpty()) return
+    /** False when the song at [startIndex] has neither a download nor a stream, so nothing started. */
+    suspend fun playQueue(songs: List<SongInfo>, startIndex: Int = 0): Boolean {
+        if (songs.isEmpty()) return false
         resetAutoplay()
 
         queue.clear()
@@ -522,8 +523,28 @@ class DesktopPlayer {
         currentIndex = startIndex
 
         val song = songs[startIndex]
-        mediaFor(song)?.let { playMedia(it, song) }
+        val media = mediaFor(song)
+        if (media != null) playMedia(media, song)
 
+        _state.value = _state.value.copy(
+            queue = queue.toList(),
+            currentIndex = currentIndex
+        )
+        return media != null
+    }
+
+    /**
+     * Swaps the queue for [songs] without touching playback; the song at [index] must be the one
+     * already playing. Listen Together's queue sync used playQueue, which restarted that song from
+     * 0:00 on every guest.
+     */
+    fun replaceQueue(songs: List<SongInfo>, index: Int) {
+        if (index !in songs.indices) return
+        resetAutoplay()
+        queue.clear()
+        queue.addAll(songs)
+        syncOriginalQueue()
+        currentIndex = index
         _state.value = _state.value.copy(
             queue = queue.toList(),
             currentIndex = currentIndex

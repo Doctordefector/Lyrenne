@@ -1,9 +1,11 @@
 package com.lyrenne.desktop.integration
 
 import com.lyrenne.desktop.playback.DesktopPlayer
+import com.lyrenne.desktop.playback.PlaybackState
 import com.lyrenne.desktop.playback.SongInfo
 import com.lyrenne.desktop.settings.PreferencesManager
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -12,6 +14,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
+import java.io.IOException
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -52,6 +55,14 @@ object DiscordRPC {
      */
     private const val SMALL_IMAGE_KEY = "lyrenne"
 
+    /** How long Discord gets to answer the handshake, and then each update. */
+    private const val HANDSHAKE_TIMEOUT_MS = 5000L
+    private const val REPLY_TIMEOUT_MS = 2000L
+
+    /** Retry backoff after a failed delivery, doubling from the first to the last. */
+    internal var retryFirstMs = 5_000L
+    internal var retryMaxMs = 60_000L
+
     private var pipe: RandomAccessFile? = null
     private var updateJob: Job? = null
     private var settingsJob: Job? = null
@@ -59,6 +70,13 @@ object DiscordRPC {
 
     @Volatile
     private var connected = false
+    // Off once updates are switched off. Checked under the lock, so a send that was already
+    // waiting for it cannot reconnect after the presence has been cleared.
+    @Volatile
+    private var enabled = false
+    // Set while Discord is known to be showing something out of date because a send failed.
+    @Volatile
+    private var deliveryFailed = false
     private var lastSongId: String? = null
     // Last observed position + the wall-clock time we observed it — used to tell a real
     // seek (position jumps out of step with elapsed time) from normal playback drift.
@@ -70,7 +88,11 @@ object DiscordRPC {
     private var lastWasPlaying = false
     private var seekJob: Job? = null
     private var pauseJob: Job? = null
+    private var retryJob: Job? = null
     private val presenceMutex = Mutex()
+
+    /** Where pipe [index] lives. Tests point it at a fake Discord. */
+    internal var pipePathFor: (index: Int) -> String = ::discordPipePath
 
     // IPC opcodes
     private const val OP_HANDSHAKE = 0
@@ -86,7 +108,7 @@ object DiscordRPC {
                 .distinctUntilChanged()
                 .collectLatest { enabled ->
                     if (enabled) {
-                        startPresenceUpdates(player)
+                        startPresenceUpdates(player.state)
                     } else {
                         stopPresenceUpdates()
                     }
@@ -94,16 +116,17 @@ object DiscordRPC {
         }
     }
 
-    private fun startPresenceUpdates(player: DesktopPlayer) {
+    internal fun startPresenceUpdates(playerState: StateFlow<PlaybackState>) {
+        enabled = true
         updateJob?.cancel()
         updateJob = scope.launch {
-            // collectLatest serializes sends and cancels an in-flight/pending update
-            // when a newer state arrives, so pipe writes never overlap and a scrub
-            // debounces to a single send. Presence updates on song change and on a
+            // collectLatest handles one state at a time. A send in flight is not cancelled by the
+            // next state (see publish), it is waited for, so pipe writes never overlap, and a
+            // scrub debounces to a single send. Presence updates on song change and on a
             // real seek — detected by the position jumping out of step with elapsed
             // wall time, which ignores the ±sub-second jitter of VLC's position that
             // made the previous absolute-threshold approach spam Discord's rate limit.
-            player.state.collectLatest { state ->
+            playerState.collectLatest { state ->
                 val song = state.currentSong
                 // Pausing is not the same as having nothing loaded, and it used to be treated
                 // that way: !isPlaying fell into the else below and wiped the presence outright,
@@ -113,7 +136,7 @@ object DiscordRPC {
                 if (song != null && !state.isPlaying) {
                     if (lastSongId != song.id || lastWasPlaying) {
                         lastWasPlaying = false
-                        schedulePausedPresence(player)
+                        schedulePausedPresence(playerState)
                     }
                     return@collectLatest
                 }
@@ -144,7 +167,7 @@ object DiscordRPC {
 
                     if (songChanged) {
                         lastSongId = song.id
-                        sendPresence(song, wall / 1000 - pos / 1000, state.duration)
+                        publish(playerState)
                     } else if (seeked || durationCorrected) {
                         // The debounce MUST live outside this collectLatest block. Playback
                         // emits a new position every ~200ms, and collectLatest cancels the
@@ -154,7 +177,7 @@ object DiscordRPC {
                         // Rewinding showed this every time; seeking forward only appeared
                         // to work because re-buffering paused emissions long enough for the
                         // delay to survive.
-                        scheduleSeekPresence(player)
+                        scheduleSeekPresence(playerState)
                     }
                 } else {
                     // Reached only when there is genuinely no track loaded.
@@ -162,7 +185,7 @@ object DiscordRPC {
                         lastSongId = null
                         lastDuration = 0L
                         lastWasPlaying = false
-                        clearPresence()
+                        publish(playerState)
                     }
                 }
             }
@@ -175,14 +198,12 @@ object DiscordRPC {
      * timer; once things settle the CURRENT state is read and sent, so the anchor is right no
      * matter how long the scrub took or how late the length arrived.
      */
-    private fun scheduleSeekPresence(player: DesktopPlayer) {
+    private fun scheduleSeekPresence(playerState: StateFlow<PlaybackState>) {
         seekJob?.cancel()
         seekJob = scope.launch {
             delay(700)
-            val state = player.state.value
-            val song = state.currentSong ?: return@launch
-            if (!state.isPlaying) return@launch
-            sendPresence(song, System.currentTimeMillis() / 1000 - state.position / 1000, state.duration)
+            if (!playerState.value.isPlaying) return@launch
+            publish(playerState)
         }
     }
 
@@ -195,86 +216,140 @@ object DiscordRPC {
      * activity rate limit before. Waiting out the gap collapses a skip back to one write, while a
      * genuine pause is still reflected within half a second.
      */
-    private fun schedulePausedPresence(player: DesktopPlayer) {
+    private fun schedulePausedPresence(playerState: StateFlow<PlaybackState>) {
         pauseJob?.cancel()
         pauseJob = scope.launch {
             delay(500)
-            val state = player.state.value
+            val state = playerState.value
             if (state.isPlaying) return@launch
             val song = state.currentSong ?: return@launch
             lastSongId = song.id
             lastDuration = state.duration
-            sendPausedPresence(song)
+            publish(playerState)
         }
     }
 
-    /** Serializes pipe writes — song-change and seek updates come from different coroutines. */
-    private suspend fun sendPresence(song: SongInfo, startEpoch: Long, durationMs: Long) {
-        presenceMutex.withLock { setPresence(song, startEpoch, durationMs) }
+    /**
+     * Publish what the player is doing right now: the playing view, the paused view, or nothing
+     * when no track is loaded. Every send goes through here. The state is read inside the lock, so
+     * a send that queued behind another cannot publish something older than what went out first.
+     *
+     * Not cancellable, deliberately. The collector calls this inline, and collectLatest cancels it
+     * on the next position tick, 200 ms later. A send cancelled while waiting for Discord's reply
+     * used to look like a broken pipe: the connection was closed, Discord drops an activity when
+     * its connection closes, and the presence vanished for the rest of the track. Every wait in
+     * here is bounded (see [awaitReply]), so holding off cancellation costs seconds at worst.
+     *
+     * A failed send leaves [deliveryFailed] set and starts [retryUntilDelivered]. Without that,
+     * a send that found Discord closed or restarted was lost until the next track.
+     */
+    private suspend fun publish(playerState: StateFlow<PlaybackState>) = withContext(NonCancellable) {
+        presenceMutex.withLock {
+            if (!enabled) return@withLock
+            val state = playerState.value
+            val song = state.currentSong
+            val delivered = when {
+                song == null -> { clearPresence(); true }
+                state.isPlaying -> setPresence(
+                    song,
+                    System.currentTimeMillis() / 1000 - state.position / 1000,
+                    state.duration
+                )
+                // The paused view: same track, no timestamps. Timestamps are what make Discord
+                // animate. Leaving them in place while paused would leave a progress bar advancing
+                // through a track that is not moving, which reads worse than showing nothing.
+                // Dropping them freezes the entry, and the small badge says Paused so it is
+                // legible rather than just stalled.
+                else -> setPresence(song, startEpoch = 0L, durationMs = 0L, paused = true)
+            }
+            deliveryFailed = !delivered
+            if (!delivered) retryUntilDelivered(playerState)
+        }
     }
 
-    private suspend fun stopPresenceUpdates() {
+    /**
+     * Keeps trying to deliver the current presence after a failed send, backing off from
+     * [retryFirstMs] to [retryMaxMs]. Stops at the first delivery, including one made by an
+     * ordinary update in the meantime.
+     *
+     * This is not the banned periodic resend (rule 6 in AGENTS.md). Nothing is written while
+     * delivery works, and while Discord is closed every attempt fails at opening the pipe, before
+     * anything reaches Discord. Each retry sends one update, the one the failed send was carrying.
+     */
+    private fun retryUntilDelivered(playerState: StateFlow<PlaybackState>) {
+        if (retryJob?.isActive == true) return
+        retryJob = scope.launch {
+            var wait = retryFirstMs
+            while (deliveryFailed) {
+                delay(wait)
+                if (deliveryFailed) publish(playerState)
+                wait = (wait * 2).coerceAtMost(retryMaxMs)
+            }
+        }
+    }
+
+    internal suspend fun stopPresenceUpdates() {
+        enabled = false
         seekJob?.cancel()
         seekJob = null
         pauseJob?.cancel()
         pauseJob = null
+        retryJob?.cancel()
+        retryJob = null
+        deliveryFailed = false
         updateJob?.cancel()
         updateJob = null
         lastSongId = null
         lastDuration = 0L
-        clearPresence()
-        disconnect()
+        // Under the lock, so the CLOSE frame cannot land in the middle of a send in flight
+        withContext(NonCancellable) {
+            presenceMutex.withLock {
+                clearPresence()
+                disconnect()
+            }
+        }
     }
 
+    private fun discordPipePath(index: Int): String {
+        val os = System.getProperty("os.name").lowercase()
+        if (os.contains("win")) return "\\\\.\\pipe\\discord-ipc-$index"
+        // Linux/macOS: check XDG_RUNTIME_DIR, TMPDIR, /tmp
+        val dirs = listOfNotNull(
+            System.getenv("XDG_RUNTIME_DIR"),
+            System.getenv("TMPDIR"),
+            "/tmp"
+        )
+        val dir = dirs.firstOrNull { java.io.File(it, "discord-ipc-$index").exists() }
+            ?: dirs.first()
+        return "$dir/discord-ipc-$index"
+    }
+
+    /** Caller holds [presenceMutex]. */
     private suspend fun connect(): Boolean {
         if (connected && pipe != null) return true
 
         // Clean up any stale connection first
-        disconnect()
-
-        val os = System.getProperty("os.name").lowercase()
-        val isWindows = os.contains("win")
+        dropConnection()
 
         // Try pipes 0-9
         for (i in 0..9) {
+            val raf = try {
+                RandomAccessFile(pipePathFor(i), "rw")
+            } catch (_: Exception) {
+                continue // No pipe at this index
+            }
+            pipe = raf
             try {
-                val pipePath = if (isWindows) {
-                    "\\\\.\\pipe\\discord-ipc-$i"
-                } else {
-                    // Linux/macOS: check XDG_RUNTIME_DIR, TMPDIR, /tmp
-                    val dirs = listOfNotNull(
-                        System.getenv("XDG_RUNTIME_DIR"),
-                        System.getenv("TMPDIR"),
-                        "/tmp"
-                    )
-                    val dir = dirs.firstOrNull { java.io.File(it, "discord-ipc-$i").exists() }
-                        ?: dirs.first()
-                    "$dir/discord-ipc-$i"
-                }
-
-                val raf = RandomAccessFile(pipePath, "rw")
-                pipe = raf
-
-                // Send handshake
                 val handshake = """{"v":1,"client_id":"$APPLICATION_ID"}"""
                 sendFrame(OP_HANDSHAKE, handshake)
-
-                // Read response with timeout (should be READY event)
-                val response = withTimeoutOrNull(5000) {
-                    withContext(Dispatchers.IO) { readFrame() }
-                }
-                if (response != null) {
-                    connected = true
-                    Timber.i("Discord IPC connected on pipe $i")
-                    return true
-                }
-
-                // No response — close and try next
-                try { raf.close() } catch (_: Exception) {}
-                pipe = null
-            } catch (_: Exception) {
-                // Try next pipe
-                pipe = null
+                awaitReply(HANDSHAKE_TIMEOUT_MS) // The READY event
+                connected = true
+                Timber.i("Discord IPC connected on pipe $i")
+                return true
+            } catch (e: Exception) {
+                // No answer on this one: close it and try the next
+                Timber.d("Discord IPC pipe $i: ${e.message}")
+                dropConnection()
             }
         }
 
@@ -294,67 +369,67 @@ object DiscordRPC {
         connected = false
     }
 
-    private fun sendFrame(opcode: Int, json: String) {
-        val raf = pipe ?: return
-        try {
-            val payload = json.toByteArray(Charsets.UTF_8)
-            val header = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
-            header.putInt(opcode)
-            header.putInt(payload.size)
-            raf.write(header.array())
-            raf.write(payload)
-        } catch (e: Exception) {
-            Timber.w("Discord sendFrame failed: ${e.message}")
-            connected = false
-            try { raf.close() } catch (_: Exception) {}
-            pipe = null
-            throw e
-        }
+    /**
+     * Forget the current connection, and close it off the calling thread: closing a pipe handle
+     * can block behind a read still pending on it (see [awaitReply]), which is exactly the state
+     * a timed-out connection is in.
+     */
+    private fun dropConnection() {
+        val raf = pipe
+        pipe = null
+        connected = false
+        if (raf != null) scope.launch { try { raf.close() } catch (_: Exception) {} }
     }
 
-    private fun readFrame(): String? {
-        val raf = pipe ?: return null
-        return try {
-            val header = ByteArray(8)
-            raf.readFully(header)
-            val buf = ByteBuffer.wrap(header).order(ByteOrder.LITTLE_ENDIAN)
-            val opcode = buf.getInt()
-            val length = buf.getInt()
-
-            if (length in 1 until 65536) {
-                val payload = ByteArray(length)
-                raf.readFully(payload)
-                String(payload, Charsets.UTF_8)
-            } else null
-        } catch (e: Exception) {
-            Timber.d("Discord readFrame failed: ${e.message}")
-            connected = false
-            try { raf.close() } catch (_: Exception) {}
-            pipe = null
-            null
-        }
+    private fun sendFrame(opcode: Int, json: String) {
+        val raf = pipe ?: throw IOException("Discord IPC not connected")
+        val payload = json.toByteArray(Charsets.UTF_8)
+        val header = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
+        header.putInt(opcode)
+        header.putInt(payload.size)
+        raf.write(header.array())
+        raf.write(payload)
     }
 
     /**
-     * Publish the paused view of [song]: same track, no timestamps.
+     * Wait at most [timeoutMs] for Discord's answer to the frame just sent, or throw.
      *
-     * Timestamps are what make Discord animate. Leaving them in place while paused would leave a
-     * progress bar advancing through a track that is not moving, which reads worse than showing
-     * nothing. Dropping them freezes the entry, and the small badge says Paused so it is legible
-     * rather than just stalled.
+     * The read is a blocking native call and nothing can interrupt it. It used to run in
+     * withContext under withTimeoutOrNull, which never fired: withContext waits for its block to
+     * return before it honours cancellation, so a Discord that stopped answering held the lock,
+     * and with it every later update, forever. The read now runs detached and only the wait for it
+     * is bounded. On a timeout the caller drops the connection, and the stuck read ends whenever
+     * its handle does.
      */
-    private suspend fun sendPausedPresence(song: SongInfo) {
-        presenceMutex.withLock { setPresence(song, startEpoch = 0L, durationMs = 0L, paused = true) }
+    private suspend fun awaitReply(timeoutMs: Long): String {
+        val raf = pipe ?: throw IOException("Discord IPC not connected")
+        val reply = scope.async { readFrame(raf) }
+        return withTimeoutOrNull(timeoutMs) { reply.await() }
+            ?: throw IOException("Discord did not answer within $timeoutMs ms")
     }
 
+    /** One frame's payload. Throws on a broken pipe or a header that cannot be a real frame. */
+    private fun readFrame(raf: RandomAccessFile): String {
+        val header = ByteArray(8)
+        raf.readFully(header)
+        val buf = ByteBuffer.wrap(header).order(ByteOrder.LITTLE_ENDIAN)
+        buf.getInt() // opcode
+        val length = buf.getInt()
+        if (length !in 0 until 65536) throw IOException("Discord frame length $length")
+        val payload = ByteArray(length)
+        raf.readFully(payload)
+        return String(payload, Charsets.UTF_8)
+    }
+
+    /** Caller holds [presenceMutex]. True once Discord has answered the update. */
     private suspend fun setPresence(
         song: SongInfo,
         startEpoch: Long,
         durationMs: Long,
         paused: Boolean = false
-    ) {
+    ): Boolean {
             try {
-                if (!connect()) return
+                if (!connect()) return false
 
                 val title = escapeJson(song.title)
                 val artist = escapeJson(song.artist)
@@ -390,30 +465,27 @@ object DiscordRPC {
                 }
 
                 sendFrame(OP_FRAME, activity)
-                // Read response but don't block forever
-                withTimeoutOrNull(2000) {
-                    withContext(Dispatchers.IO) { readFrame() }
-                }
+                awaitReply(REPLY_TIMEOUT_MS)
+                return true
             } catch (e: Exception) {
                 Timber.w("Discord presence update failed: ${e.message}")
-                connected = false
-                try { pipe?.close() } catch (_: Exception) {}
-                pipe = null
+                dropConnection()
+                return false
             }
     }
 
+    /**
+     * Caller holds [presenceMutex]. A failure needs no retry: it drops the connection, and Discord
+     * clears an activity when its connection closes.
+     */
     private suspend fun clearPresence() {
         if (!connected) return
             try {
                 val clear = """{"cmd":"SET_ACTIVITY","args":{"pid":${ProcessHandle.current().pid()},"activity":null},"nonce":"${System.nanoTime()}"}"""
                 sendFrame(OP_FRAME, clear)
-                withTimeoutOrNull(2000) {
-                    withContext(Dispatchers.IO) { readFrame() }
-                }
+                awaitReply(REPLY_TIMEOUT_MS)
             } catch (_: Exception) {
-                connected = false
-                try { pipe?.close() } catch (_: Exception) {}
-                pipe = null
+                dropConnection()
             }
     }
 
@@ -425,10 +497,12 @@ object DiscordRPC {
             .replace("\t", "\\t")
 
     fun release() {
+        enabled = false
         settingsJob?.cancel()
         updateJob?.cancel()
         seekJob?.cancel()
         pauseJob?.cancel()
+        retryJob?.cancel()
         lastSongId = null
         lastDuration = 0L
         lastWasPlaying = false

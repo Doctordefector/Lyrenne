@@ -50,7 +50,9 @@ Each of these exists because breaking it caused real damage.
    raced the named pipe and hit Discord's rate limit. It now sends on song change, a detected
    seek, a duration correction from VLC, and pause or resume. Every one of those is a discrete
    event that fires about once per track, and the seek and pause paths are both debounced. Any
-   new trigger has to clear the same bar: discrete, roughly once per track, debounced.
+   new trigger has to clear the same bar: discrete, roughly once per track, debounced. The one
+   repeating path, the retry after a failed send, writes nothing while delivery works and backs
+   off from 5 s to 60 s while it does not.
 7. **Do not bump the version** unless asked. It lives in two places that must match:
    `desktop/build.gradle.kts` and `AutoUpdater.CURRENT_VERSION`.
 8. **`data/login-profile` must never outlive a sign-in.** It holds a live Google session. Deleting

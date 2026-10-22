@@ -2,6 +2,7 @@ package com.lyrenne.desktop.backup
 
 import com.lyrenne.desktop.AppPaths
 import com.lyrenne.desktop.auth.AuthManager
+import com.lyrenne.desktop.db.DatabaseHelper
 import timber.log.Timber
 import java.io.File
 import java.io.FileInputStream
@@ -19,8 +20,10 @@ import java.util.zip.ZipOutputStream
  */
 object BackupManager {
 
+    private const val DATABASE = "lyrenne.db"
+
     private val backupFiles = listOf(
-        "preferences.properties", "lyrenne.db", "credentials.json", "lyrics-overrides.json"
+        "preferences.properties", DATABASE, "credentials.json", "lyrics-overrides.json"
     )
 
     private const val ACCOUNTS_FOLDER = "accounts"
@@ -40,12 +43,19 @@ object BackupManager {
         var count = 0
         ZipOutputStream(FileOutputStream(target)).use { zip ->
             for (name in backupFiles) {
-                val file = File(AppPaths.dataDir, name)
+                var file = File(AppPaths.dataDir, name)
                 if (!file.exists()) continue
-                // Forward slashes only — backslash entries break Java extraction
-                zip.putNextEntry(ZipEntry(name))
-                FileInputStream(file).use { it.copyTo(zip) }
-                zip.closeEntry()
+                // The live file can lag the WAL, so the database goes in as a snapshot.
+                val snapshot = if (name == DATABASE) File(AppPaths.dataDir, "$DATABASE.snapshot") else null
+                snapshot?.let { DatabaseHelper.snapshotTo(it); file = it }
+                try {
+                    // Forward slashes only — backslash entries break Java extraction
+                    zip.putNextEntry(ZipEntry(name))
+                    FileInputStream(file).use { it.copyTo(zip) }
+                    zip.closeEntry()
+                } finally {
+                    snapshot?.delete()
+                }
                 count++
             }
             // Saved accounts for the account switcher. The same plaintext cookies as
@@ -66,14 +76,9 @@ object BackupManager {
     }
 
     /**
-     * Restore from a backup ZIP. Files are written next to the live ones with
-     * a `.restore` suffix, then swapped in — the database may be locked by the
-     * running app, so the swap of the DB happens via a pending-restore marker
-     * applied on next startup when the DB is not yet open.
-     *
-     * Simpler approach used here: write directly; the SQLite JDBC driver opens
-     * connections per-query so overwriting works on Windows in practice once
-     * no statement is active. Caller should restart the app afterwards.
+     * Restore from a backup ZIP. Everything but the database is written in place. The
+     * database is open, so it waits as `lyrenne.db.restore` and DatabaseHelper swaps it in
+     * on the next start. Caller should restart the app afterwards.
      */
     fun importBackup(source: File): Result<Int> = runCatching {
         require(source.exists()) { "Backup file not found" }
@@ -98,7 +103,7 @@ object BackupManager {
                     // The account signed in right now is kept as a saved account rather than
                     // overwritten, so restoring cannot lose it.
                     if (name == "credentials.json") AuthManager.stashActiveBeforeRestore()
-                    val outFile = File(AppPaths.dataDir, name)
+                    val outFile = if (name == DATABASE) DatabaseHelper.pendingRestoreFile() else File(AppPaths.dataDir, name)
                     FileOutputStream(outFile).use { zip.copyTo(it) }
                     count++
                     Timber.i("Restored $name")

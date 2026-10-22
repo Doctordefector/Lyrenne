@@ -1350,14 +1350,10 @@ class DesktopPlayer {
         audioPlayer?.mediaPlayer()?.audio()?.setEqualizer(eq)
         vlcEqualizer = eq
 
-        // Save preset and its band values to prefs
-        val bands = (0 until 10).map { eq.amp(it) }
-        PreferencesManager.setEqPreset(presetName)
+        // Save the preset's band values so the sliders show them. setEqBands clears the
+        // preset, so the name goes in last.
+        PreferencesManager.setEqBands((0 until 10).map { eq.amp(it) })
         PreferencesManager.setEqPreamp(eq.preamp())
-        val current = PreferencesManager.preferences.value
-        // Update bands without clearing preset (setEqBands clears preset, so update directly)
-        val updatedPrefs = current.copy(eqBands = bands, eqPreset = presetName)
-        // We need to save all at once — use internal update
         PreferencesManager.setEqPreset(presetName)
     }
 

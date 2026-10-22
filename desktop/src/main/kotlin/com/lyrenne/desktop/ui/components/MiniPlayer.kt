@@ -59,6 +59,7 @@ fun MiniPlayer(
     var showSleepMenu by remember { mutableStateOf(false) }
     var showSpeedMenu by remember { mutableStateOf(false) }
     var showMoreMenu by remember { mutableStateOf(false) }
+    var showDetails by remember { mutableStateOf(false) }
     val sleepTimer by player.sleepTimer.collectAsState()
     val prefs by PreferencesManager.preferences.collectAsState()
     val songMenu = rememberMenuAnchor()
@@ -103,12 +104,16 @@ fun MiniPlayer(
         ) {
             // ---- Left: art, title/artist (menu on click or right-click), like
             Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                AsyncImage(
-                    model = squareCropFriendly(song.thumbnailUrl),
-                    contentDescription = "Album art",
-                    modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)),
-                    contentScale = ContentScale.Crop
-                )
+                Tip("Song details") {
+                    AsyncImage(
+                        model = squareCropFriendly(song.thumbnailUrl),
+                        contentDescription = "Song details",
+                        modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp))
+                            .clickable { showDetails = true },
+                        contentScale = ContentScale.Crop
+                    )
+                }
+                if (showDetails) SongDetailsDialog(song) { showDetails = false }
                 Spacer(Modifier.width(12.dp))
                 Box(Modifier.weight(1f).contextMenu(songMenu)) {
                     Column(

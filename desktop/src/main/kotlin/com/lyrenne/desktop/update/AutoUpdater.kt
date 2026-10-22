@@ -37,10 +37,27 @@ object AutoUpdater {
         ?: error("version.properties missing from the build")
 
     /**
-     * Only the Windows portable build replaces itself. Linux installs belong to a package manager
-     * (and live under a root-owned /opt), so there the check only points at the release page.
+     * Windows replaces itself. On Linux the install belongs to the package manager under a
+     * root-owned /opt, so an update downloads the signed .rpm/.deb and hands it to dnf/apt through
+     * pkexec. Anything else on Linux (a dev run, an unpacked tree) only points at the release page.
      */
-    val canSelfUpdate: Boolean get() = Platform.isWindows
+    val canSelfUpdate: Boolean get() = Platform.isWindows || linuxPackage != null
+
+    /** "rpm" or "deb" when this copy is the one the lyrenne package installed in /opt, else null. */
+    private val linuxPackage: String? by lazy {
+        if (!Platform.isLinux) return@lazy null
+        val jar = runCatching { AutoUpdater::class.java.protectionDomain.codeSource.location.path }.getOrNull()
+        if (jar?.startsWith("/opt/lyrenne/") != true) return@lazy null
+        fun owns(vararg cmd: String) = runCatching {
+            ProcessBuilder(*cmd).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                .start().waitFor() == 0
+        }.getOrDefault(false)
+        when {
+            owns("rpm", "-q", "lyrenne") -> "rpm"
+            owns("dpkg-query", "-W", "lyrenne") -> "deb"
+            else -> null
+        }
+    }
 
     /**
      * Ed25519 public key (base64 X.509) that release ZIPs are signed with. The private half stays
@@ -137,10 +154,12 @@ object AutoUpdater {
                     return@launch
                 }
 
-                val portable = isPortableInstall()
-                Timber.i("Install mode: ${if (portable) "portable" else "installed"}")
+                val portable = Platform.isWindows && isPortableInstall()
+                Timber.i("Install mode: ${linuxPackage ?: if (portable) "portable" else "installed"}")
 
-                val asset = if (portable) {
+                val asset = if (linuxPackage != null) {
+                    release.assets.find { it.name.endsWith(".$linuxPackage") }
+                } else if (portable) {
                     // Portable: need the ZIP
                     release.assets.find {
                         it.name.contains("portable", ignoreCase = true) && it.name.endsWith(".zip")
@@ -152,7 +171,7 @@ object AutoUpdater {
                 }
 
                 if (asset == null) {
-                    val kind = if (portable) "portable ZIP" else "installer"
+                    val kind = linuxPackage?.let { ".$it package" } ?: if (portable) "portable ZIP" else "installer"
                     Timber.w("No $kind in release assets: ${release.assets.map { it.name }}")
                     _state.value = UpdateState.Error("No $kind found for v$latestVersion")
                     return@launch
@@ -305,7 +324,9 @@ object AutoUpdater {
         if (current !is UpdateState.ReadyToInstall) return
 
         try {
-            if (current.isPortable) {
+            if (linuxPackage != null) {
+                applyLinuxPackageUpdate(current)
+            } else if (current.isPortable) {
                 applyPortableUpdate(current)
             } else {
                 applyInstallerUpdate(current)
@@ -332,6 +353,51 @@ object AutoUpdater {
 
         Timber.i("Installer launched, exiting app...")
         Runtime.getRuntime().exit(0)
+    }
+
+    /**
+     * pkexec shows the desktop's own password dialog, so this blocks until the user answers: it
+     * runs off the UI thread. The package manager swaps /opt/lyrenne by rename, so the running
+     * copy is unharmed, and the new one starts only after this process is gone, since
+     * SingleInstance would otherwise hand the launch straight back to us.
+     */
+    private fun applyLinuxPackageUpdate(state: UpdateState.ReadyToInstall) {
+        val pkg = state.updateFile.absolutePath
+        val cmd = when {
+            linuxPackage == "deb" -> listOf("pkexec", "apt-get", "install", "-y", pkg)
+            File("/usr/bin/dnf").exists() -> listOf("pkexec", "dnf", "install", "-y", pkg)
+            else -> listOf("pkexec", "rpm", "-U", pkg)
+        }
+        scope.launch {
+            try {
+                Timber.i("Installing update: ${cmd.joinToString(" ")}")
+                val proc = ProcessBuilder(cmd).redirectErrorStream(true).start()
+                val output = proc.inputStream.bufferedReader().readText()
+                val code = proc.waitFor()
+                if (code != 0) {
+                    Timber.e("Package install failed ($code): ${output.takeLast(500)}")
+                    // 126/127: the password dialog was dismissed or refused.
+                    _state.value = UpdateState.Error(
+                        if (code == 126 || code == 127) "Update cancelled. Click Check for updates to try again."
+                        else "The package manager could not install the update (exit $code)."
+                    )
+                    return@launch
+                }
+                state.updateFile.delete()
+                val pid = ProcessHandle.current().pid()
+                // Output goes nowhere: a pipe back to this JVM would SIGPIPE the new copy once we exit.
+                ProcessBuilder("sh", "-c", "while kill -0 $pid 2>/dev/null; do sleep 0.3; done; exec /usr/bin/lyrenne")
+                    .redirectInput(ProcessBuilder.Redirect.from(File("/dev/null")))
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                    .redirectError(ProcessBuilder.Redirect.DISCARD)
+                    .start()
+                Timber.i("Update installed, restarting...")
+                Runtime.getRuntime().exit(0)
+            } catch (e: Exception) {
+                Timber.e("Failed to install update: ${e.message}")
+                _state.value = UpdateState.Error("Failed to install update: ${e.message}")
+            }
+        }
     }
 
     private fun applyPortableUpdate(state: UpdateState.ReadyToInstall) {
@@ -618,6 +684,10 @@ object AutoUpdater {
     }
 
     private fun getUpdateDirectory(): File {
+        // Linux: /opt is root's. The data dir is ours alone, unlike a guessable /tmp path that
+        // another user could pre-create and swap the package in between the check and the install.
+        if (Platform.isLinux) return File(com.lyrenne.desktop.AppPaths.dataDir, "updates")
+
         // Put updates next to the app, not in Roaming
         val appDir = findAppDirectory()
         if (appDir != null && appDir.canWrite()) {

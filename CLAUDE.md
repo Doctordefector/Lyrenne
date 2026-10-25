@@ -842,7 +842,10 @@ a pending read on a synchronous pipe handle blocks writes on it.
 
 ## Development Notes
 - VLC must be installed on the system for playback to work (bundled VLC also supported)
-- Stream URLs fetched using InnerTube clients: ANDROID_VR_NO_AUTH → IOS → WEB_REMIX fallback
+- Stream URLs come from `ContentAwareFallbackStrategy`'s client chain (innertube). Each URL is checked
+  with a one-byte request (`DownloadManager.streamStatus`) before use, and a refused one moves on to the
+  next client: an OK player response can carry a URL YouTube 403s (issue #17). If none pass, the first
+  URL is used anyway. Every client's outcome is logged at INFO (`Stream <id>: ...` / `Download <id>: ...`)
 - This working copy IS a git clone with a working `origin`. Commit and push directly; older notes describing a robocopy-to-temp-dir push workflow are obsolete
 - **Nothing is written outside the app folder, with one exception.** All state lives in
   `<app-dir>/data/`: `lyrenne.db`, `credentials.json`, `accounts/`, `lyrics-overrides.json`,

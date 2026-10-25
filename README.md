@@ -1,18 +1,19 @@
 <div align="center">
 
 <img src=".github/lyrenne-banner.svg?v=1" width="100%"
-     alt="Lyrenne, a free open source YouTube Music player for Windows">
+     alt="Lyrenne, a free open source YouTube Music player for Windows and Linux">
 
-# Lyrenne: a YouTube Music Player for Windows
+# Lyrenne: a YouTube Music Player for Windows and Linux
 
 [![Latest release](https://img.shields.io/github/v/release/Doctordefector/Lyrenne?style=for-the-badge&label=download&labelColor=0a0a0a&color=A37C43)](https://github.com/Doctordefector/Lyrenne/releases/latest)
 [![Portable](https://img.shields.io/badge/install-portable%20zip-A37C43?style=for-the-badge&labelColor=0a0a0a)](https://github.com/Doctordefector/Lyrenne/releases/latest)
 [![License](https://img.shields.io/badge/license-GPL--3.0-777777?style=for-the-badge&labelColor=0a0a0a)](LICENSE)
 [![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-777777?style=for-the-badge&labelColor=0a0a0a)](https://github.com/Doctordefector/Lyrenne/releases/latest)
+[![Linux](https://img.shields.io/badge/Linux-.deb%20%7C%20.rpm-777777?style=for-the-badge&labelColor=0a0a0a)](#linux)
 
-**A free, open source YouTube Music desktop player for Windows 10 and 11.**
-Your real library, your real playlists, synced lyrics and offline downloads. No ads, no installer,
-no telemetry. Unzip it and it runs.
+**A free, open source YouTube Music desktop player for Windows 10 and 11, and Linux.**
+Your real library, your real playlists, synced lyrics and offline downloads. No ads, no
+telemetry. On Windows you unzip it and it runs; on Linux it is one `.deb` or `.rpm`.
 
 [**Download**](https://github.com/Doctordefector/Lyrenne/releases/latest) ·
 [Website](https://doctordefector.github.io/Lyrenne/) ·
@@ -23,6 +24,8 @@ no telemetry. Unzip it and it runs.
 ---
 
 ## Install
+
+### Windows
 
 1. Grab `Lyrenne-X.Y.Z-portable.zip` from [the latest release](https://github.com/Doctordefector/Lyrenne/releases/latest).
 2. Extract it **anywhere except a cloud-synced folder** (see the warning below).
@@ -48,22 +51,30 @@ own Java runtime. Windows 10 or 11, 64-bit.
 > `Lyrenne.exe`. A sync client that reopens those files mid-write will corrupt the database or
 > lock it on startup. `C:\Lyrenne` is a good home; the Desktop usually is not.
 
-### Linux (preview)
+### Linux
 
-`.deb` and `.rpm` packages are built by the `linux` GitHub Actions workflow. They install to
-`/opt/lyrenne`, add a `lyrenne` command and a menu entry, and pull in VLC from your distro
-(VLC is not bundled on Linux; the Snap and Flatpak versions of VLC can't be used).
+Every release ships a `.deb` (Debian, Ubuntu and their derivatives) and an `.rpm` (Fedora),
+64-bit. Grab the one for your distro from [the latest release](https://github.com/Doctordefector/Lyrenne/releases/latest):
 
 ```bash
 sudo apt install ./lyrenne_*_amd64.deb
 ```
 
+```bash
+sudo dnf install ./lyrenne-*.x86_64.rpm
+```
+
+The package installs to `/opt/lyrenne`, adds a `lyrenne` command and a menu entry, and pulls in
+VLC from your distro (VLC is not bundled on Linux; the Snap and Flatpak versions of VLC can't be
+used). Updates are one click from **Settings → Updates**: Lyrenne downloads the signed package and
+installs it through your system's password prompt.
+
 - Your library and settings live in `~/.local/share/lyrenne`, downloads in `~/Music/Lyrenne`.
 - Sign-in uses Firefox if you have it (Snap Firefox included), otherwise Chrome/Chromium/Edge/Brave/
   Vivaldi. With none of those, or only Flatpak browsers, use **Advanced: paste a cookie** on the
   sign-in screen.
-- Media keys, the GNOME/KDE media widget and `playerctl` work through MPRIS. GNOME has no tray, so
-  closing the window quits there.
+- Media keys, the GNOME/KDE media widget and `playerctl` work through MPRIS, and song changes
+  show as desktop notifications. There is no tray icon on Linux, so closing the window quits.
 - Car/USB export needs `ffmpeg` from your package manager.
 
 ## Features
@@ -97,7 +108,7 @@ Lyrenne is not a wrapper around the website and not a repackaged mobile app. It 
 Compose Desktop (JVM) application that talks to the same InnerTube API the mobile clients use,
 with its own VLC playback engine, local database and sync layer written for the desktop.
 
-- First released **9 March 2026**, actively developed, 50+ releases since.
+- First released **9 March 2026**, actively developed, 80+ releases since.
 - Auto-updater built in: it checks GitHub, downloads the new portable ZIP and restarts itself.
 - Everything runs locally. No account of its own, no analytics, no server in the middle.
 

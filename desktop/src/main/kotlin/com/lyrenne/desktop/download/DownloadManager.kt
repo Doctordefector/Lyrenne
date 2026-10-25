@@ -499,6 +499,7 @@ object DownloadManager {
     private val fallbackStrategy = ContentAwareFallbackStrategy()
 
     internal suspend fun getStreamInfo(videoId: String): StreamInfo? {
+        var unchecked: StreamInfo? = null
         for (client in fallbackStrategy.resolveClients(ContentHints())) {
             if (client.requirePoToken) continue
             if (client.loginRequired && YouTube.cookie == null) continue
@@ -506,35 +507,65 @@ object DownloadManager {
                 val signatureTimestamp = if (client.useSignatureTimestamp) {
                     withContext(Dispatchers.IO) { NewPipeUtils.getSignatureTimestamp(videoId).getOrNull() }
                 } else null
-                val playerResponse = YouTube.player(
+                val result = YouTube.player(
                     videoId,
                     client = client,
                     signatureTimestamp = signatureTimestamp
-                ).getOrNull()
-                val format = playerResponse?.streamingData?.adaptiveFormats
+                )
+                val playability = result.getOrNull()?.playabilityStatus
+                if (playability?.status != "OK") {
+                    Timber.i("Download $videoId: ${client.clientName} says ${playability?.status ?: result.exceptionOrNull()?.message} ${playability?.reason.orEmpty()}")
+                    continue
+                }
+                val format = result.getOrNull()?.streamingData?.adaptiveFormats
                     ?.filter { it.isAudio }
                     ?.maxByOrNull { it.bitrate }
 
                 val baseUrl = format?.let {
                     withContext(Dispatchers.IO) { NewPipeUtils.getStreamUrl(it, videoId).getOrNull() }
                 }
-                if (!baseUrl.isNullOrEmpty()) {
-                    val contentLength = format?.contentLength ?: 0L
-                    Timber.d("Stream resolved via ${client.clientName}: contentLength=$contentLength")
-                    return StreamInfo(
-                        url = rangedUrl(baseUrl, 0, contentLength),
-                        contentLength = contentLength,
-                        baseUrl = baseUrl
-                    )
+                if (baseUrl.isNullOrEmpty()) {
+                    Timber.i("Download $videoId: ${client.clientName} gave no audio URL")
+                    continue
                 }
+                val contentLength = format?.contentLength ?: 0L
+                val info = StreamInfo(
+                    url = rangedUrl(baseUrl, 0, contentLength),
+                    contentLength = contentLength,
+                    baseUrl = baseUrl
+                )
+                val code = withContext(Dispatchers.IO) { streamStatus(baseUrl) }
+                if (code in 200..299) {
+                    Timber.i("Download $videoId via ${client.clientName}: contentLength=$contentLength")
+                    return info
+                }
+                Timber.i("Download $videoId: ${client.clientName} stream refused, HTTP ${code ?: "unreachable"}")
+                if (unchecked == null) unchecked = info
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e // cancellation must propagate, not be treated as a failure
             } catch (e: Exception) {
-                Timber.d("Client ${client.clientName} failed for $videoId: ${e.message}")
+                Timber.i("Download $videoId: ${client.clientName} failed: ${e.message}")
                 continue
             }
         }
-        return null
+        // Nothing passed the check: use the first URL anyway, so a check that misfires (a proxy
+        // refusing Range, a timeout) costs a log line, not the download
+        if (unchecked != null) Timber.w("Download $videoId: no stream passed its check, trying the first anyway")
+        return unchecked
+    }
+
+    private val probeClient = httpClient.newBuilder().callTimeout(8, TimeUnit.SECONDS).build()
+
+    /**
+     * HTTP status for the first byte of a stream URL, or null if it could not be reached. A player
+     * response can be OK while its URL is refused (issue #17: every song 403'd in VLC), so both
+     * resolvers check a URL before using it and move on to the next client when it fails.
+     */
+    internal fun streamStatus(url: String): Int? = try {
+        probeClient.newCall(Request.Builder().url(url).header("Range", "bytes=0-0").build())
+            .execute().use { it.code }
+    } catch (e: Exception) {
+        null
     }
 
     /** Append the range parameter Android uses to bypass YouTube CDN throttling. */

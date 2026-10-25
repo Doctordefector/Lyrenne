@@ -569,6 +569,7 @@ class DesktopPlayer {
 
     private suspend fun getStreamUrl(videoId: String): String? {
         return try {
+            var unchecked: String? = null
             for (client in fallbackStrategy.resolveClients(ContentHints())) {
                 // JVM has no BotGuard for PoTokens, and no login for login-only clients
                 if (client.requirePoToken) continue
@@ -577,13 +578,17 @@ class DesktopPlayer {
                     val signatureTimestamp = if (client.useSignatureTimestamp) {
                         withContext(Dispatchers.IO) { NewPipeUtils.getSignatureTimestamp(videoId).getOrNull() }
                     } else null
-                    val playerResponse = YouTube.player(
+                    val result = YouTube.player(
                         videoId,
                         client = client,
                         signatureTimestamp = signatureTimestamp
-                    ).getOrNull()
+                    )
+                    val playerResponse = result.getOrNull()
+                    val playability = playerResponse?.playabilityStatus
 
-                    if (playerResponse?.playabilityStatus?.status == "OK") {
+                    if (playability?.status != "OK") {
+                        Timber.i("Stream $videoId: ${client.clientName} says ${playability?.status ?: result.exceptionOrNull()?.message} ${playability?.reason.orEmpty()}")
+                    } else {
                         // Get audio stream matching quality preference
                         val targetBitrate = PreferencesManager.preferences.value.audioQuality.bitrate * 1000 // kbps to bps
                         val allAudio = playerResponse.streamingData?.adaptiveFormats
@@ -604,19 +609,37 @@ class DesktopPlayer {
                             val streamUrl = withContext(Dispatchers.IO) {
                                 NewPipeUtils.getStreamUrl(audioFormat, videoId).getOrNull()
                             }
-                            if (!streamUrl.isNullOrEmpty()) {
-                                Timber.d("Stream resolved for $videoId via ${client.clientName}")
-                                _state.value = _state.value.copy(error = null)
-                                return streamUrl
+                            if (streamUrl.isNullOrEmpty()) {
+                                Timber.i("Stream $videoId: ${client.clientName} gave no audio URL")
+                            } else {
+                                // An OK response can still carry a URL YouTube refuses (issue #17)
+                                val code = withContext(Dispatchers.IO) { DownloadManager.streamStatus(streamUrl) }
+                                if (code in 200..299) {
+                                    Timber.i("Stream $videoId via ${client.clientName}")
+                                    _state.value = _state.value.copy(error = null)
+                                    return streamUrl
+                                }
+                                Timber.i("Stream $videoId: ${client.clientName} stream refused, HTTP ${code ?: "unreachable"}")
+                                if (unchecked == null) unchecked = streamUrl
                             }
+                        } else {
+                            Timber.i("Stream $videoId: ${client.clientName} gave no audio formats")
                         }
                     }
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e // cancellation must propagate, not be treated as a failure
                 } catch (e: Exception) {
-                    Timber.w("Client ${client.clientName} failed: ${e.message}")
+                    Timber.w("Stream $videoId: ${client.clientName} failed: ${e.message}")
                     continue
                 }
+            }
+
+            // Nothing passed the check: let VLC try the first URL anyway, so a check that misfires
+            // (a proxy refusing Range, a timeout) costs a log line, not the song
+            unchecked?.let {
+                Timber.w("Stream $videoId: no stream passed its check, trying the first anyway")
+                _state.value = _state.value.copy(error = null)
+                return it
             }
 
             Timber.w("Could not get playable stream for $videoId")

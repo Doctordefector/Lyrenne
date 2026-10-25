@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Lyrenne | YouTube Music Player for Windows</title>
-<meta name="description" content="Lyrenne is a free, open source YouTube Music player for Windows 10 and 11. Portable, no installer, no ads. Plays your real library, playlists and synced lyrics.">
+<title>Lyrenne | YouTube Music Player for Windows and Linux</title>
+<meta name="description" content="Lyrenne is a free, open source YouTube Music player for Windows 10, 11 and Linux. Portable on Windows, .deb and .rpm on Linux, no ads. Plays your real library, playlists and synced lyrics.">
 <link rel="canonical" href="https://doctordefector.github.io/Lyrenne/">
 <link rel="icon" type="image/svg+xml" href="images/logo.svg">
 <link rel="alternate icon" type="image/png" href="images/logo.png">
@@ -15,13 +15,13 @@
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Lyrenne">
-<meta property="og:title" content="Lyrenne | YouTube Music Player for Windows">
-<meta property="og:description" content="A free, open source YouTube Music player for Windows. Portable, no installer, no ads.">
+<meta property="og:title" content="Lyrenne | YouTube Music Player for Windows and Linux">
+<meta property="og:description" content="A free, open source YouTube Music player for Windows and Linux. Synced lyrics, offline downloads, no ads.">
 <meta property="og:url" content="https://doctordefector.github.io/Lyrenne/">
 <meta property="og:image" content="https://doctordefector.github.io/Lyrenne/images/social-preview.png">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Lyrenne | YouTube Music Player for Windows">
-<meta name="twitter:description" content="A free, open source YouTube Music player for Windows. Portable, no installer, no ads.">
+<meta name="twitter:title" content="Lyrenne | YouTube Music Player for Windows and Linux">
+<meta name="twitter:description" content="A free, open source YouTube Music player for Windows and Linux. Synced lyrics, offline downloads, no ads.">
 <meta name="twitter:image" content="https://doctordefector.github.io/Lyrenne/images/social-preview.png">
 
 <script type="application/ld+json">
@@ -29,16 +29,16 @@
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   "name": "Lyrenne",
-  "alternateName": "Lyrenne YouTube Music Player for Windows",
+  "alternateName": "Lyrenne YouTube Music Player for Windows and Linux",
   "applicationCategory": "MultimediaApplication",
   "applicationSubCategory": "Music Player",
-  "operatingSystem": "Windows 10, Windows 11",
+  "operatingSystem": "Windows 10, Windows 11, Linux",
   "downloadUrl": "https://github.com/Doctordefector/Lyrenne/releases/latest",
   "installUrl": "https://github.com/Doctordefector/Lyrenne/releases/latest",
   "license": "https://www.gnu.org/licenses/gpl-3.0.html",
   "isAccessibleForFree": true,
   "screenshot": "https://doctordefector.github.io/Lyrenne/images/screenshot.jpg",
-  "description": "A free, open source YouTube Music player for Windows. Portable, no installer, no ads.",
+  "description": "A free, open source YouTube Music player for Windows and Linux. Synced lyrics, offline downloads, no ads.",
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
   "author": {
     "@type": "Person",
@@ -54,9 +54,10 @@
   "@type": "FAQPage",
   "mainEntity": [
     {"@type":"Question","name":"Is there a YouTube Music desktop app for Windows?","acceptedAnswer":{"@type":"Answer","text":"YouTube does not ship an official desktop app. Lyrenne is a free, open source native player for Windows 10 and 11 that signs in to your own YouTube Music account and plays your real library."}},
+    {"@type":"Question","name":"Is there a YouTube Music app for Linux?","acceptedAnswer":{"@type":"Answer","text":"Lyrenne runs on Linux. Every release ships a .deb for Debian and Ubuntu and an .rpm for Fedora, with one-click updates from inside the app."}},
     {"@type":"Question","name":"Is Lyrenne free?","acceptedAnswer":{"@type":"Answer","text":"Yes. It is free and open source under GPL-3.0. There is no paid tier, no account of its own and no telemetry."}},
-    {"@type":"Question","name":"Does it need an installer?","acceptedAnswer":{"@type":"Answer","text":"No. It ships as a portable ZIP. Extract it anywhere and run Lyrenne.exe. Everything it writes stays in its own folder, so deleting that folder removes it completely."}},
-    {"@type":"Question","name":"Do I need VLC or Java installed?","acceptedAnswer":{"@type":"Answer","text":"No. The download bundles the VLC playback engine, ffmpeg and its own Java runtime."}},
+    {"@type":"Question","name":"Does it need an installer?","acceptedAnswer":{"@type":"Answer","text":"Not on Windows. It ships as a portable ZIP. Extract it anywhere and run Lyrenne.exe. Everything it writes stays in its own folder, so deleting that folder removes it completely. On Linux it installs as a .deb or .rpm package."}},
+    {"@type":"Question","name":"Do I need VLC or Java installed?","acceptedAnswer":{"@type":"Answer","text":"No. The download bundles its own Java runtime, and on Windows the VLC playback engine and ffmpeg too. The Linux packages pull VLC in from your distribution."}},
     {"@type":"Question","name":"Does Lyrenne play music without ads?","acceptedAnswer":{"@type":"Answer","text":"Lyrenne streams through the same API the mobile apps use and shows no advertising of its own."}}
   ]
 }
@@ -290,21 +291,21 @@ footer { background-color: var(--bg-color); padding: 2rem; border-top: 1px solid
 
 <section id="hero">
     <img class="mark" src="images/logo.svg" width="88" height="88" alt="Lyrenne app icon">
-    <h1><span class="scramble-text">Lyrenne</span><span class="sub">YouTube Music for Windows</span></h1>
-    <p class="lede">A free, open source YouTube Music client for Windows 10 and 11. Your real
-        library, your real playlists, synced lyrics and offline downloads. No ads, no installer,
-        no telemetry.</p>
+    <h1><span class="scramble-text">Lyrenne</span><span class="sub">YouTube Music for Windows &amp; Linux</span></h1>
+    <p class="lede">A free, open source YouTube Music client for Windows 10, 11 and Linux. Your
+        real library, your real playlists, synced lyrics and offline downloads. No ads, no
+        telemetry.</p>
     <a class="lux-frame" href="https://github.com/Doctordefector/Lyrenne/releases/latest">
         <span class="lux-frame-content">Download</span>
     </a>
-    <div class="hero-meta">Portable ZIP &middot; 64-bit &middot; GPL-3.0</div>
+    <div class="hero-meta">Portable ZIP &middot; .deb &middot; .rpm &middot; 64-bit &middot; GPL-3.0</div>
 </section>
 
 <section id="what" class="fade-in">
     <h2>What It Is</h2>
     <p class="prose">YouTube ships no desktop app for YouTube Music, and a browser tab is not a
-        music player. Lyrenne is a native Windows application that signs in to your own
-        account and talks to the same API the mobile app uses.</p>
+        music player. Lyrenne is a native desktop application for Windows and Linux that
+        signs in to your own account and talks to the same API the mobile app uses.</p>
     <p class="prose">It is <strong>not a wrapper around the website</strong> and not a repackaged
         Android build. It has its own player, database and sync layer, written for the desktop.</p>
     <div class="shot-frame fade-in" style="margin-top:3rem">
@@ -320,21 +321,23 @@ footer { background-color: var(--bg-color); padding: 2rem; border-top: 1px solid
             <span class="card-context">Library</span>
             <h3>Two-way sync</h3>
             <p>Liked songs, albums, artists and playlists sync in both directions. Edits made on
-                the desktop reach your YouTube Music account instead of stopping at a local copy.</p>
+                the desktop reach your YouTube Music account instead of stopping at a local copy. Keep
+                several accounts signed in and switch with one click.</p>
             <span class="card-tag">InnerTube / SQLDelight</span>
         </div>
         <div class="card fade-in">
             <span class="card-context">Playback</span>
             <h3>A real player</h3>
-            <p>Bundled VLC engine with crossfade, a 10-band equalizer, playback speed, sleep timer,
-                skip silence and volume normalization.</p>
+            <p>VLC engine with gapless playback, crossfade, Smart Shuffle, a 10-band equalizer
+                with presets, playback speed, sleep timer, skip silence and volume normalization.</p>
             <span class="card-tag">VLC / vlcj</span>
         </div>
         <div class="card fade-in">
             <span class="card-context">Lyrics</span>
             <h3>Five providers</h3>
             <p>BetterLyrics, LrcLib, KuGou, YouTube lyrics and YouTube transcripts, chained. A
-                track one source misses is usually covered by the next.</p>
+                track one source misses is usually covered by the next, with word-by-word
+                highlighting where the timing exists.</p>
             <span class="card-tag">Synced / Plain</span>
         </div>
         <div class="card fade-in">
@@ -354,9 +357,9 @@ footer { background-color: var(--bg-color); padding: 2rem; border-top: 1px solid
         <div class="card fade-in">
             <span class="card-context">Desktop</span>
             <h3>Native extras</h3>
-            <p>Media keys, tray mini player, Discord Rich Presence, Last.fm scrobbling, Listen
-                Together rooms and Shazam recognition.</p>
-            <span class="card-tag">Windows 10 / 11</span>
+            <p>Media keys, a floating mini player, Discord Rich Presence, Last.fm scrobbling,
+                Listen Together rooms, Shazam recognition and listening stats.</p>
+            <span class="card-tag">Windows Now Playing / MPRIS</span>
         </div>
     </div>
 </section>
@@ -379,7 +382,7 @@ footer { background-color: var(--bg-color); padding: 2rem; border-top: 1px solid
                 Java runtime are already inside the archive, so there is nothing else to install.</p>
         </div>
     </div>
-    <p class="prose" style="margin-top:2.5rem">Prefer a package manager? Scoop works:</p>
+    <p class="prose" style="margin-top:2.5rem">Prefer a package manager on Windows? Scoop works:</p>
     <pre class="cmd"><code>scoop bucket add lyrenne https://github.com/Doctordefector/scoop-lyrenne
 scoop install lyrenne</code></pre>
     <div class="notice fade-in">
@@ -389,13 +392,19 @@ scoop install lyrenne</code></pre>
         most common cause of the app failing to start. Keep it out of OneDrive, Dropbox and a
         synced Desktop folder.
     </div>
+    <p class="prose" style="margin-top:2.5rem"><strong>On Linux</strong>, take the
+        <code>.deb</code> (Debian, Ubuntu and their derivatives) or the <code>.rpm</code> (Fedora)
+        from <a href="https://github.com/Doctordefector/Lyrenne/releases/latest">the latest release</a>.
+        It pulls VLC in from your distro, and later updates are one click from Settings.</p>
+    <pre class="cmd"><code>sudo apt install ./lyrenne_*_amd64.deb
+sudo dnf install ./lyrenne-*.x86_64.rpm</code></pre>
 </section>
 
 <section id="faq" class="fade-in">
     <h2>Questions</h2>
     <div class="faq">
         <details><summary>Is there an official YouTube Music desktop app for Windows?</summary>
-            <p>No. YouTube ships mobile apps and the web player, nothing native for Windows.
+            <p>No. YouTube ships mobile apps and the web player, nothing native for Windows or Linux.
                Lyrenne is an independent open source client.</p></details>
         <details><summary>Is Lyrenne free?</summary>
             <p>Yes, free and open source under GPL-3.0. No paid tier, no account of its own,
@@ -405,11 +414,14 @@ scoop install lyrenne</code></pre>
                its benefits.</p></details>
         <details><summary>Does it need VLC or Java installed?</summary>
             <p>No. Both are bundled in the download, along with ffmpeg for exporting.</p></details>
-        <details><summary>Does it work on macOS or Linux?</summary>
-            <p>The code is Compose Desktop on the JVM, so it is portable in principle, but only
-               Windows builds are published today.</p></details>
+        <details><summary>Does it work on Linux or macOS?</summary>
+            <p>Linux, yes: every release ships a <code>.deb</code> and an <code>.rpm</code>, and
+               the app updates itself through your package manager. macOS builds are not
+               published yet.</p></details>
         <details><summary>How do I uninstall it?</summary>
-            <p>Delete the folder. Everything it wrote lives inside it.</p></details>
+            <p>On Windows, delete the folder; everything it wrote lives inside it. On Linux,
+               remove the <code>lyrenne</code> package, and <code>~/.local/share/lyrenne</code>
+               if you want your library gone too.</p></details>
     </div>
 </section>
 

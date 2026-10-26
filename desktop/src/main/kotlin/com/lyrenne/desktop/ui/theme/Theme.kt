@@ -14,6 +14,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lyrenne.desktop.Platform
 import com.lyrenne.desktop.settings.ThemeMode
+import com.sun.jna.platform.win32.Advapi32Util
+import com.sun.jna.platform.win32.WinReg
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -301,13 +303,23 @@ private fun runForOutput(vararg cmd: String): String? = try {
     null
 }
 
+/**
+ * Read straight from the registry, not by running `reg query`.
+ *
+ * [SystemTheme] now reads it off the UI thread, but starting `reg.exe` was measured costing 4.4 s
+ * on a throttled laptop (once on the UI thread, a tray panel open); the direct read takes
+ * microseconds, so the seed read in Main and the 30 s poll stay free.
+ *
+ * A missing value reads as light, the same as `reg query` failing to find it did.
+ */
 private fun isWindowsDarkTheme(): Boolean {
-    val output = runForOutput(
-        "reg", "query",
-        "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-        "/v", "AppsUseLightTheme"
-    ) ?: return true
-    return output.contains("0x0")
+    return try {
+        val key = "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"
+        Advapi32Util.registryValueExists(WinReg.HKEY_CURRENT_USER, key, "AppsUseLightTheme") &&
+            Advapi32Util.registryGetIntValue(WinReg.HKEY_CURRENT_USER, key, "AppsUseLightTheme") == 0
+    } catch (_: Throwable) {
+        true
+    }
 }
 
 private fun isMacDarkTheme(): Boolean =

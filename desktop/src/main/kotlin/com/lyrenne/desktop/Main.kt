@@ -312,6 +312,10 @@ private fun runApp() {
             height = TRAY_PANEL_HEIGHT.dp
         )
 
+        // Keeps the floating player down while quitting: hiding the main window would otherwise
+        // bring it up for the length of the teardown
+        var quitting by remember { mutableStateOf(false) }
+
         /**
          * Quit, from every exit path (tray panel, window close, tray callback).
          *
@@ -322,6 +326,7 @@ private fun runApp() {
          * releases run off the UI thread, and the process exits regardless after 3 s.
          */
         val quit: () -> Unit = {
+            quitting = true
             trayPanelAt = null
             windowVisible = false
             kotlin.concurrent.thread(name = "shutdown") {
@@ -580,7 +585,7 @@ private fun runApp() {
         // up a fresh render surface, which is long enough to look like it had not worked.
         if (prefs.floatingPlayer) {
             Window(
-                visible = currentSong != null && mainHidden && !floatingDismissed,
+                visible = currentSong != null && mainHidden && !floatingDismissed && !quitting,
                 create = {
                     ComposeWindow().apply {
                         // A utility window has no taskbar button. Without it a second Lyrenne

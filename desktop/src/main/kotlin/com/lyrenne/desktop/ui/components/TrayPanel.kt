@@ -30,6 +30,8 @@ import com.lyrenne.desktop.settings.PreferencesManager
 import com.lyrenne.desktop.ui.theme.LocalLyrenneExtras
 import com.lyrenne.desktop.ui.theme.LyrenneTokens
 import com.lyrenne.desktop.ui.theme.rememberArtTint
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -58,10 +60,20 @@ fun TrayPanel(
     onQuit: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val state by player.state.collectAsState()
+    // Only what the panel shows, each collected on its own. The full playback state carries a
+    // position that changes five times a second, and collecting all of it redrew the whole panel
+    // at that rate. The position itself is read by TraySeekBar alone.
+    val currentSong by remember(player) { player.state.map { it.currentSong }.distinctUntilChanged() }
+        .collectAsState(player.state.value.currentSong)
+    val isPlaying by remember(player) { player.state.map { it.isPlaying }.distinctUntilChanged() }
+        .collectAsState(player.state.value.isPlaying)
+    val shuffleEnabled by remember(player) { player.state.map { it.shuffleEnabled }.distinctUntilChanged() }
+        .collectAsState(player.state.value.shuffleEnabled)
+    val repeatMode by remember(player) { player.state.map { it.repeatMode }.distinctUntilChanged() }
+        .collectAsState(player.state.value.repeatMode)
+    val song = currentSong
     val prefs by PreferencesManager.preferences.collectAsState()
     val scope = rememberCoroutineScope()
-    val song = state.currentSong
     val colors = MaterialTheme.colorScheme
     val artTint = rememberArtTint(song?.thumbnailUrl)
     val washAlpha = LocalLyrenneExtras.current.artWashAlpha
@@ -144,48 +156,14 @@ fun TrayPanel(
 
                 Spacer(Modifier.height(10.dp))
 
-                // Seek bar. Duration is 0 until VLC reports it (restored queue, still loading),
-                // and dividing by a coerced 1ms made the bar read as 100% full at 0:01 / 0:00.
-                var scrubbing by remember { mutableStateOf<Float?>(null) }
-                val duration = state.duration
-                val known = duration > 0L
-                PlayerSlider(
-                    value = scrubbing
-                        ?: if (known) (state.position.toFloat() / duration).coerceIn(0f, 1f) else 0f,
-                    onValueChange = { if (known) scrubbing = it },
-                    onValueChangeFinished = {
-                        scrubbing?.let { player.seekTo((it * duration).toLong()) }
-                        scrubbing = null
-                    },
-                    idleThumb = 0.dp,
-                    modifier = Modifier.fillMaxWidth().height(16.dp)
-                        .wheelStep(
-                            value = { player.state.value.position.toFloat() },
-                            step = 5_000f,
-                            range = 0f..duration.toFloat(),
-                            enabled = known
-                        ) { player.seekTo(it.toLong()) }
-                )
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(
-                        formatMs(state.position),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.onSurfaceVariant
-                    )
-                    Text(
-                        // Same placeholder as the dock
-                        if (known) formatMs(duration) else "–:––",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.onSurfaceVariant
-                    )
-                }
+                TraySeekBar(player)
 
                 Row(
                     Modifier.fillMaxWidth().padding(vertical = 4.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TrayToggle(PlayerIcons.Shuffle, "Shuffle", state.shuffleEnabled, player::toggleShuffle)
+                    TrayToggle(PlayerIcons.Shuffle, "Shuffle", shuffleEnabled, player::toggleShuffle)
                     IconButton(
                         onClick = { scope.launch { player.playPrevious() } },
                         modifier = Modifier.size(36.dp)
@@ -196,8 +174,8 @@ fun TrayPanel(
                         shape = CircleShape
                     ) {
                         Icon(
-                            if (state.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            if (state.isPlaying) "Pause" else "Play",
+                            if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            if (isPlaying) "Pause" else "Play",
                             Modifier.size(24.dp)
                         )
                     }
@@ -206,9 +184,9 @@ fun TrayPanel(
                         modifier = Modifier.size(36.dp)
                     ) { Icon(Icons.Default.SkipNext, "Next", Modifier.size(22.dp)) }
                     TrayToggle(
-                        if (state.repeatMode == RepeatMode.ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
+                        if (repeatMode == RepeatMode.ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
                         "Repeat",
-                        state.repeatMode != RepeatMode.OFF,
+                        repeatMode != RepeatMode.OFF,
                         player::toggleRepeat
                     )
                 }
@@ -303,4 +281,54 @@ private fun formatMs(ms: Long): String {
     val hours = total / 3600
     return if (hours > 0) "%d:%02d:%02d".format(hours, (total % 3600) / 60, total % 60)
     else "%d:%02d".format(total / 60, total % 60)
+}
+
+/**
+ * The seek bar and its times, the only part of the panel that follows the playback position.
+ * Kept to whole seconds, which is all the times show, so this redraws once a second instead of
+ * on every position tick.
+ */
+@Composable
+private fun TraySeekBar(player: DesktopPlayer) {
+    val colors = MaterialTheme.colorScheme
+    val duration by remember(player) { player.state.map { it.duration }.distinctUntilChanged() }
+        .collectAsState(player.state.value.duration)
+    val seconds by remember(player) { player.state.map { it.position / 1000 }.distinctUntilChanged() }
+        .collectAsState(player.state.value.position / 1000)
+    val position = seconds * 1000
+
+    // Seek bar. Duration is 0 until VLC reports it (restored queue, still loading),
+    // and dividing by a coerced 1ms made the bar read as 100% full at 0:01 / 0:00.
+    var scrubbing by remember { mutableStateOf<Float?>(null) }
+    val known = duration > 0L
+    PlayerSlider(
+        value = scrubbing
+            ?: if (known) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f,
+        onValueChange = { if (known) scrubbing = it },
+        onValueChangeFinished = {
+            scrubbing?.let { player.seekTo((it * duration).toLong()) }
+            scrubbing = null
+        },
+        idleThumb = 0.dp,
+        modifier = Modifier.fillMaxWidth().height(16.dp)
+            .wheelStep(
+                value = { player.state.value.position.toFloat() },
+                step = 5_000f,
+                range = 0f..duration.toFloat(),
+                enabled = known
+            ) { player.seekTo(it.toLong()) }
+    )
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(
+            formatMs(position),
+            style = MaterialTheme.typography.labelSmall,
+            color = colors.onSurfaceVariant
+        )
+        Text(
+            // Same placeholder as the dock
+            if (known) formatMs(duration) else "–:––",
+            style = MaterialTheme.typography.labelSmall,
+            color = colors.onSurfaceVariant
+        )
+    }
 }

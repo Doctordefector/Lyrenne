@@ -1,0 +1,4 @@
+# Same line endings on Windows, WSL, Linux and macOS checkouts, whatever core.autocrlf says
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf

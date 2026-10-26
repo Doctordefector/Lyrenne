@@ -21,9 +21,6 @@ object DesktopNotification {
     /** Callback invoked when user clicks "Show Lyrenne" in tray menu or double-clicks the icon. */
     var onShowWindow: (() -> Unit)? = null
 
-    /** Callback invoked when user clicks "Exit" in tray menu. */
-    var onExitApp: (() -> Unit)? = null
-
     /** Right-click on the tray icon, with screen coordinates for placing the panel. */
     var onTrayMenu: ((x: Int, y: Int) -> Unit)? = null
 
@@ -118,6 +115,5 @@ object DesktopNotification {
         }
         trayIcon = null
         onShowWindow = null
-        onExitApp = null
     }
 }

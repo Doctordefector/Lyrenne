@@ -21,6 +21,8 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.lyrenne.desktop.playback.DesktopPlayer
 import com.lyrenne.desktop.settings.PreferencesManager
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -49,10 +51,15 @@ fun TrayPanel(
     onQuit: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val state by player.state.collectAsState()
+    // Only what the panel shows, each collected on its own. The full playback state carries a
+    // position that changes five times a second, and collecting all of it redrew the whole panel
+    // at that rate. The position itself is read by TraySeekBar alone.
+    val currentSong by remember(player) { player.state.map { it.currentSong }.distinctUntilChanged() }
+        .collectAsState(player.state.value.currentSong)
+    val isPlaying by remember(player) { player.state.map { it.isPlaying }.distinctUntilChanged() }
+        .collectAsState(player.state.value.isPlaying)
     val prefs by PreferencesManager.preferences.collectAsState()
     val scope = rememberCoroutineScope()
-    val song = state.currentSong
 
     // The card hugs its content and sits at the bottom; the gap above stays transparent.
     // Clicking that empty strip dismisses, the way clicking outside a menu does.
@@ -74,6 +81,7 @@ fun TrayPanel(
         shadowElevation = 8.dp
     ) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            val song = currentSong
             if (song == null) {
                 Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
                     Text(
@@ -118,29 +126,7 @@ fun TrayPanel(
 
                 Spacer(Modifier.height(6.dp))
 
-                // Seek bar. Duration is 0 until VLC reports it (restored queue, still loading),
-                // and dividing by a coerced 1ms made the bar read as 100% full at 0:01 / 0:00.
-                var scrubbing by remember { mutableStateOf<Float?>(null) }
-                val duration = state.duration
-                val known = duration > 0L
-                Slider(
-                    value = scrubbing
-                        ?: if (known) (state.position.toFloat() / duration).coerceIn(0f, 1f) else 0f,
-                    onValueChange = { if (known) scrubbing = it },
-                    onValueChangeFinished = {
-                        scrubbing?.let { player.seekTo((it * duration).toLong()) }
-                        scrubbing = null
-                    },
-                    enabled = known,
-                    modifier = Modifier.fillMaxWidth().height(16.dp)
-                )
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(formatMs(state.position), style = MaterialTheme.typography.labelSmall)
-                    Text(
-                        if (known) formatMs(duration) else "--:--",
-                        style = MaterialTheme.typography.labelSmall
-                    )
-                }
+                TraySeekBar(player)
 
                 Row(
                     Modifier.fillMaxWidth(),
@@ -157,8 +143,8 @@ fun TrayPanel(
                         modifier = Modifier.size(36.dp)
                     ) {
                         Icon(
-                            if (state.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            if (state.isPlaying) "Pause" else "Play",
+                            if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            if (isPlaying) "Pause" else "Play",
                             Modifier.size(20.dp)
                         )
                     }
@@ -208,6 +194,42 @@ fun TrayPanel(
             }
         }
     }
+    }
+}
+
+/**
+ * The seek bar and its times, the only part of the panel that follows the playback position.
+ * Kept to whole seconds, which is all the times show, so this redraws once a second instead of
+ * on every position tick.
+ */
+@Composable
+private fun TraySeekBar(player: DesktopPlayer) {
+    val duration by remember(player) { player.state.map { it.duration }.distinctUntilChanged() }
+        .collectAsState(player.state.value.duration)
+    val seconds by remember(player) { player.state.map { it.position / 1000 }.distinctUntilChanged() }
+        .collectAsState(player.state.value.position / 1000)
+    val position = seconds * 1000
+
+    // Duration is 0 until VLC reports it (restored queue, still loading), and dividing by a
+    // coerced 1ms made the bar read as 100% full at 0:01 / 0:00.
+    var scrubbing by remember { mutableStateOf<Float?>(null) }
+    val known = duration > 0L
+    Slider(
+        value = scrubbing ?: if (known) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f,
+        onValueChange = { if (known) scrubbing = it },
+        onValueChangeFinished = {
+            scrubbing?.let { player.seekTo((it * duration).toLong()) }
+            scrubbing = null
+        },
+        enabled = known,
+        modifier = Modifier.fillMaxWidth().height(16.dp)
+    )
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(formatMs(position), style = MaterialTheme.typography.labelSmall)
+        Text(
+            if (known) formatMs(duration) else "--:--",
+            style = MaterialTheme.typography.labelSmall
+        )
     }
 }
 

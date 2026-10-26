@@ -10,6 +10,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lyrenne.desktop.settings.ThemeMode
+import com.sun.jna.platform.win32.Advapi32Util
+import com.sun.jna.platform.win32.WinReg
 
 /**
  * Dark theme, built from the same tokens as the website and the app mark: near-black surfaces,
@@ -247,17 +249,22 @@ fun isSystemDarkTheme(): Boolean {
     }
 }
 
+/**
+ * Read straight from the registry, not by running `reg query`.
+ *
+ * This runs on the UI thread, inside composition, every time a window first composes
+ * [LyrenneTheme]. The tray panel does that on every open. Starting `reg.exe` there was measured
+ * holding the UI thread for 4.4 s on a single open, before the panel could draw anything, and
+ * process creation only gets slower on a throttled laptop. The direct read takes microseconds.
+ *
+ * A missing value reads as light, the same as `reg query` failing to find it did.
+ */
 private fun isWindowsDarkTheme(): Boolean {
     return try {
-        val process = ProcessBuilder(
-            "reg", "query",
-            "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-            "/v", "AppsUseLightTheme"
-        ).start()
-        val output = process.inputStream.bufferedReader().readText()
-        process.waitFor()
-        output.contains("0x0")
-    } catch (_: Exception) {
+        val key = "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"
+        Advapi32Util.registryValueExists(WinReg.HKEY_CURRENT_USER, key, "AppsUseLightTheme") &&
+            Advapi32Util.registryGetIntValue(WinReg.HKEY_CURRENT_USER, key, "AppsUseLightTheme") == 0
+    } catch (_: Throwable) {
         true
     }
 }

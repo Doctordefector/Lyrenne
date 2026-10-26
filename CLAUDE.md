@@ -991,6 +991,33 @@ Created in `Main.kt`, drawn by `ui/components/FloatingPlayer.kt`. Three things t
 To screenshot it, capture with `CAPTUREBLT`. A plain BitBlt (and `Graphics.CopyFromScreen`) skips
 layered windows, so the disc is invisible in the capture while being perfectly visible on screen.
 
+## Tray panel and quitting
+
+The right-click tray panel (`ui/components/TrayPanel.kt`, its window in `Main.kt`) lagged and Quit
+froze on a laptop in power saving mode. Measured 2026-10-01 on a desktop, with the process put in
+Windows efficiency mode (EcoQoS) on two E-cores as a stand-in for Energy Saver:
+
+- **Never start a process from composition.** `isWindowsDarkTheme()` ran `reg query` on the UI
+  thread every time a window first composed `LyrenneTheme`, and the tray panel did that on every
+  open. From a backgrounded, idle Lyrenne that one spawn held the UI thread for 4.4 s, while the
+  same command takes 33 ms from a shell. Windows throttles exactly that kind of process hardest.
+  It reads the registry through JNA now. The first open went from 4.7 s to 0.15 s.
+- **The panel's window is made once**, shown and hidden after that like the floating player, and
+  made displayable with `pack()` when the tray icon is created. A new window per right-click cost
+  0.22 to 0.30 s each time. Later opens now paint in 37 to 108 ms.
+- **The panel is only composed while open**, and only `TraySeekBar` reads the position, in whole
+  seconds. Collecting the whole `PlaybackState` redrew all of it five times a second.
+- **`quit()` hides every window first, then tears down on a daemon thread** joined for at most
+  5 s. VLC's release took 213 to 246 ms with a song playing, all of it on the UI thread with the
+  panel frozen on screen. The windows now go in 30 to 50 ms. Every quit path goes through it.
+- **The floating player stays hidden while quitting.** `quit()` hiding the main window would
+  otherwise bring it up for the length of the teardown.
+
+To drive the tray icon without a mouse, post AWT's tray message to its `SunAwtTrayIcon` window:
+`WM_AWT_TRAY_NOTIFY` is `0x9834` on JDK 21, `wParam` the icon id (1), `lParam` `WM_RBUTTONDOWN` then
+`WM_RBUTTONUP`. AWT reads the position from the cursor. Posting `WM_ACTIVATE` with `WA_INACTIVE` to
+the panel dismisses it. `jcmd` cannot attach to the jlinked runtime, so sample stacks in-process.
+
 ## Autoplay
 
 A song played on its own (search, home, recognition, stats, Recently Played) is a one-song queue.

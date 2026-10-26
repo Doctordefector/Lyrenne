@@ -29,6 +29,25 @@ class LyricsOverridesTest {
     }
 
     @Test
+    fun `an offset survives a reload, and putting it back on time leaves no entry`() {
+        val dir = Files.createTempDirectory("lyrics-offsets").toFile()
+        try {
+            val file = File(dir, "lyrics-offsets.json")
+            LyricsOffsets.file = file
+            assertEquals(0L, LyricsOffsets.get("song1"))
+            LyricsOffsets.set("song1", -300)
+
+            LyricsOffsets.file = file
+            assertEquals(-300L, LyricsOffsets.get("song1"))
+
+            LyricsOffsets.set("song1", 0)
+            assertEquals("{}", file.readText())
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `a corrupt file is ignored rather than breaking lookups`() {
         val dir = Files.createTempDirectory("lyrics-overrides").toFile()
         try {

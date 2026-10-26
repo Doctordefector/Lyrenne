@@ -23,7 +23,7 @@ object BackupManager {
     private const val DATABASE = "lyrenne.db"
 
     private val backupFiles = listOf(
-        "preferences.properties", DATABASE, "credentials.json", "lyrics-overrides.json"
+        "preferences.properties", DATABASE, "credentials.json", "lyrics-overrides.json", "lyrics-offsets.json"
     )
 
     private const val ACCOUNTS_FOLDER = "accounts"

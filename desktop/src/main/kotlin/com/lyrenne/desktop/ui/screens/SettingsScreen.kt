@@ -557,6 +557,20 @@ fun SettingsScreen(
                     )
                 }
 
+                item {
+                    SettingsItem(
+                        icon = Icons.Default.Translate,
+                        title = "Romanize Lyrics",
+                        subtitle = "Show how Japanese, Korean, Chinese, Cyrillic and other scripts read, under each line",
+                        trailing = {
+                            Switch(
+                                checked = preferences.lyricsRomanize,
+                                onCheckedChange = { PreferencesManager.setLyricsRomanize(it) }
+                            )
+                        }
+                    )
+                }
+
                 item(key = "group:Library & content") {
                     SettingsGroupHeader("Library & content")
                 }

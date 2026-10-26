@@ -103,6 +103,10 @@ dependencies {
     // JSON
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
 
+    // Lyrics romanization, offline: ICU transliterates every script, kuromoji reads Japanese kanji
+    implementation("com.ibm.icu:icu4j:76.1")
+    implementation("com.atilika.kuromoji:kuromoji-ipadic:0.9.0")
+
     // Logging
     implementation("org.slf4j:slf4j-simple:2.0.16")
 

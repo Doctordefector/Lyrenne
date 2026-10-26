@@ -12,9 +12,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AvTimer
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,6 +29,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -35,14 +40,20 @@ import com.lyrenne.desktop.lyrics.LyricLine
 import com.lyrenne.desktop.lyrics.LyricWord
 import com.lyrenne.desktop.lyrics.LyricsCandidate
 import com.lyrenne.desktop.lyrics.LyricsManager
+import com.lyrenne.desktop.lyrics.LyricsOffsets
+import com.lyrenne.desktop.lyrics.LyricsParser
+import com.lyrenne.desktop.lyrics.Romanizer
 import com.lyrenne.desktop.media.suppressMediaKeys
 import com.lyrenne.desktop.playback.DesktopPlayer
 import com.lyrenne.desktop.playback.knownDurationMs
 import com.lyrenne.desktop.settings.LyricsPosition
 import com.lyrenne.desktop.settings.PreferencesManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.math.roundToLong
 
 /**
  * How long a lyrics fetch waits for the track's length before going without.
@@ -65,6 +76,9 @@ fun LyricsPanel(
     // The song the search dialog was opened for. Held rather than read from the player, so a
     // track change while the dialog is open cannot file the pick under the next song.
     var searchFor by remember { mutableStateOf<com.lyrenne.desktop.playback.SongInfo?>(null) }
+    // Same reason: the editor saves to the song it was opened for, with the text it opened with.
+    var editFor by remember { mutableStateOf<Pair<com.lyrenne.desktop.playback.SongInfo, String>?>(null) }
+    val prefs by PreferencesManager.preferences.collectAsState()
 
     // Fetch lyrics when song changes
     LaunchedEffect(playerState.currentSong?.id) {
@@ -87,6 +101,31 @@ fun LyricsPanel(
     val currentSong = playerState.currentSong
     // Lyrics from the previous track must not show while this one's are being looked up.
     val stateIsForThisSong = currentSong != null && lyricsState.songId == currentSong.id
+
+    // Per song, read once when the song changes and written on every nudge.
+    var offsetMs by remember(currentSong?.id) {
+        mutableLongStateOf(currentSong?.let { LyricsOffsets.get(it.id) } ?: 0L)
+    }
+    fun nudgeOffset(newOffset: Long) {
+        val song = currentSong ?: return
+        offsetMs = newOffset.coerceIn(-MAX_OFFSET_MS, MAX_OFFSET_MS)
+        LyricsOffsets.set(song.id, offsetMs)
+    }
+
+    // Every line's text, background vocals included, in the order shown.
+    val shownTexts = remember(lyricsState.lines, lyricsState.lyrics) {
+        lyricsState.lines?.flatMap { line -> listOf(line.text) + line.background.map { it.text } }
+            ?: lyricsState.lyrics?.lines()
+            ?: emptyList()
+    }
+    val hasForeignText = remember(shownTexts) { shownTexts.any(Romanizer::needsRomanization) }
+    // Worked out off the UI thread: the first Japanese song loads a dictionary.
+    val romanized by produceState<Map<String, String>>(emptyMap(), shownTexts, prefs.lyricsRomanize, hasForeignText) {
+        value = emptyMap()
+        if (prefs.lyricsRomanize && hasForeignText) {
+            value = withContext(Dispatchers.Default) { Romanizer.romanize(shownTexts) }
+        }
+    }
 
     AnimatedVisibility(
         visible = visible,
@@ -113,7 +152,11 @@ fun LyricsPanel(
                         lyricsState.source?.let { source ->
                             Text(
                                 // The provider's name alone ("LrcLib") explained nothing.
-                                if (lyricsState.isManual) "via $source (chosen)" else "via $source",
+                                when {
+                                    source == LyricsManager.EDITED_SOURCE -> "edited by you"
+                                    lyricsState.isManual -> "via $source (chosen)"
+                                    else -> "via $source"
+                                },
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
@@ -122,23 +165,27 @@ fun LyricsPanel(
                             )
                         }
                     }
-                    if (stateIsForThisSong && lyricsState.isManual && currentSong != null) {
-                        Tip("Go back to automatic lyrics") {
-                            IconButton(
-                                onClick = {
-                                    LyricsManager.resetToAutomatic(
-                                        songId = currentSong.id,
-                                        title = currentSong.title,
-                                        artist = currentSong.artist,
-                                        durationSec = ((playerState.duration.takeIf { it > 0 }
-                                            ?: currentSong.knownDurationMs()) / 1000).toInt(),
-                                        album = currentSong.album
+                    if (stateIsForThisSong && lyricsState.lines != null) {
+                        var timingOpen by remember { mutableStateOf(false) }
+                        Box {
+                            Tip("Lyrics timing") {
+                                IconButton(onClick = { timingOpen = true }, modifier = Modifier.size(32.dp)) {
+                                    Icon(
+                                        Icons.Default.AvTimer,
+                                        "Lyrics timing",
+                                        // Tinted while moved, so a forgotten offset is noticeable.
+                                        tint = if (offsetMs != 0L) MaterialTheme.colorScheme.primary
+                                        else LocalContentColor.current,
+                                        modifier = Modifier.size(20.dp)
                                     )
-                                },
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(Icons.Default.RestartAlt, "Go back to automatic lyrics", modifier = Modifier.size(20.dp))
+                                }
                             }
+                            LyricsTimingMenu(
+                                expanded = timingOpen,
+                                offsetMs = offsetMs,
+                                onChange = ::nudgeOffset,
+                                onDismiss = { timingOpen = false },
+                            )
                         }
                     }
                     Tip("Search for lyrics") {
@@ -148,6 +195,56 @@ fun LyricsPanel(
                             modifier = Modifier.size(32.dp)
                         ) {
                             Icon(Icons.Default.Search, "Search for lyrics", modifier = Modifier.size(20.dp))
+                        }
+                    }
+                    var menuOpen by remember { mutableStateOf(false) }
+                    Box {
+                        Tip("More") {
+                            IconButton(
+                                onClick = { menuOpen = true },
+                                enabled = currentSong != null,
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(Icons.Default.MoreVert, "More", modifier = Modifier.size(20.dp))
+                            }
+                        }
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            val haveLyrics = stateIsForThisSong && lyricsState.lyrics != null
+                            DropdownMenuItem(
+                                text = { Text(if (haveLyrics) "Edit lyrics" else "Write lyrics") },
+                                leadingIcon = { Icon(Icons.Default.Edit, null) },
+                                onClick = {
+                                    menuOpen = false
+                                    currentSong?.let { editFor = it to (if (haveLyrics) lyricsState.lyrics!! else "") }
+                                }
+                            )
+                            if (stateIsForThisSong && hasForeignText) {
+                                DropdownMenuItem(
+                                    text = { Text("Show romanization") },
+                                    leadingIcon = { Icon(Icons.Default.Translate, null) },
+                                    trailingIcon = {
+                                        Checkbox(checked = prefs.lyricsRomanize, onCheckedChange = null)
+                                    },
+                                    onClick = { PreferencesManager.setLyricsRomanize(!prefs.lyricsRomanize) }
+                                )
+                            }
+                            if (stateIsForThisSong && lyricsState.isManual && currentSong != null) {
+                                DropdownMenuItem(
+                                    text = { Text("Go back to automatic lyrics") },
+                                    leadingIcon = { Icon(Icons.Default.RestartAlt, null) },
+                                    onClick = {
+                                        menuOpen = false
+                                        LyricsManager.resetToAutomatic(
+                                            songId = currentSong.id,
+                                            title = currentSong.title,
+                                            artist = currentSong.artist,
+                                            durationSec = ((playerState.duration.takeIf { it > 0 }
+                                                ?: currentSong.knownDurationMs()) / 1000).toInt(),
+                                            album = currentSong.album
+                                        )
+                                    }
+                                )
+                            }
                         }
                     }
                     Tip("Close") {
@@ -161,7 +258,6 @@ fun LyricsPanel(
 
                 // Content
                 Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                    val prefs by PreferencesManager.preferences.collectAsState()
                     val textAlign = when (prefs.lyricsPosition) {
                         LyricsPosition.LEFT -> TextAlign.Start
                         LyricsPosition.CENTER -> TextAlign.Center
@@ -194,18 +290,27 @@ fun LyricsPanel(
                                     Spacer(Modifier.width(8.dp))
                                     Text("Search for lyrics")
                                 }
+                                Spacer(Modifier.height(4.dp))
+                                TextButton(onClick = { editFor = currentSong to "" }) {
+                                    Icon(Icons.Default.Edit, null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Write your own")
+                                }
                             }
                         }
                         lyricsState.lines != null -> {
                             SyncedLyricsView(
                                 lines = lyricsState.lines!!,
-                                positionMs = playerState.position,
+                                // Positive offset shows lyrics sooner, so the lyrics run ahead of
+                                // the song by that much, and a click seeks back by it.
+                                positionMs = playerState.position + offsetMs,
                                 isPlaying = playerState.isPlaying,
                                 speed = prefs.playbackSpeed,
                                 textSize = prefs.lyricsTextSize,
                                 textAlign = textAlign,
+                                romanized = romanized,
                                 onSeek = if (prefs.lyricsClickToSeek) {
-                                    { timestampMs -> player.seekTo(timestampMs) }
+                                    { timestampMs -> player.seekTo((timestampMs - offsetMs).coerceAtLeast(0)) }
                                 } else null
                             )
                         }
@@ -213,7 +318,8 @@ fun LyricsPanel(
                             PlainLyricsView(
                                 lyrics = lyricsState.lyrics!!,
                                 textSize = prefs.lyricsTextSize,
-                                textAlign = textAlign
+                                textAlign = textAlign,
+                                romanized = romanized,
                             )
                         }
                         else -> {
@@ -241,6 +347,136 @@ fun LyricsPanel(
             }
         )
     }
+
+    editFor?.let { (song, text) ->
+        LyricsEditDialog(
+            initialText = text,
+            onDismiss = { editFor = null },
+            onSave = { edited ->
+                LyricsManager.saveEdited(song.id, edited)
+                editFor = null
+            }
+        )
+    }
+}
+
+/** How far the timing control lets lyrics move, either way. Further is a wrong match, not a lag. */
+private const val MAX_OFFSET_MS = 60_000L
+
+/**
+ * Moves this song's lyrics earlier or later, for lyrics that are right but run ahead of or behind
+ * the singer. Worded as earlier and later rather than as a signed number: which way "+" goes is
+ * a convention nobody can guess.
+ */
+@Composable
+private fun LyricsTimingMenu(
+    expanded: Boolean,
+    offsetMs: Long,
+    onChange: (Long) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val currentOffset by rememberUpdatedState(offsetMs)
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).width(260.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text("Lyrics timing", style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                describeOffset(offsetMs),
+                style = MaterialTheme.typography.headlineSmall,
+                color = if (offsetMs == 0L) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary,
+                // A wheel notch is a tenth of a second, the same as the small buttons; up is earlier.
+                modifier = Modifier.wheelStep(
+                    value = { currentOffset.toFloat() },
+                    step = 100f,
+                    range = -MAX_OFFSET_MS.toFloat()..MAX_OFFSET_MS.toFloat(),
+                ) { onChange((it / 100).roundToLong() * 100) }
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Earlier", style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(48.dp))
+                OutlinedButton(onClick = { onChange(offsetMs + 100) }, contentPadding = PaddingValues(horizontal = 12.dp)) { Text("0.1 s") }
+                OutlinedButton(onClick = { onChange(offsetMs + 500) }, contentPadding = PaddingValues(horizontal = 12.dp)) { Text("0.5 s") }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Later", style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(48.dp))
+                OutlinedButton(onClick = { onChange(offsetMs - 100) }, contentPadding = PaddingValues(horizontal = 12.dp)) { Text("0.1 s") }
+                OutlinedButton(onClick = { onChange(offsetMs - 500) }, contentPadding = PaddingValues(horizontal = 12.dp)) { Text("0.5 s") }
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Lyrics behind the singer? Show them earlier. Saved for this song.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+            TextButton(onClick = { onChange(0) }, enabled = offsetMs != 0L) { Text("Reset") }
+        }
+    }
+}
+
+internal fun describeOffset(offsetMs: Long): String {
+    if (offsetMs == 0L) return "On time"
+    val seconds = "%.1f".format(java.util.Locale.ROOT, kotlin.math.abs(offsetMs) / 1000.0)
+    return if (offsetMs > 0) "$seconds s earlier" else "$seconds s later"
+}
+
+/**
+ * The raw lyrics, editable. Takes LRC as well as plain text, so timestamps can be fixed line by
+ * line, and a whole `.lrc` file can be loaded in. Saved lyrics are kept for this song like a pick
+ * from the search, and "Go back to automatic lyrics" undoes them.
+ */
+@Composable
+private fun LyricsEditDialog(
+    initialText: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    var text by remember { mutableStateOf(initialText) }
+    val synced = remember(text) { LyricsParser.parse(text) != null }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (initialText.isEmpty()) "Write lyrics" else "Edit lyrics") },
+        text = {
+            Column(modifier = Modifier.width(520.dp)) {
+                Text(
+                    "Plain text, or LRC with a time on each line, like [01:23.45]A line. Fixing one wrong time is usually enough; the timing button moves them all.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                    modifier = Modifier.fillMaxWidth().height(360.dp).suppressMediaKeys()
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = {
+                        NativeFileDialog.open("Open lyrics file", "lrc")?.let { file ->
+                            runCatching { file.readText() }.onSuccess { text = it }
+                        }
+                    }) { Text("Open .lrc file") }
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        if (text.isBlank()) "" else if (synced) "Synced" else "Plain text",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onSave(text.trim()) }, enabled = text.isNotBlank() && text != initialText) { Text("Save") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
 
 /** Index of the line being sung at [positionMs], or -1 before the first one starts. */
@@ -285,6 +521,7 @@ private fun SyncedLyricsView(
     speed: Float,
     textSize: Float = 16f,
     textAlign: TextAlign = TextAlign.Start,
+    romanized: Map<String, String> = emptyMap(),
     onSeek: ((Long) -> Unit)? = null
 ) {
     val currentIndex = remember(positionMs, lines) { currentLineIndex(lines, positionMs) }
@@ -339,6 +576,7 @@ private fun SyncedLyricsView(
                         upcomingColor = upcomingColor,
                         baseSize = textSize,
                         textAlign = textAlign,
+                        romanized = romanized[line.text],
                     )
                     line.background.forEach { bg ->
                         LyricsLine(
@@ -355,6 +593,7 @@ private fun SyncedLyricsView(
                             baseSize = (textSize - 3f).coerceAtLeast(10f),
                             textAlign = textAlign,
                             isBackground = true,
+                            romanized = romanized[bg.text],
                         )
                     }
                 }
@@ -382,6 +621,7 @@ private fun LyricsLine(
     baseSize: Float = 16f,
     textAlign: TextAlign = TextAlign.Start,
     isBackground: Boolean = false,
+    romanized: String? = null,
 ) {
     // Animate scale: current line pops up to 1.05x like Android Metrolist
     val scale by animateFloatAsState(
@@ -450,6 +690,19 @@ private fun LyricsLine(
             modifier = lineModifier
         )
     }
+    // The reading sits under its line in the line's own colour, smaller and never bold, so the
+    // script the song is sung in stays the thing being highlighted.
+    if (romanized != null) {
+        Text(
+            text = romanized,
+            fontSize = (baseSize - 2f).coerceAtLeast(10f).sp,
+            fontStyle = FontStyle.Italic,
+            color = animatedColor,
+            lineHeight = (baseSize + 2f).sp,
+            textAlign = textAlign,
+            modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)
+        )
+    }
 }
 
 /**
@@ -493,10 +746,34 @@ internal fun highlightWords(
 private fun PlainLyricsView(
     lyrics: String,
     textSize: Float = 16f,
-    textAlign: TextAlign = TextAlign.Start
+    textAlign: TextAlign = TextAlign.Start,
+    romanized: Map<String, String> = emptyMap(),
 ) {
     LazyColumn {
-        item {
+        if (romanized.isNotEmpty()) {
+            // Line by line only when there is a reading to put under some of them.
+            items(lyrics.lines()) { line -> Column {
+                Text(
+                    text = line,
+                    fontSize = textSize.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    lineHeight = (textSize + 10).sp,
+                    textAlign = textAlign,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                romanized[line]?.let { reading ->
+                    Text(
+                        text = reading,
+                        fontSize = (textSize - 2f).coerceAtLeast(10f).sp,
+                        fontStyle = FontStyle.Italic,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = (textSize + 4).sp,
+                        textAlign = textAlign,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)
+                    )
+                }
+            } }
+        } else item {
             Text(
                 text = lyrics,
                 fontSize = textSize.sp,

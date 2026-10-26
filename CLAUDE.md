@@ -84,6 +84,7 @@ Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop 
 - Randomize home sections (setting)
 - Lyrics: 5-provider chain (BetterLyrics → LrcLib → KuGou → YouTube lyrics → YouTube transcript)
 - Lyrics customization (text size 12-32pt, alignment left/center/right, click-to-seek toggle)
+- Lyrics timing per song, editing or writing lyrics by hand (LRC or plain, or a loaded .lrc), and romanization under lines in other scripts. See Lyrics: timing, editing, romanization
 - Recognition history (RecognitionHistory table, list on Ready state, play from history)
 - Privacy: pause listen history + pause search history settings
 - Content region/language settings (gl/hl via YouTube.locale, curated lists + system default)
@@ -157,7 +158,8 @@ Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop 
 |------|---------|
 | lyrics/LyricsManager.kt | Provider chain, manual search across all providers, caching by songId |
 | lyrics/LyricsParser.kt | Every lyric format the providers send, into timed lines with optional word timing |
-| lyrics/LyricsOverrides.kt | Lyrics picked by hand, per song, in `data/lyrics-overrides.json` |
+| lyrics/LyricsOverrides.kt | Lyrics picked or edited by hand (`data/lyrics-overrides.json`) and per-song timing (`LyricsOffsets`, `data/lyrics-offsets.json`), both on `PerSongFile` |
+| lyrics/Romanizer.kt | Romanized reading of non-Latin lines: kuromoji for Japanese, `KoreanRomanizer` for Hangul, ICU for the rest |
 
 #### UI Screens
 | File | Purpose |
@@ -1041,6 +1043,38 @@ Two lookup bugs that look like "no lyrics for this song":
 
 Manual picks are stored as full text in `data/lyrics-overrides.json`, keyed by song id, because no
 provider offers a stable id to refetch the same result. Backups include the file.
+
+## Lyrics: timing, editing, romanization
+
+Matches what upstream Android offers (per-song offset, edit lyrics, romanization), all offline.
+
+- **Timing** is per song, in `data/lyrics-offsets.json` (`LyricsOffsets`), kept apart from the
+  override file on purpose: going back to automatic lyrics, or picking others, keeps it. Positive
+  means the lyrics show sooner, the same sign as LRC's `[offset:]` and upstream's `lyricsOffset`.
+  It is applied in the panel only: the position handed to `SyncedLyricsView` is `position + offset`
+  and a click seeks to `line - offset`. The UI says "earlier" and "later", never a signed number.
+  Zero is stored as no entry. Capped at 60 s either way.
+- **Editing** saves through `LyricsManager.saveEdited`, which is a manual pick with source
+  `Edited` (the header says "edited by you"), so "Go back to automatic lyrics" undoes it. The text
+  goes through `LyricsParser` like any provider's, so LRC, word timing and `{bg}` all work.
+- **Romanization** (`lyricsRomanize`, on by default, also in the panel's menu) is worked out off the
+  UI thread for the whole song at once, keyed by line text, and drawn under each line in italics.
+  - Any kana anywhere in the song makes it Japanese, so kanji-only lines are read as Japanese
+    rather than as Mandarin. kuromoji gives each word's reading, tokens are grouped the way romaji
+    lyrics are written (auxiliaries, suffixes and て/で join the word before; は/へ/を as particles
+    read wa/e/o), and ICU spells the kana. Its dictionary costs about 45 MB of heap and loads only
+    when a Japanese song shows.
+  - Hangul goes through `KoreanRomanizer` (Revised Romanization with the common sound changes).
+    ICU's Hangul-Latin is letter for letter ("salanghae", "sip-eo"), and its Korean BGN transform
+    needs decomposed jamo and still mangles finals.
+  - Cyrillic uses ICU's BGN/PCGN transform for the language the song's letters point to (і/ї/є/ґ
+    Ukrainian, ў Belarusian, ђ/ћ/џ Serbian, ѓ/ќ/ѕ Macedonian, else Russian). ICU's default is ISO 9,
+    which writes я as "â".
+  - Everything else is ICU `Any-Latin` (pinyin with tones, Greek, Indic scripts...). Arabic,
+    Hebrew, Thai, Lao, Khmer, Myanmar, Syriac and Thaana get **nothing**: they leave vowels
+    unwritten and a letter-by-letter spelling is unreadable. `RomanizerTest` pins sample output.
+  - ICU4J and kuromoji add about 25 MB to the release. Both only need JDK modules the runtime
+    already has (checked with `jdeps --print-module-deps`).
 
 ## Account switching
 

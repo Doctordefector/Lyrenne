@@ -189,6 +189,12 @@ object LyricsManager {
         publish(songId, candidate, isManual = true)
     }
 
+    /** The source shown for lyrics the user wrote or changed by hand. */
+    const val EDITED_SOURCE = "Edited"
+
+    /** Keeps lyrics the user wrote or changed for [songId], like a pick from a search. */
+    fun saveEdited(songId: String, text: String) = choose(songId, LyricsCandidate(EDITED_SOURCE, text))
+
     /** Forgets a hand-picked choice and runs the normal lookup again. */
     fun resetToAutomatic(songId: String, title: String, artist: String, durationSec: Int, album: String?) {
         LyricsOverrides.remove(songId)

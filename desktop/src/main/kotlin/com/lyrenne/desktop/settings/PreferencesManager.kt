@@ -94,6 +94,7 @@ data class AppPreferences(
     val lyricsTextSize: Float = 16f,           // sp, 12-32
     val lyricsPosition: LyricsPosition = LyricsPosition.LEFT,
     val lyricsClickToSeek: Boolean = true,
+    val lyricsRomanize: Boolean = true,         // reading under lines in other scripts
     // Car / USB export
     val carExportDualMono: Boolean = false,     // fold L+R together for tracks mastered on one side
     // One-off safety backup written before sync first deletes local library state
@@ -196,6 +197,7 @@ object PreferencesManager {
                         try { LyricsPosition.valueOf(it) } catch (_: Exception) { null }
                     } ?: LyricsPosition.LEFT,
                     lyricsClickToSeek = props.getProperty("lyricsClickToSeek")?.toBoolean() ?: true,
+                    lyricsRomanize = props.getProperty("lyricsRomanize")?.toBoolean() ?: true,
                     carExportDualMono = props.getProperty("carExportDualMono")?.toBoolean() ?: false,
                     syncPruneBackupDone = props.getProperty("syncPruneBackupDone")?.toBoolean() ?: false,
                     // Defaults to TRUE here, unlike the data class, and that asymmetry is the
@@ -268,6 +270,7 @@ object PreferencesManager {
             props.setProperty("lyricsTextSize", prefs.lyricsTextSize.toString())
             props.setProperty("lyricsPosition", prefs.lyricsPosition.name)
             props.setProperty("lyricsClickToSeek", prefs.lyricsClickToSeek.toString())
+            props.setProperty("lyricsRomanize", prefs.lyricsRomanize.toString())
             props.setProperty("carExportDualMono", prefs.carExportDualMono.toString())
             props.setProperty("syncPruneBackupDone", prefs.syncPruneBackupDone.toString())
             props.setProperty("onboardingCompleted", prefs.onboardingCompleted.toString())
@@ -536,6 +539,11 @@ object PreferencesManager {
 
     fun setLyricsClickToSeek(enabled: Boolean) {
         _preferences.value = _preferences.value.copy(lyricsClickToSeek = enabled)
+        savePreferences()
+    }
+
+    fun setLyricsRomanize(enabled: Boolean) {
+        _preferences.value = _preferences.value.copy(lyricsRomanize = enabled)
         savePreferences()
     }
 

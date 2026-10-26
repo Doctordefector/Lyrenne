@@ -3,6 +3,7 @@
 ## Overview
 Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop (JVM).
 - **Upstream**: https://github.com/MetrolistGroup/Metrolist (innertube synced to upstream/main @ 9285e7a96, after v13.6.3, on 2026-08-21; other shared modules unchanged since v13.6.0; upstream is in maintenance mode)
+- **Don't sync upstream past `9285e7a96` without a plan** (checked 2026-10-26): upstream moved most of `innertube` into an external library, InnerTubeX, and deleted `shazamkit`. The documented copy-the-module sync would break stream playback, downloads and song recognition here; adopting InnerTubeX is a port of its own
   - Sync method: `git checkout upstream/main -- innertube`, delete files upstream removed, then re-apply the thumbnail empty-defaults patch (see InnerTube modifications below). The old accountIndex patch is gone: upstream replaced it with `authUser` (AuthManager sets `YouTube.authUser`)
   - Stream URLs are deobfuscated through NewPipeUtils (signatureCipher + n throttle param) in DesktopPlayer and DownloadManager, using the MetrolistExtractor fork at commit f0a00f5. That commit builds on openjdk17, which JVM 21 accepts. Do NOT bump to the fork's 3cd3341: it builds on openjdk25 and Gradle refuses it for our JVM 21 toolchain
   - kizzy module: upstream deleted it; our copy remains in repo but is NO LONGER compiled into desktop (was never referenced — desktop Discord RPC is the named-pipe DiscordRPC.kt)

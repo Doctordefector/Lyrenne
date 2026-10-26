@@ -60,3 +60,12 @@ build is a key you have published.
 Version lives in **two** places that must match, `desktop/build.gradle.kts` (`lyrenneVersion`)
 and `AutoUpdater.CURRENT_VERSION`. The full process is in `CLAUDE.md`; packaging specifics are in
 `packaging/README.md`.
+
+## The iPad version, and working from more than one PC
+
+The iPad app is its own repo, [Lyrenne-iPad](https://github.com/Doctordefector/Lyrenne-iPad)
+(Swift, built on GitHub's macOS runners). It reimplements the networking here, so a fix to how
+streams are fetched (`YouTubeClient.kt`, `ContentAwareFallbackStrategy.kt`) or to Listen Together's
+protocol usually needs porting there too. Its README has the clone layout that keeps both repos
+side by side on every machine. `.gitattributes` keeps line endings LF in every checkout, so
+`gradlew` also runs from WSL on a Windows clone.

@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.ui.components
 
+import com.lyrenne.desktop.sync.setLiked
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.offset
@@ -171,18 +172,3 @@ private fun ColumnScope.SongMenuItems(
     }
 }
 
-/** Like or unlike locally and on YouTube. The song may not be in the library yet, so add it first. */
-fun setLiked(song: SongInfo, liked: Boolean, downloaded: Boolean) {
-    DatabaseHelper.insertSong(
-        id = song.id,
-        title = song.title,
-        duration = song.duration,
-        thumbnailUrl = song.thumbnailUrl,
-        albumName = song.album
-    )
-    DatabaseHelper.updateSongLiked(song.id, liked)
-    YouTubeWrites.likeSong(song.id, liked)
-    if (liked && !downloaded && PreferencesManager.preferences.value.autoDownloadOnLike) {
-        DownloadManager.queueDownload(song)
-    }
-}

@@ -3,6 +3,9 @@ package com.lyrenne.desktop.sync
 import com.metrolist.innertube.YouTube
 import com.lyrenne.desktop.auth.AuthManager
 import com.lyrenne.desktop.db.DatabaseHelper
+import com.lyrenne.desktop.download.DownloadManager
+import com.lyrenne.desktop.playback.SongInfo
+import com.lyrenne.desktop.settings.PreferencesManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -136,5 +139,21 @@ object YouTubeWrites {
         }
         // Signed out, or YouTube refused — keep it local so the edit isn't lost.
         return DatabaseHelper.createLocalPlaylist(name)
+    }
+}
+
+/** Like or unlike locally and on YouTube. The song may not be in the library yet, so add it first. */
+fun setLiked(song: SongInfo, liked: Boolean, downloaded: Boolean) {
+    DatabaseHelper.insertSong(
+        id = song.id,
+        title = song.title,
+        duration = song.duration,
+        thumbnailUrl = song.thumbnailUrl,
+        albumName = song.album
+    )
+    DatabaseHelper.updateSongLiked(song.id, liked)
+    YouTubeWrites.likeSong(song.id, liked)
+    if (liked && !downloaded && PreferencesManager.preferences.value.autoDownloadOnLike) {
+        DownloadManager.queueDownload(song)
     }
 }

@@ -806,7 +806,14 @@ class DesktopPlayer {
     }
 
     fun play() {
-        audioPlayer?.mediaPlayer()?.controls()?.play()
+        val player = audioPlayer?.mediaPlayer() ?: return
+        // A queue restored at startup has nothing loaded yet, so a bare play() (a headset's Play
+        // button, MPRIS, the Deck plugin) did nothing; togglePlayPause knows how to start it.
+        if (player.media().info() == null) {
+            if (!player.status().isPlaying) togglePlayPause()
+        } else {
+            player.controls().play()
+        }
     }
 
     /** VLC's finished event. Internal so the smoke test can end a track without VLC. */

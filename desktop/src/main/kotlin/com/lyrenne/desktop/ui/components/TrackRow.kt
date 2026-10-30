@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.ui.components
 
+import com.lyrenne.desktop.sync.setLiked
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.hoverable

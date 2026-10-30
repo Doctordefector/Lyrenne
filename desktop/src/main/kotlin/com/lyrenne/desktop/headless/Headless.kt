@@ -18,7 +18,7 @@ import com.lyrenne.desktop.playback.knownDurationMs
 import com.lyrenne.desktop.playback.toPlayerSongInfo
 import com.lyrenne.desktop.settings.PreferencesManager
 import com.lyrenne.desktop.sync.LibrarySync
-import com.lyrenne.desktop.ui.components.setLiked
+import com.lyrenne.desktop.sync.setLiked
 import com.metrolist.innertube.YouTube
 import com.metrolist.innertube.models.AlbumItem
 import com.metrolist.innertube.models.ArtistItem
@@ -53,6 +53,20 @@ import kotlin.system.exitProcess
  * The port and a per-run token go in `headless.json` in the data dir (owner-only), and every
  * request must carry the token, so other local users and web pages cannot drive the player.
  */
+/**
+ * Entry point for the Steam Deck build, whose launcher is pointed here instead of MainKt: that build
+ * ships without Compose, and the JVM cannot even load MainKt without it.
+ */
+fun main(args: Array<String>) {
+    val log = com.lyrenne.desktop.installCrashReporting()
+    try {
+        Headless.run(args)
+    } catch (e: Throwable) {
+        com.lyrenne.desktop.reportFatal(e, log)
+        exitProcess(1)
+    }
+}
+
 object Headless {
     const val DEFAULT_PORT = 48711
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())

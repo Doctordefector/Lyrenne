@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lyrenne for iPad | Free YouTube Music player with synced lyrics</title>
+<meta name="description" content="A free, open source YouTube Music player for iPad: your library and playlists, synced lyrics, offline downloads and background play, with no ads. Sideload it with Sideloadly and a free Apple ID, no Mac needed.">
+<link rel="canonical" href="https://doctordefector.github.io/Lyrenne/ipad/">
+<link rel="icon" type="image/svg+xml" href="../images/logo.svg">
+<link rel="alternate icon" type="image/png" href="../images/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Lyrenne">
+<meta property="og:title" content="Lyrenne for iPad | Free YouTube Music player with synced lyrics">
+<meta property="og:description" content="A free, open source YouTube Music player for iPad: your library and playlists, synced lyrics, offline downloads and background play, with no ads. Sideload it with Sideloadly and a free Apple ID, no Mac needed.">
+<meta property="og:url" content="https://doctordefector.github.io/Lyrenne/ipad/">
+<meta property="og:image" content="https://doctordefector.github.io/Lyrenne/images/social-preview.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Lyrenne for iPad | Free YouTube Music player with synced lyrics">
+<meta name="twitter:description" content="A free, open source YouTube Music player for iPad: your library and playlists, synced lyrics, offline downloads and background play, with no ads. Sideload it with Sideloadly and a free Apple ID, no Mac needed.">
+<meta name="twitter:image" content="https://doctordefector.github.io/Lyrenne/images/social-preview.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Lyrenne for iPad",
+  "applicationCategory": "MultimediaApplication",
+  "applicationSubCategory": "Music Player",
+  "operatingSystem": "iPadOS",
+  "downloadUrl": "https://github.com/Doctordefector/Lyrenne-iPad/releases/latest",
+  "installUrl": "https://github.com/Doctordefector/Lyrenne-iPad/releases/latest",
+  "license": "https://www.gnu.org/licenses/gpl-3.0.html",
+  "isAccessibleForFree": true,
+  "description": "A free, open source YouTube Music player for iPad: your library and playlists, synced lyrics, offline downloads and background play, with no ads. Sideload it with Sideloadly and a free Apple ID, no Mac needed.",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "isPartOf": {
+    "@type": "SoftwareApplication",
+    "name": "Lyrenne",
+    "url": "https://doctordefector.github.io/Lyrenne/"
+  },
+  "author": {
+    "@type": "Person",
+    "name": "Andrei Chapliuk",
+    "url": "https://andrevich.netlify.app",
+    "sameAs": [
+      "https://github.com/Doctordefector"
+    ]
+  }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Is there an ad-free YouTube Music app for iPad?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Lyrenne for iPad is a free, open source YouTube Music player for iPad that shows no ads of its own. It's sideloaded rather than on the App Store."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Do I need a Mac to install it?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. Sideloadly on a Windows PC installs it with a free Apple ID. No Mac and no paid developer account."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Does it play in the background?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. It keeps playing in the background and with the screen locked, with controls on the lock screen and in Control Center."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Why does it stop opening after a week?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Apps sideloaded with a free Apple ID expire after 7 days. Re-run Sideloadly, or let it refresh automatically over Wi-Fi."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Does it work on iPhone?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "It's built for the iPad's split layout and only installs on iPad."
+      }
+    }
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Lyrenne",
+      "item": "https://doctordefector.github.io/Lyrenne/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "iPad",
+      "item": "https://doctordefector.github.io/Lyrenne/ipad/"
+    }
+  ]
+}
+</script>
+<style>
+:root {
+    --bg-color: #0a0a0a;
+    --text-color: #e0e0e0;
+    --heading-color: #ffffff;
+    --light-grey: #333333;
+    --accent-color: #A37C43;
+    --font-heading: 'Space Mono', monospace;
+    --font-body: 'Inter', sans-serif;
+}
+
+@property --angle { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+@keyframes spin { to { --angle: 360deg; } }
+@keyframes shimmer { 0%, 100% { background-position: 0% center; } 50% { background-position: 200% center; } }
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+    background-color: var(--bg-color); color: var(--text-color);
+    font-family: var(--font-body); line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3, h4 { font-family: var(--font-heading); color: var(--heading-color); font-weight: 400; }
+section { padding: 4rem 2rem; max-width: 1200px; margin: 0 auto; border-top: 1px solid var(--light-grey); }
+a { color: var(--text-color); text-decoration: none; transition: color 0.3s ease; }
+a:hover { color: var(--accent-color); }
+.dud { color: var(--light-grey); }
+
+/* --- Navigation --- */
+.sticky-nav {
+    position: sticky; top: 0; width: 100%; z-index: 1000;
+    background-color: rgba(10, 10, 10, 0.85); backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--light-grey); padding: 1.5rem 0;
+}
+.sticky-nav nav { display: flex; justify-content: center; gap: 3rem; flex-wrap: wrap; }
+.sticky-nav nav a {
+    color: var(--text-color); font-family: var(--font-heading);
+    text-transform: uppercase; letter-spacing: 0.2em; font-size: 0.9rem;
+}
+
+/* --- Hero --- */
+#hero {
+    min-height: 78vh; display: flex; flex-direction: column; justify-content: center;
+    align-items: center; text-align: center; border-top: none;
+}
+#hero img.mark { width: 88px; height: 88px; border-radius: 20px; margin-bottom: 2.5rem; }
+#hero h1 {
+    font-size: 2.6rem; letter-spacing: 0.42em; margin-bottom: 1.25rem;
+    text-transform: uppercase; padding-left: 0.42em;
+}
+#hero h1 .sub {
+    display: block; font-size: 1rem; letter-spacing: 0.22em; margin-top: 1.1rem;
+    color: var(--accent-color);
+}
+#hero p.lede { font-size: 1.05rem; color: #888; max-width: 620px; margin-bottom: 2.75rem; }
+
+/* Download frame, same conic border as the site */
+.lux-frame {
+    display: inline-block; position: relative; padding: 2px;
+    background: conic-gradient(from var(--angle), var(--light-grey), var(--accent-color), #fff, var(--accent-color), var(--light-grey));
+    animation: spin 4s linear infinite;
+    box-shadow: 0 4px 24px rgba(163, 124, 67, 0.15);
+    transition: box-shadow 0.4s ease, transform 0.4s ease;
+}
+.lux-frame:hover { transform: translateY(-2px); box-shadow: 0 8px 40px rgba(163, 124, 67, 0.3); }
+.lux-frame-content {
+    display: block; background-color: #111; padding: 1.15rem 3rem;
+    font-family: var(--font-heading); font-size: 0.95rem;
+    text-transform: uppercase; letter-spacing: 0.22em; color: var(--heading-color);
+    box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+}
+.lux-frame:hover .lux-frame-content { color: var(--accent-color); }
+.hero-meta {
+    margin-top: 1.5rem; font-family: var(--font-heading); font-size: 0.7rem;
+    letter-spacing: 0.18em; color: #666; text-transform: uppercase;
+}
+
+/* --- Section headings --- */
+section h2 {
+    font-size: 2rem; margin-bottom: 3rem; text-align: center;
+    background: linear-gradient(90deg, #ffffff 0%, var(--accent-color) 50%, #ffffff 100%);
+    background-size: 200% auto;
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    animation: shimmer 4s ease-in-out infinite;
+}
+.prose { max-width: 760px; margin: 0 auto; color: #999; font-size: 0.95rem; line-height: 1.8; }
+.prose + .prose { margin-top: 1.1rem; }
+.prose strong { color: var(--text-color); font-weight: 500; }
+
+/* --- Cards --- */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; }
+.card {
+    background-color: #111; border: 1px solid var(--light-grey); padding: 2rem;
+    position: relative; overflow: hidden;
+    transition: transform 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease;
+}
+.card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent-color), transparent);
+    opacity: 0; transition: opacity 0.4s ease;
+}
+.card:hover {
+    transform: translateY(-4px); border-color: rgba(163, 124, 67, 0.3);
+    box-shadow: 0 8px 32px rgba(163, 124, 67, 0.1);
+}
+.card:hover::before { opacity: 1; }
+.card-context {
+    display: block; font-family: var(--font-heading); font-size: 0.7rem;
+    color: var(--accent-color); letter-spacing: 0.15em; margin-bottom: 0.75rem;
+    opacity: 0.8; text-transform: uppercase;
+}
+.card h3 { font-size: 1.3rem; margin-bottom: 0.75rem; transition: color 0.3s ease; }
+.card:hover h3 { color: var(--accent-color); }
+.card p { color: #777; font-size: 0.9rem; line-height: 1.7; }
+.card-tag {
+    display: inline-block; margin-top: 1rem; font-family: var(--font-heading);
+    font-size: 0.7rem; color: #999; letter-spacing: 0.1em;
+    border: 1px solid var(--light-grey); padding: 0.3rem 0.8rem; border-radius: 2px;
+}
+
+/* --- Install steps --- */
+.steps { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.25rem; }
+.step {
+    background-color: #111; border: 1px solid var(--light-grey); padding: 1.6rem 1.8rem;
+    position: relative; overflow: hidden;
+    transition: transform 0.4s ease, border-color 0.4s ease;
+}
+.step:hover { transform: translateY(-3px); border-color: rgba(163, 124, 67, 0.3); }
+.step-number {
+    display: block; font-family: var(--font-heading); font-size: 0.75rem;
+    color: var(--accent-color); letter-spacing: 0.15em; margin-bottom: 0.5rem; opacity: 0.7;
+}
+.step p { color: #999; font-size: 0.95rem; }
+code {
+    font-family: var(--font-heading); font-size: 0.85rem; color: var(--text-color);
+    background-color: #1a1a1a; border: 1px solid var(--light-grey);
+    padding: 0.15rem 0.5rem; border-radius: 2px;
+}
+pre.cmd {
+    max-width: 760px; margin: 0.9rem auto 0; overflow-x: auto;
+    background-color: #1a1a1a; border: 1px solid var(--light-grey); border-radius: 2px;
+    padding: 0.9rem 1.1rem;
+}
+pre.cmd code { background: none; border: 0; padding: 0; white-space: pre; }
+.notice {
+    max-width: 760px; margin: 2rem auto 0; padding: 1.5rem 1.8rem;
+    background-color: #16130d; border: 1px solid rgba(163, 124, 67, 0.35);
+    border-left: 2px solid var(--accent-color);
+    color: #b9a68a; font-size: 0.9rem; line-height: 1.7;
+}
+.notice-label {
+    display: block; font-family: var(--font-heading); font-size: 0.7rem;
+    letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent-color);
+    margin-bottom: 0.6rem;
+}
+
+/* --- FAQ --- */
+.faq { max-width: 760px; margin: 0 auto; }
+.faq details { border-bottom: 1px solid var(--light-grey); padding: 1.1rem 0; }
+.faq summary {
+    cursor: pointer; font-family: var(--font-heading); font-size: 0.95rem;
+    color: var(--heading-color); list-style: none; transition: color 0.3s ease;
+}
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::before { content: '+ '; color: var(--accent-color); }
+.faq details[open] summary::before { content: '- '; }
+.faq summary:hover { color: var(--accent-color); }
+.faq p { color: #777; font-size: 0.9rem; margin-top: 0.85rem; line-height: 1.75; }
+
+/* --- Shot --- */
+.shot-frame {
+    max-width: 900px; margin: 0 auto; padding: 2px;
+    background: conic-gradient(from var(--angle), var(--light-grey), var(--accent-color), var(--light-grey));
+    animation: spin 6s linear infinite;
+}
+.shot-frame img { display: block; width: 100%; height: auto; background-color: #111; }
+
+/* --- Footer --- */
+footer { background-color: var(--bg-color); padding: 2rem; border-top: 1px solid var(--light-grey); }
+.footer-content {
+    max-width: 1200px; margin: 0 auto; display: flex; justify-content: space-between;
+    gap: 1rem; flex-wrap: wrap; font-size: 0.85rem; color: #888;
+}
+.footer-right { display: flex; gap: 2rem; flex-wrap: wrap; }
+.footer-content .author { color: var(--accent-color); }
+.footer-content .author:hover { color: var(--heading-color); }
+
+/* --- Reveal --- */
+.fade-in { opacity: 0; transform: translateY(20px); transition: opacity 0.6s ease-out, transform 0.6s ease-out; }
+.fade-in.visible { opacity: 1; transform: translateY(0); }
+.cards .fade-in:nth-child(2) { transition-delay: 0.1s; }
+.cards .fade-in:nth-child(3) { transition-delay: 0.2s; }
+.cards .fade-in:nth-child(4) { transition-delay: 0.3s; }
+.cards .fade-in:nth-child(5) { transition-delay: 0.4s; }
+.cards .fade-in:nth-child(6) { transition-delay: 0.5s; }
+.steps .fade-in:nth-child(2) { transition-delay: 0.15s; }
+.steps .fade-in:nth-child(3) { transition-delay: 0.3s; }
+
+@media (max-width: 768px) {
+    section { padding: 4rem 1.5rem; }
+    .sticky-nav nav { gap: 1.5rem; }
+    #hero h1 { font-size: 1.5rem; letter-spacing: 0.3em; padding-left: 0.3em; }
+    .lux-frame-content { padding: 1rem 1.75rem; font-size: 0.8rem; }
+    .footer-content { flex-direction: column; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .lux-frame, .shot-frame, section h2 { animation: none; }
+    .fade-in { opacity: 1; transform: none; transition: none; }
+}
+.shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1.5rem;max-width:760px;margin:3rem auto 0;align-items:start}
+.wide{max-width:1000px;margin:1.5rem auto 0;display:flex;flex-direction:column;gap:1.5rem}
+.shots img,.wide img{width:100%;height:auto;display:block;border:1px solid var(--light-grey)}
+.back{font-family:var(--font-heading);font-size:0.75rem;letter-spacing:0.15em;text-transform:uppercase;color:#888}
+</style>
+</head>
+<body>
+<header class="sticky-nav">
+    <nav>
+        <a href="../">Lyrenne</a>
+        <a href="#features">Features</a>
+        <a href="#install">Install</a>
+        <a href="#faq">FAQ</a>
+        <a href="https://github.com/Doctordefector/Lyrenne-iPad">GitHub</a>
+    </nav>
+</header>
+<main>
+<section id="hero">
+    <img class="mark" src="../images/logo.svg" width="88" height="88" alt="Lyrenne app icon">
+    <h1><span>Lyrenne</span><span class="sub">YouTube Music for iPad</span></h1>
+    <p class="lede">A YouTube Music player built for the iPad's big screen: browsing on the left, now playing and synced lyrics on the right. Keeps playing in the background and on the lock screen. Free, open source, no ads.</p>
+    <a class="lux-frame" href="https://github.com/Doctordefector/Lyrenne-iPad/releases/latest"><span class="lux-frame-content">Download the .ipa</span></a>
+    <div class="hero-meta">iPad &middot; Sideloaded &middot; Free Apple ID &middot; GPL-3.0</div>
+</section>
+<section id="what" class="fade-in">
+    <h2>What It Is</h2>
+    <p class="prose">Lyrenne for iPad is the iPad version of <a href="../">Lyrenne</a>, the desktop YouTube Music player, rebuilt in SwiftUI for the iPad. It signs in to your own YouTube Music account and plays your real library.</p>
+    <p class="prose">It isn't on the App Store, so you <strong>sideload</strong> it: Sideloadly on a Windows PC installs it with a free Apple ID. No Mac and no paid developer account.</p>
+    
+    
+</section>
+<section id="features" class="fade-in">
+    <h2>Features</h2>
+    <div class="cards">
+        <div class="card fade-in">
+            <span class="card-context">Library</span>
+            <h3>Your real library</h3>
+            <p>Sign in with Google, then your liked songs and playlists with Play, Shuffle and Download all. Home, search, artist and album pages too.</p>
+        </div>
+        <div class="card fade-in">
+            <span class="card-context">Lyrics</span>
+            <h3>Synced lyrics</h3>
+            <p>Tap a line to jump to it. Shift a song's timing, write or edit lyrics, and show how Japanese, Korean, Chinese or Cyrillic lyrics read under each line.</p>
+        </div>
+        <div class="card fade-in">
+            <span class="card-context">Background</span>
+            <h3>Keeps playing</h3>
+            <p>Plays in the background and with the screen locked, with lock screen and Control Center controls and artwork.</p>
+        </div>
+        <div class="card fade-in">
+            <span class="card-context">Offline</span>
+            <h3>Downloads</h3>
+            <p>Keep songs for offline listening. They also show up in the Files app under On My iPad, Lyrenne.</p>
+        </div>
+        <div class="card fade-in">
+            <span class="card-context">Queue</span>
+            <h3>Autoplay and queue</h3>
+            <p>The queue tops itself up with YouTube Music's radio for the song playing. Play next, add to queue, shuffle and repeat.</p>
+        </div>
+        <div class="card fade-in">
+            <span class="card-context">Together</span>
+            <h3>Listen Together</h3>
+            <p>Join a room started in the desktop or Android Lyrenne with its code, and the host's songs, pauses and seeks follow on the iPad.</p>
+        </div>
+    </div>
+</section>
+<section id="install" class="fade-in">
+    <h2>Install</h2>
+    <div class="steps">
+        <div class="step fade-in"><span class="step-number">Step 1</span><p>Download <code>Lyrenne.ipa</code> from <a href="https://github.com/Doctordefector/Lyrenne-iPad/releases/latest">the latest release</a>.</p></div>
+        <div class="step fade-in"><span class="step-number">Step 2</span><p>On a Windows PC, install <a href="https://www.apple.com/itunes/">iTunes</a> (the non-Store version) and <a href="https://sideloadly.io">Sideloadly</a>. Plug in the iPad, trust the computer, drag <code>Lyrenne.ipa</code> into Sideloadly, enter a free Apple ID and press Start.</p></div>
+        <div class="step fade-in"><span class="step-number">Step 3</span><p>On the iPad, go to Settings, General, VPN &amp; Device Management and trust your Apple ID. On iPadOS 16 or newer, also turn on Settings, Privacy &amp; Security, Developer Mode.</p></div>
+    </div>
+    <div class="notice"><span class="notice-label">Good to know</span>With a free Apple ID, sideloaded apps expire after 7 days. Re-run Sideloadly to refresh it (it can do that automatically over Wi-Fi).</div>
+</section>
+<section id="faq" class="fade-in">
+    <h2>FAQ</h2>
+    <div class="faq">
+        <details><summary>Is there an ad-free YouTube Music app for iPad?</summary><p>Lyrenne for iPad is a free, open source YouTube Music player for iPad that shows no ads of its own. It's sideloaded rather than on the App Store.</p></details>
+        <details><summary>Do I need a Mac to install it?</summary><p>No. Sideloadly on a Windows PC installs it with a free Apple ID. No Mac and no paid developer account.</p></details>
+        <details><summary>Does it play in the background?</summary><p>Yes. It keeps playing in the background and with the screen locked, with controls on the lock screen and in Control Center.</p></details>
+        <details><summary>Why does it stop opening after a week?</summary><p>Apps sideloaded with a free Apple ID expire after 7 days. Re-run Sideloadly, or let it refresh automatically over Wi-Fi.</p></details>
+        <details><summary>Does it work on iPhone?</summary><p>It's built for the iPad's split layout and only installs on iPad.</p></details>
+    </div>
+</section>
+</main>
+<footer>
+    <div class="footer-content">
+        <span><a class="back" href="../">&larr; Lyrenne for Windows &amp; Linux</a></span>
+        <div class="footer-right">
+            <a href="https://github.com/Doctordefector/Lyrenne-iPad">Source</a>
+            <a href="../steam-deck/">Steam Deck version</a>
+            <span>by <a class="author" href="https://github.com/Doctordefector">Doctordefector</a></span>
+        </div>
+    </div>
+</footer>
+<script>
+const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); io.unobserve(e.target); } }), { threshold: 0.1 });
+document.querySelectorAll('.fade-in').forEach(el => io.observe(el));
+</script>
+</body>
+</html>

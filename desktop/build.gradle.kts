@@ -160,7 +160,7 @@ compose.desktop {
 
             // Include required JVM modules in the custom runtime. jdk.security.auth: dbus-java
             // (MPRIS on Linux) reads the Unix uid through it for D-Bus authentication.
-            modules("java.sql", "java.naming", "java.net.http", "jdk.unsupported", "jdk.security.auth")
+            modules("java.sql", "java.naming", "java.net.http", "jdk.unsupported", "jdk.security.auth", "jdk.httpserver")
 
             packageName = "Lyrenne"
             packageVersion = lyrenneVersion

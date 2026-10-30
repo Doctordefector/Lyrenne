@@ -407,12 +407,39 @@ class DesktopPlayer {
             override fun error(mediaPlayer: MediaPlayer) {
                 val detail = lastVlcError
                 Timber.e("Playback error occurred${detail?.let { ": $it" } ?: ""}")
+                // A stream that dies mid-song (the machine slept, the URL expired, the network
+                // blinked) is fetched afresh once and resumed where it stopped.
+                val s = _state.value
+                val song = s.currentSong
+                if (song != null && s.position > 0 && recoveredSongId != song.id) {
+                    recoveredSongId = song.id
+                    scope.launch { recoverStream(song, s.position, detail) }
+                    return
+                }
                 _state.value = _state.value.copy(
                     isPlaying = false,
                     error = detail?.let { "Playback failed: $it" } ?: "Playback failed"
                 )
             }
         })
+    }
+
+    // ponytail: one recovery per song id, so a stream that keeps dying fails normally on the second
+    @Volatile private var recoveredSongId: String? = null
+
+    private suspend fun recoverStream(song: SongInfo, atMs: Long, detail: String?) {
+        // A download that fails will fail again; only streams go stale.
+        val media = if (downloadedFileFor(song.id) == null) streamFor(song.id) else null
+        if (media == null) {
+            _state.value = _state.value.copy(isPlaying = false, error = detail?.let { "Playback failed: $it" } ?: "Playback failed")
+            return
+        }
+        if (_state.value.currentSong?.id != song.id) return
+        Timber.i("Stream for ${song.id} died at ${atMs}ms, resumed on a fresh one")
+        lastVlcError = null
+        val options = buildMediaOptions() + ":start-time=${atMs / 1000.0}"
+        audioPlayer?.mediaPlayer()?.media()?.play(media, *options.toTypedArray())
+        applyEqualizer()
     }
 
     private fun startPositionUpdates() {

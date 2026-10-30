@@ -79,6 +79,9 @@ jobs:
           mkdir -p dist
           nfpm package -f packaging/linux/nfpm.yaml -p deb -t dist/
           nfpm package -f packaging/linux/nfpm.yaml -p rpm -t dist/
+          # For the Steam Deck plugin (SteamOS can install neither package): the plugin pins this
+          # file's sha256, so it is not signed separately.
+          tar -C desktop/build/compose/binaries/main/app -czf "dist/lyrenne-$LYRENNE_VERSION-linux-x86_64.tar.gz" Lyrenne
       # The in-app updater installs these through pkexec, so they need a .sig like the ZIP.
       - name: Sign .deb and .rpm
         env:

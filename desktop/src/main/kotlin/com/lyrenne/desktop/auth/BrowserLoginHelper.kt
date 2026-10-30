@@ -151,6 +151,12 @@ object BrowserLoginHelper {
      * the typing. Everything else, cache and history included, is deleted, which also takes the
      * profile from about 87 MB down to a few hundred KB.
      */
+    // deleteRecursively() leaves a symlink whose target is gone, and Firefox's `lock` is always one
+    // once the browser has closed. Left behind, the next launch could take the profile as in use.
+    private fun remove(f: File) {
+        if (Files.isSymbolicLink(f.toPath())) Files.deleteIfExists(f.toPath()) else f.deleteRecursively()
+    }
+
     fun pruneLoginProfile() {
         for (dir in allProfileDirs()) {
             // A sign-in still open in the browser (the headless copy restarted under it) keeps its cookies.
@@ -163,15 +169,15 @@ object BrowserLoginHelper {
                     if (!f.name.equals("Local State", ignoreCase = true) &&
                         !f.name.equals("Default", ignoreCase = true)
                     ) {
-                        f.deleteRecursively()
+                        remove(f)
                     }
                 }
                 File(dir, "Default").listFiles()?.forEach { f ->
-                    if (!f.name.startsWith("Login Data")) f.deleteRecursively()
+                    if (!f.name.startsWith("Login Data")) remove(f)
                 }
             } else {
                 dir.listFiles()?.forEach { f ->
-                    if (f.name != "logins.json" && f.name != "key4.db") f.deleteRecursively()
+                    if (f.name != "logins.json" && f.name != "key4.db") remove(f)
                 }
             }
             Timber.i("Pruned login profile ${dir.name} down to saved passwords")

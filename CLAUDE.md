@@ -297,20 +297,25 @@ with a live Google session and its DPAPI key, and `logout()` did not touch it, s
 left a working session on disk**. A measured install: 87 MB, which was 99% of the whole `data/`
 folder.
 
-`BrowserLoginHelper.clearLoginProfile()` now runs in three places, and all three are needed:
+`BrowserLoginHelper.pruneLoginProfile()` deletes everything in the profile except the browser's
+saved-password store (Chromium `Login Data` + `Local State`, Firefox `logins.json` + `key4.db`). It
+runs in three places, and all three are needed:
 
 | Where | Why |
 |---|---|
 | After a successful extraction | The cookies are in memory by then; the profile is spent |
 | `AuthManager.logout()` | Otherwise signing out is not signing out |
-| `Main.runApp()` startup | Sweeps profiles left by pre-2.10.0 versions. Safe there specifically because no login can be in flight yet |
+| Startup (windowed and headless) | Sweeps profiles left by older versions. Skips a profile a browser still has open (a headless restart mid sign-in) |
 
-Only delete on `CookieExtractResult.Success`. The handoff path calls `readCookiesFromProfile`
-repeatedly while the user is still typing their password, and deleting on a non-Success would wipe
+Only prune on `CookieExtractResult.Success`. The handoff path calls `readCookiesFromProfile`
+repeatedly while the user is still typing their password, and pruning on a non-Success would wipe
 the profile mid-login.
 
-The one cost is that the next sign-in starts from a clean profile, so the user retypes their Google
-password instead of the browser remembering them. That is the trade and it was made deliberately.
+The saved password stays even through a sign-out, because whether it exists is the user's own
+answer to the browser's "save password?" prompt: yes means the next sign-in is a tap, no means there
+is nothing to keep. It cannot authenticate anything on its own. Until 2.20.0 sign-out deleted the
+whole profile and overrode that answer. The prune also removes symlinks itself: Firefox's `lock`
+dangles once the browser closes, and `deleteRecursively()` leaves dangling links behind.
 
 ## Update download: HTTPS and GitHub only
 

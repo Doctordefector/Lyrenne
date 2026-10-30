@@ -185,30 +185,6 @@ object BrowserLoginHelper {
     }
 
     /**
-     * Delete the login profile outright, saved passwords and all. This is the sign-out path;
-     * everywhere else wants [pruneLoginProfile].
-     *
-     * Safe to call when it does not exist.
-     *
-     * The profile is single-use scratch space: once the cookies are in credentials.json it has
-     * no further purpose, and what it still holds is a second live Google session. Around 87 MB
-     * of Chromium profile including the cookie DB and its key. Leaving it behind meant signing
-     * out deleted credentials.json and left a working session sitting next to it.
-     *
-     * Failure is logged, not raised. A browser process still holding a file lock is not a reason
-     * to fail a sign-in that already succeeded; the next attempt overwrites the profile anyway.
-     */
-    fun clearLoginProfile() {
-        for (dir in allProfileDirs()) {
-            if (dir.deleteRecursively()) {
-                Timber.i("Cleared login profile")
-            } else {
-                Timber.w("Could not fully clear login profile at ${dir.absolutePath}")
-            }
-        }
-    }
-
-    /**
      * For a browser someone else starts: the Steam Deck plugin has Steam launch it, because only an
      * app Steam launched gets its on-screen keyboard and controls in Game Mode. Returns the browser's
      * name and full command; follow with [awaitLogin].

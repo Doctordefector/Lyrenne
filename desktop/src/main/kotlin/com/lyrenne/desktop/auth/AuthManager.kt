@@ -533,8 +533,10 @@ object AuthManager {
                 credentialsFile.delete()
             }
             // Deleting credentials.json alone was not a sign-out: the browser login profile is a
-            // second copy of the same session, and it outlived the thing it duplicated.
-            BrowserLoginHelper.clearLoginProfile()
+            // second copy of the same session, and it outlived the thing it duplicated. Pruning
+            // takes the session (the cookie store) and keeps only a password the user told the
+            // browser to save; wiping that too overrode their own "save password" answer.
+            BrowserLoginHelper.pruneLoginProfile()
             YouTube.cookie = null
             YouTube.visitorData = null
             YouTube.dataSyncId = null

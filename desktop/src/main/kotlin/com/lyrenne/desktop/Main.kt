@@ -219,12 +219,12 @@ private fun loadResourceImage(name: String): java.awt.image.BufferedImage? = try
     null
 }
 
-fun main() {
+fun main(args: Array<String>) {
     val log = installCrashReporting()
     // Before any window or the media session exists: both are named by the process's app id.
     WindowsAppIdentity.apply()
     try {
-        runApp()
+        if ("--headless" in args) com.lyrenne.desktop.headless.Headless.run(args) else runApp()
     } catch (e: Throwable) {
         reportFatal(e, log)
         exitProcess(1)
@@ -233,7 +233,12 @@ fun main() {
 
 private fun runApp() {
     // Before the database opens: a second copy only wakes the first one up.
-    if (!SingleInstance.claim()) exitProcess(0)
+    // A headless copy (the Steam Deck plugin's) quits when poked, so try once more after it has gone.
+    // A windowed copy just gets shown twice.
+    if (!SingleInstance.claim()) {
+        Thread.sleep(1500)
+        if (!SingleInstance.claim()) exitProcess(0)
+    }
 
     // Every remaining Swing dialog (folder pickers, backup/restore) defaults to the
     // cross-platform Metal look — grey 1990s widgets. The system L&F makes them render

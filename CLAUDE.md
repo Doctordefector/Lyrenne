@@ -1393,7 +1393,9 @@ Plan and rationale: `AUDIT_AND_LINUX_PLAN.md`. What is in place:
 - **VLC**: never bundled on Linux; vlcj `NativeDiscovery` finds the distro `libvlc`. Snap/Flatpak VLC
   cannot be used. Streaming prefers Opus there (Fedora's stock VLC may lack AAC).
 - **Sign-in**: Firefox first (plaintext cookies), then the Chromium family with `--password-store=basic`,
-  then "Advanced: paste a cookie" (`PasteCookieSection`). Flatpak browsers are skipped.
+  then Flatpak browsers (SteamOS has only those), then "Advanced: paste a cookie" (`PasteCookieSection`).
+  A Flatpak browser can only see its own `~/.var/app/<id>`, so its login profile lives there; the
+  exported launcher in `exports/bin` runs `flatpak run` and stays up while the browser does.
 - **Tray**: none on Linux, deliberately. The AWT tray is XEmbed only: on Fedora (KDE, or
   GNOME with the AppIndicator extension) the icon showed but got no clicks, and `displayMessage`
   drew a Win95-style balloon for every song change. So `trayActive` is false, the minimize-to-tray
@@ -1418,3 +1420,22 @@ Plan and rationale: `AUDIT_AND_LINUX_PLAN.md`. What is in place:
   it over MPRIS with `playerctl`; `LinuxBrowserE2ETest` runs real Firefox and Chrome through the login
   launch/lock/cookie-read path (signed out). **Not verifiable in CI**, needs a real desktop: browser sign-in,
   streamed playback (needs a session), MPRIS widgets, tray behaviour per desktop.
+
+## Headless mode (Steam Deck plugin)
+
+`Lyrenne --headless` runs the player with no window and serves a localhost JSON API
+(`headless/Headless.kt`). It exists for the Decky Loader plugin (repo Doctordefector/Lyrenne-Decky),
+whose Python backend starts it with `systemd-run --user` and whose Quick Access panel is the only UI.
+
+- **Auth**: binds 127.0.0.1 only; a random token per run goes to `headless.json` in the data dir
+  (mode 600, with port and pid) and every request must send it as `X-Lyrenne-Token`.
+- **Runtime**: needs `jdk.httpserver` in the jlink module list. The 2.19.0 runtime lacked it, so
+  `--headless` on that build dies with `NoClassDefFoundError: com/sun/net/httpserver/HttpServer`.
+- **Single instance**: launching the windowed app pokes the headless copy, which quits; `runApp`
+  tries the claim once more after 1.5 s. A windowed copy poked this way is simply shown twice.
+- **SteamOS 3.9** ships libvlc 3.0.23 (https, mkv/mp4, opus, faad, ALSA output only), so nothing
+  VLC needs bundling there. It ships no Java: the tarball's own runtime is used.
+- **Shipping**: release CI adds `lyrenne-<v>-linux-x86_64.tar.gz` (the `createDistributable` folder);
+  the plugin pins its sha256. `linux.yml` smoke-tests `--headless` (token accepted, 401 without).
+- Anonymous playback is bot-checked by YouTube ("Sign in to confirm you're not a bot") on every
+  client in the fallback chain, so the plugin must get the user signed in before anything plays.

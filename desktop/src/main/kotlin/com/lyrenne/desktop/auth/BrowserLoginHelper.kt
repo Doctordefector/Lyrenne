@@ -38,7 +38,7 @@ object BrowserLoginHelper {
     /** The browsers looked for on this OS, for the "no browser found" message. */
     val supportedBrowserNames: String get() = when {
         Platform.isWindows -> "Edge, Chrome, Brave or Firefox"
-        Platform.isLinux -> "Firefox, LibreWolf, Chrome, Chromium, Edge, Brave or Vivaldi"
+        Platform.isLinux -> "Firefox, LibreWolf, Chrome, Chromium, Edge, Brave or Vivaldi (native, snap or Flatpak)"
         else -> "Firefox"
     }
 
@@ -99,8 +99,27 @@ object BrowserLoginHelper {
             val profile = if (snapName != null) snapProfile(snapName) else defaultProfileDir()
             return LoginBrowser(kind, exe, name, profile)
         }
+        // Flatpak browsers (SteamOS, Silverblue) see only their own ~/.var/app/<id>, so the profile
+        // goes there. The exported launcher runs `flatpak run` and stays up while the browser does.
+        for ((kind, name, appId) in flatpakBrowsers) {
+            val exe = listOf(File(home, ".local/share/flatpak/exports/bin/$appId"), File("/var/lib/flatpak/exports/bin/$appId"))
+                .firstOrNull { it.isFile } ?: continue
+            return LoginBrowser(kind, exe, name, flatpakProfile(appId))
+        }
         return null
     }
+
+    private val flatpakBrowsers = listOf(
+        Triple(BrowserKind.FIREFOX, "Firefox", "org.mozilla.firefox"),
+        Triple(BrowserKind.FIREFOX, "LibreWolf", "io.gitlab.librewolf-community"),
+        Triple(BrowserKind.CHROMIUM, "Chrome", "com.google.Chrome"),
+        Triple(BrowserKind.CHROMIUM, "Chromium", "org.chromium.Chromium"),
+        Triple(BrowserKind.CHROMIUM, "Edge", "com.microsoft.Edge"),
+        Triple(BrowserKind.CHROMIUM, "Brave", "com.brave.Browser"),
+    )
+
+    private fun flatpakProfile(appId: String) =
+        File(System.getProperty("user.home"), ".var/app/$appId/lyrenne-$PROFILE_NAME")
 
     private fun onPath(command: String): File? =
         System.getenv("PATH").orEmpty().split(File.pathSeparator)
@@ -114,7 +133,8 @@ object BrowserLoginHelper {
     private fun allProfileDirs(): List<File> {
         val snaps = File(System.getProperty("user.home"), "snap").listFiles().orEmpty()
             .map { File(it, "common/lyrenne-$PROFILE_NAME") }
-        return (listOf(defaultProfileDir()) + snaps).filter { it.exists() }
+        val flatpaks = flatpakBrowsers.map { flatpakProfile(it.third) }
+        return (listOf(defaultProfileDir()) + snaps + flatpaks).filter { it.exists() }
     }
 
     /**
@@ -133,6 +153,11 @@ object BrowserLoginHelper {
      */
     fun pruneLoginProfile() {
         for (dir in allProfileDirs()) {
+            // A sign-in still open in the browser (the headless copy restarted under it) keeps its cookies.
+            if (liveLock(dir.toPath().resolve("lock")) || liveLock(dir.toPath().resolve("SingletonLock"))) {
+                Timber.i("Login profile ${dir.name} is open in a browser, not pruning")
+                continue
+            }
             if (File(dir, "Local State").exists() || File(dir, "Default").exists()) {
                 dir.listFiles()?.forEach { f ->
                     if (!f.name.equals("Local State", ignoreCase = true) &&
@@ -194,6 +219,14 @@ object BrowserLoginHelper {
         val browserName = browser.name
         val profileDir = browser.profileDir
         profileDir.mkdirs()
+
+        // A sign-in window from an earlier attempt is still open: a second launch would only hit its
+        // profile lock, so wait for that one to close instead.
+        if (isProfileInUse(browser)) {
+            onStatus("Finish signing in, then close $browserName.")
+            return@withContext pollForCookiesInProfile(browser, onStatus)
+                ?: CookieExtractResult.Error("Timed out waiting for $browserName to close")
+        }
 
         Timber.i("Launching $browserName with profile at ${profileDir.absolutePath}")
         onStatus("Opening $browserName...")
@@ -323,6 +356,12 @@ object BrowserLoginHelper {
      */
     private fun liveLock(link: java.nio.file.Path): Boolean {
         if (!Files.exists(link, LinkOption.NOFOLLOW_LINKS)) return false
+        // A Flatpak browser writes the pid from its own pid namespace (often 2, a kernel thread out
+        // here), so ask whether any process was started with this profile instead.
+        val dir = link.parent.toString()
+        if ("/.var/app/" in dir) {
+            return ProcessHandle.allProcesses().anyMatch { p -> p.info().commandLine().map { dir in it }.orElse(false) }
+        }
         if (!Files.isSymbolicLink(link)) return true
         val target = runCatching { Files.readSymbolicLink(link).toString() }.getOrNull() ?: return true
         val pid = Regex("""(\d+)$""").find(target)?.groupValues?.get(1)?.toLongOrNull() ?: return true

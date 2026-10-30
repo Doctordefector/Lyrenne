@@ -51,6 +51,23 @@ jobs:
           test -f ~/.local/share/lyrenne/lyrenne.db
           ! grep -E "Exception in thread|Fatal|FATAL" run.log
 
+      # The Steam Deck plugin runs `--headless` and drives it over localhost: the API must answer
+      # with the token from headless.json and refuse without it.
+      - name: Headless smoke-run
+        run: |
+          lyrenne --headless > headless.log 2>&1 &
+          for i in $(seq 30); do [ -f ~/.local/share/lyrenne/headless.json ] && break; sleep 1; done
+          HS=~/.local/share/lyrenne/headless.json
+          TOKEN=$(python3 -c "import json;print(json.load(open('$HS'))['token'])")
+          curl -sf -H "X-Lyrenne-Token: $TOKEN" http://127.0.0.1:48711/state | tee state.json
+          python3 -c "import json;s=json.load(open('state.json'));assert s['vlc'] is True, s"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:48711/state)" = 401
+          curl -sf -X POST -H "X-Lyrenne-Token: $TOKEN" http://127.0.0.1:48711/quit
+          sleep 3; ! pgrep -f -- "--headless"
+
+      - name: Package .tar.gz
+        run: tar -C desktop/build/compose/binaries/main/app -czf "dist/lyrenne-linux-x86_64.tar.gz" Lyrenne
+
       - uses: actions/upload-artifact@v4
         with:
           name: lyrenne-linux

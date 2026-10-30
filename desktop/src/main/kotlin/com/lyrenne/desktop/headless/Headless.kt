@@ -177,7 +177,10 @@ object Headless {
             "GET /artist" -> artist(q["id"].orEmpty())
             "POST /play" -> play(body)
             "POST /cmd" -> command(body)
-            "POST /login" -> startLogin()
+            "POST /login" -> startLogin(body["external"]?.jsonPrimitive?.booleanOrNull == true)
+            "GET /login/browser" -> BrowserLoginHelper.loginCommand()?.let { (name, command) ->
+                buildJsonObject { put("name", name); put("command", JsonArray(command.map { JsonPrimitive(it) })) }
+            } ?: error("No browser found (Lyrenne looks for ${BrowserLoginHelper.supportedBrowserNames}).")
             "POST /login/finish" -> { BrowserLoginHelper.closeLoginBrowser(); ok() }
             "POST /logout" -> { AuthManager.logout(); ok() }
             "POST /quit" -> { scope.launch { delay(100); shutdown() }; ok() }
@@ -349,11 +352,14 @@ object Headless {
     }
 
     /** Runs the browser sign-in in the background; progress shows up as `login` in /state. */
-    private fun startLogin(): JsonObject {
+    /** `{external: true}`: the caller launches the browser (from [BrowserLoginHelper.loginCommand]). */
+    private fun startLogin(external: Boolean): JsonObject {
         if (login != null && login?.startsWith("Error") != true && login != "Signed in") return ok()
         login = "Opening browser..."
         scope.launch {
-            login = when (val result = BrowserLoginHelper.loginWithBrowser { login = it }) {
+            val result = if (external) BrowserLoginHelper.awaitLogin { login = it }
+            else BrowserLoginHelper.loginWithBrowser { login = it }
+            login = when (result) {
                 is CookieExtractResult.Success -> AuthManager.saveCredentials(result.cookie, "", "")
                     .fold({ "Signed in" }, { "Error: ${it.message}" })
                 is CookieExtractResult.Error -> "Error: ${result.message}"

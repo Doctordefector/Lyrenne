@@ -203,6 +203,25 @@ object BrowserLoginHelper {
     }
 
     /**
+     * For a browser someone else starts: the Steam Deck plugin has Steam launch it, because only an
+     * app Steam launched gets its on-screen keyboard and controls in Game Mode. Returns the browser's
+     * name and full command; follow with [awaitLogin].
+     */
+    fun loginCommand(): Pair<String, List<String>>? = findLoginBrowser()?.let { browser ->
+        browser.profileDir.mkdirs()
+        browser.name to launchArgs(browser)
+    }
+
+    /** Waits (10 minutes at most) for the browser from [loginCommand] to sign in and close. */
+    suspend fun awaitLogin(onStatus: (String) -> Unit): CookieExtractResult = withContext(Dispatchers.IO) {
+        val browser = findLoginBrowser()
+            ?: return@withContext CookieExtractResult.Error("No browser found (Lyrenne looks for $supportedBrowserNames).")
+        onStatus("Sign in to YouTube Music, then close ${browser.name}.")
+        pollForCookiesInProfile(browser, onStatus)
+            ?: CookieExtractResult.Error("Timed out waiting for ${browser.name} to close")
+    }
+
+    /**
      * Closes the browser running the login profile, politely (SIGTERM lets Firefox flush its
      * cookie store), so a waiting [loginWithBrowser] goes on to read the cookies. For Game Mode on
      * the Steam Deck, where a browser window has no close button.

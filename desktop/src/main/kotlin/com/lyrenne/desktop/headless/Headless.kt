@@ -178,6 +178,7 @@ object Headless {
             "POST /play" -> play(body)
             "POST /cmd" -> command(body)
             "POST /login" -> startLogin()
+            "POST /login/finish" -> { BrowserLoginHelper.closeLoginBrowser(); ok() }
             "POST /logout" -> { AuthManager.logout(); ok() }
             "POST /quit" -> { scope.launch { delay(100); shutdown() }; ok() }
             else -> null

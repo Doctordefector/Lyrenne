@@ -203,6 +203,18 @@ object BrowserLoginHelper {
     }
 
     /**
+     * Closes the browser running the login profile, politely (SIGTERM lets Firefox flush its
+     * cookie store), so a waiting [loginWithBrowser] goes on to read the cookies. For Game Mode on
+     * the Steam Deck, where a browser window has no close button.
+     */
+    fun closeLoginBrowser() {
+        val dirs = allProfileDirs().map { it.absolutePath }
+        ProcessHandle.allProcesses()
+            .filter { p -> p.info().commandLine().map { cmd -> dirs.any { it in cmd } }.orElse(false) }
+            .forEach { it.destroy() }
+    }
+
+    /**
      * 1. Launch browser with a dedicated profile dir
      * 2. Wait for the user to sign in and close the browser
      * 3. Read cookies from the now-unlocked cookie DB
@@ -307,8 +319,8 @@ object BrowserLoginHelper {
         browser: LoginBrowser,
         onStatus: (String) -> Unit
     ): CookieExtractResult? {
-        // Poll every 5 seconds for up to 5 minutes
-        for (attempt in 1..60) {
+        // Poll every 5 seconds for up to 10 minutes, the same as a fresh launch waits
+        for (attempt in 1..120) {
             delay(5000)
 
             // If the lock is gone, the browser has fully closed

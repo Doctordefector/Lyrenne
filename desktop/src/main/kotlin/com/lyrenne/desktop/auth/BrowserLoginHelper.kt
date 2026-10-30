@@ -208,8 +208,34 @@ object BrowserLoginHelper {
      * name and full command; follow with [awaitLogin].
      */
     fun loginCommand(): Pair<String, List<String>>? = findLoginBrowser()?.let { browser ->
+        // 80% scale: at 100% on an 800 px Deck screen, YouTube's cookie consent put "Accept all"
+        // just below the fold. Kiosk mode fit it too, but left no visible way out of the browser.
+        prepareProfile(browser, scale = "0.8")
+        val args = launchArgs(browser)
+        browser.name to when (browser.kind) {
+            BrowserKind.FIREFOX -> args
+            BrowserKind.CHROMIUM -> args.take(1) + "--force-device-scale-factor=0.8" + args.drop(1)
+        }
+    }
+
+    /**
+     * Creates the profile and, for Firefox, skips its first-run screens (the welcome and terms
+     * dialogs sat on top of the sign-in page in a fresh profile). [pruneLoginProfile] deletes
+     * user.js with everything else, so it is written on every sign-in.
+     */
+    private fun prepareProfile(browser: LoginBrowser, scale: String? = null) {
         browser.profileDir.mkdirs()
-        browser.name to launchArgs(browser)
+        if (browser.kind != BrowserKind.FIREFOX) return
+        val prefs = listOfNotNull(
+            "browser.aboutwelcome.enabled" to "false",
+            "browser.preonboarding.enabled" to "false",
+            "termsofuse.bypassNotification" to "true",
+            "datareporting.policy.dataSubmissionPolicyBypassNotification" to "true",
+            "browser.shell.checkDefaultBrowser" to "false",
+            "browser.startup.homepage_override.mstone" to "\"ignore\"",
+            scale?.let { "layout.css.devPixelsPerPx" to "\"$it\"" },
+        )
+        File(browser.profileDir, "user.js").writeText(prefs.joinToString("") { (k, v) -> "user_pref(\"$k\", $v);\n" })
     }
 
     /** Waits (10 minutes at most) for the browser from [loginCommand] to sign in and close. */
@@ -249,7 +275,7 @@ object BrowserLoginHelper {
 
         val browserName = browser.name
         val profileDir = browser.profileDir
-        profileDir.mkdirs()
+        prepareProfile(browser)
 
         // A sign-in window from an earlier attempt is still open: a second launch would only hit its
         // profile lock, so wait for that one to close instead.

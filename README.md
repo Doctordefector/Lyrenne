@@ -17,11 +17,18 @@ telemetry. On Windows you unzip it and it runs; on Linux it is one `.deb` or `.r
 
 [**Download**](https://github.com/Doctordefector/Lyrenne/releases/latest) ·
 [Website](https://doctordefector.github.io/Lyrenne/) ·
-[Features](#features) · [Troubleshooting](#troubleshooting) · [Build from source](#build-from-source)
+[Features](#features) · [Other versions](#other-versions) · [Troubleshooting](#troubleshooting) · [Build from source](#build-from-source)
 
 </div>
 
 ---
+
+## Other versions
+
+| | |
+|---|---|
+| **iPad** | [Lyrenne for iPad](https://github.com/Doctordefector/Lyrenne-iPad): a sideloadable version with synced lyrics. |
+| **Steam Deck** | [Lyrenne for Decky](https://github.com/Doctordefector/Lyrenne-Decky): play your music in Game Mode from the Quick Access Menu while you game. |
 
 ## Install
 

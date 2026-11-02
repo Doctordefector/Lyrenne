@@ -508,25 +508,13 @@ object AutoUpdater {
     // ==================== Detection ====================
 
     /**
-     * Detect if running as portable install.
-     * Installed: has uninstaller (NSIS) or is under Program Files.
-     * Everything else: portable.
+     * Installed only when an installer left its uninstaller behind. Releases ship no Windows
+     * installer, so through 2.18.1 guessing from the folder (Program Files, %LOCALAPPDATA%) sent
+     * portable copies living there hunting for an .exe/.msi asset: "No installer found".
      */
     private fun isPortableInstall(): Boolean {
         val appDir = findAppDirectory() ?: return true // default to portable if unknown
-        val path = appDir.absolutePath.lowercase()
-
-        // NSIS installer creates unins000.exe
-        if (File(appDir, "unins000.exe").exists()) return false
-
-        // MSI installs go to Program Files
-        if (path.contains("program files")) return false
-
-        // Check for LocalAppData install location (typical for per-user NSIS installs)
-        val localAppData = System.getenv("LOCALAPPDATA")?.lowercase()
-        if (localAppData != null && path.startsWith(localAppData)) return false
-
-        return true
+        return !File(appDir, "unins000.exe").exists()
     }
 
     // ==================== Network ====================

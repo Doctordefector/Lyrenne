@@ -146,6 +146,11 @@ compose.desktop {
             "-XX:ParallelGCThreads=2",
             "-XX:ConcGCThreads=1",
             "-XX:CICompilerCount=3",
+            // Linux: the default posix_spawn goes through lib/jspawnhelper, which must match the
+            // running JVM's build. Once a .deb/.rpm swaps /opt/lyrenne underneath us, every spawn
+            // (pkexec, the restart) failed with "Failed to exec spawn helper". FORK needs no helper.
+            // Ignored on Windows.
+            "-Djdk.lang.Process.launchMechanism=FORK",
         )
 
         nativeDistributions {

@@ -1416,6 +1416,9 @@ Plan and rationale: `AUDIT_AND_LINUX_PLAN.md`. What is in place:
 - **Updater**: a copy the `lyrenne` package installed in /opt downloads the release's `.rpm`/`.deb`, checks its
   `.sig`, installs it with `pkexec dnf|rpm -U|apt-get`, and restarts once the old process is gone (SingleInstance
   would hand an earlier launch back to it). Anything else on Linux only links the release page. CI signs both packages.
+  `-Djdk.lang.Process.launchMechanism=FORK` (build.gradle.kts jvmArgs) is load-bearing: the default spawn
+  runs `/opt/lyrenne/lib/runtime/lib/jspawnhelper`, and once a package swaps /opt under a running copy the
+  new helper's version no longer matches, so every spawn failed ("Failed to exec spawn helper", seen 2.20.0).
 - **Packaging**: `packaging/linux/nfpm.yaml` builds .deb/.rpm from `createDistributable` with VLC as a
   dependency. CI: `.github/workflows/linux.yml` (`-Pci` skips the network smoke tests).
   `fetchFfmpeg` and `packagePortableZip` only run on a Windows host.

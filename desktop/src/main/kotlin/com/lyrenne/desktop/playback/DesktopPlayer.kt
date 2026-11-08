@@ -220,6 +220,9 @@ class DesktopPlayer {
     // Autoplay: similar songs from YouTube's radio, added once the queue is down to its last song.
     // radioStarted means "Start Radio" built this queue, which keeps going whatever the setting says.
     private var radioStarted = false
+    // playedAlone means playSong built this queue from one song (search, home, a shelf), so there
+    // is no list the user chose for Repeat All to loop. See autoplayWanted.
+    private var playedAlone = false
     private var autoplayFetch: Deferred<Boolean>? = null
     // Bumped whenever the queue is replaced, so a fetch still in flight for the old one is dropped
     private var queueGeneration = 0
@@ -408,10 +411,13 @@ class DesktopPlayer {
                 val detail = lastVlcError
                 Timber.e("Playback error occurred${detail?.let { ": $it" } ?: ""}")
                 // A stream that dies mid-song (the machine slept, the URL expired, the network
-                // blinked) is fetched afresh once and resumed where it stopped.
+                // blinked) is fetched afresh once and resumed where it stopped. One VLC is refused
+                // at the start (HTTP 403, issue #17) is fetched afresh once too, from another
+                // client: the URL check is OkHttp's request, not VLC's, and can pass a URL VLC is
+                // then refused.
                 val s = _state.value
                 val song = s.currentSong
-                if (song != null && s.position > 0 && recoveredSongId != song.id) {
+                if (song != null && recoveredSongId != song.id) {
                     recoveredSongId = song.id
                     scope.launch { recoverStream(song, s.position, detail) }
                     return
@@ -424,20 +430,26 @@ class DesktopPlayer {
         })
     }
 
-    // ponytail: one recovery per song id, so a stream that keeps dying fails normally on the second
+    // One recovery per start of a song (reset in playMedia), so a stream that keeps dying fails normally on the second
     @Volatile private var recoveredSongId: String? = null
 
     private suspend fun recoverStream(song: SongInfo, atMs: Long, detail: String?) {
-        // A download that fails will fail again; only streams go stale.
-        val media = if (downloadedFileFor(song.id) == null) streamFor(song.id) else null
+        // A download that fails will fail again; only streams go stale. Refused at the start, the
+        // client that gave the URL is skipped; died mid-song, the same client is fine.
+        val refused = lastStreamClient?.takeIf { atMs == 0L && it.first == song.id }?.second
+        val media = when {
+            downloadedFileFor(song.id) != null -> null
+            refused != null -> getStreamUrl(song.id, skip = setOf(refused))
+            else -> streamFor(song.id)
+        }
         if (media == null) {
             _state.value = _state.value.copy(isPlaying = false, error = detail?.let { "Playback failed: $it" } ?: "Playback failed")
             return
         }
         if (_state.value.currentSong?.id != song.id) return
-        Timber.i("Stream for ${song.id} died at ${atMs}ms, resumed on a fresh one")
+        Timber.i("Stream for ${song.id} failed at ${atMs}ms, retrying on a fresh one")
         lastVlcError = null
-        val options = buildMediaOptions() + ":start-time=${atMs / 1000.0}"
+        val options = buildMediaOptions() + if (atMs > 0) listOf(":start-time=${atMs / 1000.0}") else emptyList()
         audioPlayer?.mediaPlayer()?.media()?.play(media, *options.toTypedArray())
         applyEqualizer()
     }
@@ -526,6 +538,7 @@ class DesktopPlayer {
     private suspend fun playSingle(song: SongInfo, radio: Boolean): Boolean {
         val media = mediaFor(song) ?: return false
         resetAutoplay(radio)
+        playedAlone = true
         queue.clear()
         queue.add(song)
         syncOriginalQueue()
@@ -594,10 +607,15 @@ class DesktopPlayer {
     // ponytail: upstream's client chooser; kept in innertube so syncs update it for free
     private val fallbackStrategy = ContentAwareFallbackStrategy()
 
-    private suspend fun getStreamUrl(videoId: String): String? {
+    /** The video and client the last stream URL came from, so a URL VLC is refused can skip it. */
+    @Volatile private var lastStreamClient: Pair<String, String>? = null
+
+    /** [skip]: client names not to ask, because VLC was just refused the URL one of them gave. */
+    private suspend fun getStreamUrl(videoId: String, skip: Set<String> = emptySet()): String? {
         return try {
-            var unchecked: String? = null
+            var unchecked: Pair<String, String>? = null
             for (client in fallbackStrategy.resolveClients(ContentHints())) {
+                if (client.clientName in skip) continue
                 // JVM has no BotGuard for PoTokens, and no login for login-only clients
                 if (client.requirePoToken) continue
                 if (client.loginRequired && YouTube.cookie == null) continue
@@ -644,10 +662,11 @@ class DesktopPlayer {
                                 if (code in 200..299) {
                                     Timber.i("Stream $videoId via ${client.clientName}")
                                     _state.value = _state.value.copy(error = null)
+                                    lastStreamClient = videoId to client.clientName
                                     return streamUrl
                                 }
                                 Timber.i("Stream $videoId: ${client.clientName} stream refused, HTTP ${code ?: "unreachable"}")
-                                if (unchecked == null) unchecked = streamUrl
+                                if (unchecked == null) unchecked = streamUrl to client.clientName
                             }
                         } else {
                             Timber.i("Stream $videoId: ${client.clientName} gave no audio formats")
@@ -663,10 +682,11 @@ class DesktopPlayer {
 
             // Nothing passed the check: let VLC try the first URL anyway, so a check that misfires
             // (a proxy refusing Range, a timeout) costs a log line, not the song
-            unchecked?.let {
+            unchecked?.let { (url, clientName) ->
                 Timber.w("Stream $videoId: no stream passed its check, trying the first anyway")
                 _state.value = _state.value.copy(error = null)
-                return it
+                lastStreamClient = videoId to clientName
+                return url
             }
 
             Timber.w("Could not get playable stream for $videoId")
@@ -697,6 +717,8 @@ class DesktopPlayer {
 
         // A stale error from the previous track would otherwise be reported for this one.
         lastVlcError = null
+        // One recovery per start, so playing a song again gets its own
+        recoveredSongId = null
         _state.value = _state.value.copy(error = null)
 
         val options = buildMediaOptions()
@@ -833,7 +855,8 @@ class DesktopPlayer {
                 play()
             }
             RepeatMode.ALL -> {
-                if (currentIndex < queue.size - 1) {
+                // A lone song or a radio carries on into similar songs instead of looping
+                if (currentIndex < queue.size - 1 || awaitSimilarSongs()) {
                     playNext()
                 } else {
                     // Loop back to start
@@ -1236,14 +1259,21 @@ class DesktopPlayer {
         awaitSimilarSongs(force = true)
     }
 
+    /**
+     * Repeat All loops a list the user chose, so it holds autoplay back. A song played on its own
+     * or a radio is not such a list: under Repeat All the first looped that one song forever, with
+     * nothing queued after it (issue #19, Repeat being saved across restarts), and the second
+     * replayed its first page. Both carry on instead. Looping one song is what Repeat One is for.
+     */
     private fun autoplayWanted(): Boolean =
-        (radioStarted || PreferencesManager.preferences.value.autoplay) &&
-            repeatMode == RepeatMode.OFF && autoplayAllowed()
+        (radioStarted || PreferencesManager.preferences.value.autoplay) && autoplayAllowed() &&
+            (repeatMode == RepeatMode.OFF || (repeatMode == RepeatMode.ALL && (playedAlone || radioStarted)))
 
     /** A replaced queue starts over: nothing still in flight for the old one may land in it. */
     private fun resetAutoplay(radio: Boolean = false) {
         queueGeneration++
         radioStarted = radio
+        playedAlone = false
         autoplayFetch?.cancel()
         autoplayFetch = null
     }

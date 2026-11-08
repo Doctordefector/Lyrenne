@@ -1239,7 +1239,7 @@ reached any other way, the Downloaded auto playlist included, was streamed, whic
 the stream (`DesktopPlayer.streamFor`) both stubbed.
 
 ## Version Management
-- **Current version**: v2.20.1
+- **Current version**: v2.20.2
 - **One place**: `desktop/build.gradle.kts` → `lyrenneVersion = "X.Y.Z"`. `processResources` expands it into
   `version.properties`, which `AutoUpdater.CURRENT_VERSION` reads. `UpdateSignatureTest` pins that they agree
 

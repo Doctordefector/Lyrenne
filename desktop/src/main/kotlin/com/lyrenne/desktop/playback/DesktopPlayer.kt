@@ -28,6 +28,7 @@ import uk.co.caprica.vlcj.player.base.MediaPlayerEventAdapter
 import uk.co.caprica.vlcj.player.component.AudioPlayerComponent
 import uk.co.caprica.vlcj.player.base.Equalizer
 import java.io.File
+import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
@@ -407,6 +408,10 @@ class DesktopPlayer {
                 _state.value = _state.value.copy(duration = newLength)
             }
 
+            override fun volumeChanged(mediaPlayer: MediaPlayer, volume: Float) {
+                onVlcVolumeReported(volume)
+            }
+
             override fun error(mediaPlayer: MediaPlayer) {
                 val detail = lastVlcError
                 Timber.e("Playback error occurred${detail?.let { ": $it" } ?: ""}")
@@ -498,14 +503,13 @@ class DesktopPlayer {
         }
         val gain = crossfadeGain(duration - position, crossfadeMs)
         val target = vlcVolume(PreferencesManager.preferences.value.volume)
-        audioPlayer?.mediaPlayer()?.audio()?.setVolume((target * gain).roundToInt())
+        applyVlcVolume((target * gain).roundToInt())
     }
 
     /** Hand the volume back to the user's setting after a crossfade tail was interrupted. */
     private fun restoreVolume() {
         crossfadeFading = false
-        audioPlayer?.mediaPlayer()?.audio()
-            ?.setVolume(vlcVolume(PreferencesManager.preferences.value.volume))
+        applyVlcVolume(vlcVolume(PreferencesManager.preferences.value.volume))
     }
 
     /** Ramp VLC volume from 0 to the user's volume over [durationMs]. */
@@ -517,10 +521,10 @@ class DesktopPlayer {
             val stepDelay = durationMs / steps
             for (i in 0..steps) {
                 if (!isActive) return@launch
-                audioPlayer?.mediaPlayer()?.audio()?.setVolume(target * i / steps)
+                applyVlcVolume(target * i / steps)
                 delay(stepDelay)
             }
-            audioPlayer?.mediaPlayer()?.audio()?.setVolume(target)
+            applyVlcVolume(target)
         }
     }
 
@@ -1079,7 +1083,41 @@ class DesktopPlayer {
     }
 
     fun setVolume(volume: Float) {
-        audioPlayer?.mediaPlayer()?.audio()?.setVolume(vlcVolume(volume))
+        applyVlcVolume(vlcVolume(volume))
+    }
+
+    /** The last 0-100 volume this app handed VLC, so its own changes are not read back as outside ones. */
+    @Volatile private var sentVlcVolume = -1
+    private var outsideVolumeSave: Job? = null
+
+    private fun applyVlcVolume(vlc: Int) {
+        sentVlcVolume = vlc
+        audioPlayer?.mediaPlayer()?.audio()?.setVolume(vlc)
+    }
+
+    /**
+     * VLC plays through its own session in the Windows mixer and reports when something else moves
+     * it: Lyrenne VR's wrist slider, or the mixer itself. Follow it, so the slider shows what you
+     * hear instead of snapping the sound back on the next track.
+     *
+     * [reported] is VLC's 0-1 number, the cube root of the session amplitude, so it is the same scale
+     * as [vlcVolume]'s output over 100 and inverts through the same curve.
+     */
+    private fun onVlcVolumeReported(reported: Float) {
+        if (reported < 0f) return
+        val vlc = (reported * 100).roundToInt()
+        // Our own writes echo back, and fades write every step; neither is the user.
+        if (abs(vlc - sentVlcVolume) <= 1 || crossfadeFading || fadeJob?.isActive == true) return
+        sentVlcVolume = vlc
+        val slider = if (vlc <= 0) 0f
+            else (vlc / 100.0).coerceIn(0.0, 1.0).pow(3 / FADER_LOUDNESS).toFloat()
+        PreferencesManager.setVolume(slider, persist = false)
+        // A VR slider drag reports many steps; write the file once it settles.
+        outsideVolumeSave?.cancel()
+        outsideVolumeSave = scope.launch {
+            delay(800)
+            PreferencesManager.setVolume(PreferencesManager.preferences.value.volume)
+        }
     }
 
     // --- Queue Persistence ---

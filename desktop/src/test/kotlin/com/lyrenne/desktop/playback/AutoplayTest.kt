@@ -116,7 +116,7 @@ class AutoplayTest {
     }
 
     @Test
-    fun `repeat modes never autoplay`() = runBlocking {
+    fun `repeat modes hold autoplay back on a list the user chose`() = runBlocking {
         setQueue(listOf(song(1)), current = 0)
         radioReturns(item(2))
 
@@ -125,6 +125,26 @@ class AutoplayTest {
             assertFalse("autoplayed under $mode", player.awaitSimilarSongs())
         }
         assertEquals(1, queue.size)
+    }
+
+    /**
+     * Issue #19: Repeat is saved across restarts, so Repeat All left on from an album made every
+     * song played from search loop itself forever with nothing queued after it.
+     */
+    @Test
+    fun `a song played on its own carries on under Repeat All but not Repeat One`() = runBlocking {
+        setQueue(listOf(song(1)), current = 0)
+        DesktopPlayer::class.java.getDeclaredField("playedAlone")
+            .apply { isAccessible = true }
+            .setBoolean(player, true)
+        radioReturns(item(1), item(2), item(3))
+
+        player.setRepeatMode(RepeatMode.ONE)
+        assertFalse("Repeat One is the way to loop one song", player.awaitSimilarSongs())
+
+        player.setRepeatMode(RepeatMode.ALL)
+        assertTrue(player.awaitSimilarSongs())
+        assertEquals(listOf("id1", "id2", "id3"), queue.map { it.id })
     }
 
     @Test

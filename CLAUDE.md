@@ -683,6 +683,7 @@ tile or header; five hand-written copies of the song menu had drifted apart befo
 | `DetailHeader` / `DetailTopBar` | Album/playlist/artist/podcast header (big round Play, icon actions, ⋮) and the top bar that shows the name once the header scrolls away |
 | `ScreenTitle`, `ToolHeader`, `PrimaryAction`, `SecondaryAction`, `PillTab`, `SkeletonShelf/Rows` | Titles, buttons, tabs and loading placeholders (`Kit.kt`) |
 | `CollapsibleSearchField`, `PlaylistSortMenu` | Search that opens from an icon, and one sort dropdown |
+| `ScrollbarLazyColumn`, `ScrollbarLazyGrid`, `lyrenneScrollbarStyle()` | Drop-in LazyColumn / LazyVerticalGrid with a draggable scrollbar on the right (issue #18). Every Library tab uses them |
 | `Tip` | Tooltip; every icon-only button is wrapped in one |
 | `selectedChipColors()` (Theme.kt) | Selected = the primaryContainer family everywhere, never Material's default secondaryContainer |
 
@@ -854,6 +855,10 @@ a pending read on a synchronous pipe handle blocks writes on it.
   with a one-byte request (`DownloadManager.streamStatus`) before use, and a refused one moves on to the
   next client: an OK player response can carry a URL YouTube 403s (issue #17). If none pass, the first
   URL is used anyway. Every client's outcome is logged at INFO (`Stream <id>: ...` / `Download <id>: ...`)
+- The check is OkHttp's request, not VLC's, so it can pass a URL VLC is then refused. VLC's `error`
+  event therefore retries once per start of a song: refused at 0:00, `getStreamUrl(skip = ...)` asks the
+  other clients (`lastStreamClient` remembers which gave the URL); died mid-song, a fresh URL resumes
+  where it stopped. `recoveredSongId` resets in `playMedia`
 - This working copy IS a git clone with a working `origin`. Commit and push directly; older notes describing a robocopy-to-temp-dir push workflow are obsolete
 - **Nothing is written outside the app folder, with one exception.** All state lives in
   `<app-dir>/data/`: `lyrenne.db`, `credentials.json`, `accounts/`, `lyrics-overrides.json`,
@@ -1176,6 +1181,10 @@ one song where the list should carry on, which is the follow-up report on #11.
 - **A replaced queue drops fetches in flight**: `queueGeneration` bumps on every replacement and
   the append checks it, so a slow fetch cannot land in the queue the user has since started.
 - **Hide explicit content** applies to everything autoplay and Start Radio queue.
+- **Repeat All holds autoplay back only on a list the user chose.** A song played on its own
+  (`playedAlone`, set by `playSingle`) and a radio carry on under Repeat All; Repeat One always
+  holds it back. Repeat is saved across restarts, so Repeat All left on from an album made every
+  search result loop itself with nothing queued (issue #19, same reporter as #12).
 - **Shuffle**: appended songs go into `originalQueue` too, even while shuffled, and so do songs the
   user adds (Add to queue in front of autoplay's picks there as well, Play next straight after the
   playing song). Left out, turning shuffle off dropped them, and with them the song playing if it

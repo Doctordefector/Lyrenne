@@ -23,11 +23,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
+import com.lyrenne.desktop.ui.components.ScrollbarLazyColumn
+import com.lyrenne.desktop.ui.components.ScrollbarLazyGrid
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -392,7 +392,7 @@ private fun SongsTab(
         return
     }
 
-    LazyColumn {
+    ScrollbarLazyColumn {
         if (displaySongs.isNotEmpty()) {
             item(key = "actions") {
                 Row(
@@ -484,7 +484,7 @@ private fun AlbumsTab(
             subMessage = if (searchQuery.isNotBlank()) "Try a different search term" else "Sync your library to see saved albums"
         )
     } else if (viewMode == com.lyrenne.desktop.settings.LibraryViewMode.GRID) {
-        LazyVerticalGrid(
+        ScrollbarLazyGrid(
             columns = GridCells.Adaptive(minSize = 160.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -499,7 +499,7 @@ private fun AlbumsTab(
             }
         }
     } else {
-        LazyColumn(
+        ScrollbarLazyColumn(
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             items(displayAlbums, key = { it.id }) { album ->
@@ -627,7 +627,7 @@ private fun ArtistsTab(
             subMessage = if (searchQuery.isNotBlank()) "Try a different search term" else "Sync your library to see subscribed artists"
         )
     } else if (viewMode == com.lyrenne.desktop.settings.LibraryViewMode.GRID) {
-        LazyVerticalGrid(
+        ScrollbarLazyGrid(
             columns = GridCells.Adaptive(minSize = 160.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -643,7 +643,7 @@ private fun ArtistsTab(
             }
         }
     } else {
-        LazyColumn(
+        ScrollbarLazyColumn(
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             items(displayArtists, key = { it.id }) { artist ->
@@ -728,7 +728,7 @@ private fun PlaylistsTab(
         )
     }
 
-    LazyColumn(
+    ScrollbarLazyColumn(
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         // Create playlist button
@@ -954,7 +954,7 @@ private fun DownloadsTab(
     // One LazyColumn for both sections. The active list used to be a plain Column of Cards,
     // which composes every entry whether or not it is on screen: queueing a 700-track playlist
     // built 700 Cards up front and froze the tab.
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    ScrollbarLazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (active.isNotEmpty()) {
             item(key = "active-header") {
                 Row(

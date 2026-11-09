@@ -32,13 +32,20 @@ import com.lyrenne.desktop.media.suppressMediaKeys
 @Composable
 fun CollapsibleSearchField(query: String, onQueryChange: (String) -> Unit, placeholder: String) {
     var open by remember { mutableStateOf(false) }
+    // onFocusChanged reports "unfocused" the moment the field appears, before requestFocus lands.
+    // Collapsing on that closed the field in the frame it opened (issue #14 follow-up), so it
+    // only collapses after it has actually held focus.
+    var hadFocus by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
     if (open || query.isNotEmpty()) {
         OutlinedTextField(
             value = query,
             onValueChange = onQueryChange,
             modifier = Modifier.width(220.dp).focusRequester(focus).suppressMediaKeys()
-                .onFocusChanged { if (!it.isFocused && query.isEmpty()) open = false },
+                .onFocusChanged {
+                    if (it.isFocused) hadFocus = true
+                    else if (hadFocus && query.isEmpty()) { open = false; hadFocus = false }
+                },
             placeholder = { Text(placeholder) },
             leadingIcon = { Icon(Icons.Default.Search, null) },
             trailingIcon = {

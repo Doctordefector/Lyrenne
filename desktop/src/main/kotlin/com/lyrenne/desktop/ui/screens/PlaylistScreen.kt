@@ -40,7 +40,9 @@ import com.lyrenne.desktop.ui.components.PlaylistSortMenu
 import com.lyrenne.desktop.ui.components.rememberPlaylistSortState
 import com.lyrenne.desktop.ui.components.matchesQuery
 import com.lyrenne.desktop.ui.components.chooseExportFolder
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -60,6 +62,7 @@ fun PlaylistScreen(
     var isLoadingMore by remember { mutableStateOf(false) }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     var continuation by rememberSaveable { mutableStateOf<String?>(null) }
+    var pageFailed by remember { mutableStateOf(false) }
     val playingId by player.select { it.currentSong?.id }
     var query by remember { mutableStateOf("") }
     val sortState = rememberPlaylistSortState()
@@ -81,26 +84,49 @@ fun PlaylistScreen(
         isLoading = false
     }
 
-    /** Appends the next page. False once there is none, or when it fails to load. */
+    /**
+     * Appends the next page. False once there is none, or when it fails to load. A failed page is
+     * retried twice before giving up, and then the list ends in a Retry button (issue #20): a single
+     * network blip used to end the playlist at 100 songs with nothing to say so.
+     */
     suspend fun loadNextPage(): Boolean = pageLock.withLock {
-        val cont = continuation ?: return false
-        YouTube.playlistContinuation(cont).onSuccess { page ->
-            allSongs = allSongs + page.songs
-            continuation = page.continuation
-        }.isSuccess
+        repeat(3) { attempt ->
+            val cont = continuation ?: return false
+            val result = YouTube.playlistContinuation(cont)
+            result.onSuccess { page ->
+                allSongs = allSongs + page.songs
+                continuation = page.continuation
+                pageFailed = false
+                Timber.i("Playlist $playlistId: +${page.songs.size} songs (${allSongs.size} loaded, more=${page.continuation != null})")
+                return true
+            }
+            Timber.w("Playlist $playlistId: page after ${allSongs.size} songs failed (try ${attempt + 1}/3): ${result.exceptionOrNull()}")
+            delay(1000L * (attempt + 1))
+        }
+        pageFailed = true
+        false
     }
 
     suspend fun loadAllPages() {
         while (loadNextPage()) Unit
     }
 
-    // Load more songs when reaching the end
-    fun loadMore() {
-        if (continuation == null || isLoadingMore) return
-        scope.launch {
-            isLoadingMore = true
-            loadNextPage()
-            isLoadingMore = false
+    val listState = rememberLazyListState()
+
+    // Load more while the end of the list is in view (issue #20). Watching the scroll position,
+    // not one row's composition: a trigger on row size-5 fired once, and never again if that
+    // page failed or the row was skipped. Keeps going while the list is too short to scroll.
+    LaunchedEffect(playlistPage) {
+        if (playlistPage == null) return@LaunchedEffect
+        snapshotFlow {
+            val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            // The loaded count, so a page that leaves the end still in view asks again
+            if (continuation != null && !pageFailed && last >= listState.layoutInfo.totalItemsCount - 8) allSongs.size else -1
+        }.collect { loaded ->
+            if (loaded >= 0 && !isLoadingMore) {
+                isLoadingMore = true
+                try { loadNextPage() } finally { isLoadingMore = false }
+            }
         }
     }
 
@@ -127,7 +153,6 @@ fun PlaylistScreen(
         }
     }
 
-    val listState = rememberLazyListState()
     val collapsed by remember { derivedStateOf { listState.headerScrolledAway() } }
     val orderedInfos = remember(orderedSongs) { orderedSongs.map { it.toDesktopSongInfo() } }
     val playAll = { scope.launch { player.playQueue(orderedInfos, 0) }; Unit }
@@ -241,11 +266,6 @@ fun PlaylistScreen(
                             isPlaying = playingId == song.id,
                             onClick = { scope.launch { player.playQueue(orderedInfos, index) } }
                         )
-
-                        // Load more when near end
-                        if (index == allSongs.size - 5 && continuation != null) {
-                            LaunchedEffect(index) { loadMore() }
-                        }
                     }
 
                     // Loading more indicator
@@ -256,6 +276,22 @@ fun PlaylistScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                            }
+                        }
+                    }
+
+                    if (pageFailed && !isLoadingMore) {
+                        item {
+                            Row(
+                                Modifier.fillMaxWidth().padding(16.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "Couldn't load the rest of this playlist",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                TextButton(onClick = { pageFailed = false }) { Text("Retry") }
                             }
                         }
                     }

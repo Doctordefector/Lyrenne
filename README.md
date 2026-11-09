@@ -27,6 +27,7 @@ telemetry. On Windows you unzip it and it runs; on Linux it is one `.deb` or `.r
 
 | | |
 |---|---|
+| **PC VR** | [Lyrenne VR](https://github.com/Doctordefector/Lyrenne-VR): your music on your wrist in any SteamVR or Virtual Desktop (VDXR) game. Glance to see the song and synced lyrics, point to play, skip or change the volume. |
 | **iPad** | [Lyrenne for iPad](https://github.com/Doctordefector/Lyrenne-iPad): a sideloadable version with synced lyrics. |
 | **Steam Deck** | [Lyrenne for Decky](https://github.com/Doctordefector/Lyrenne-Decky): play your music in Game Mode from the Quick Access Menu while you game. |
 

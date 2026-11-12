@@ -972,7 +972,7 @@ object YouTube {
             }
         }
 
-    suspend fun playlist(playlistId: String): Result<PlaylistPage> =
+    suspend fun playlist(playlistId: String, anonymous: Boolean = false): Result<PlaylistPage> =
         runCatching {
             val response =
                 innerTube
@@ -980,6 +980,7 @@ object YouTube {
                         client = WEB_REMIX,
                         browseId = "VL$playlistId",
                         setLogin = true,
+                        anonymous = anonymous,
                     ).body<BrowseResponse>()
             val base =
                 response.contents
@@ -1177,7 +1178,7 @@ object YouTube {
             )
         }
 
-    suspend fun playlistContinuation(continuation: String): Result<PlaylistContinuationPage> =
+    suspend fun playlistContinuation(continuation: String, anonymous: Boolean = false): Result<PlaylistContinuationPage> =
         runCatching {
             val response =
                 innerTube
@@ -1185,6 +1186,7 @@ object YouTube {
                         client = WEB_REMIX,
                         continuation = continuation,
                         setLogin = true,
+                        anonymous = anonymous,
                     ).body<BrowseResponse>()
 
             val mainContents: List<MusicShelfRenderer.Content> =

@@ -618,7 +618,9 @@ class DesktopPlayer {
     private suspend fun getStreamUrl(videoId: String, skip: Set<String> = emptySet()): String? {
         return try {
             var unchecked: Pair<String, String>? = null
-            for (client in fallbackStrategy.resolveClients(ContentHints())) {
+            // WEB_CREATOR last: songs uploaded to your own library play only through signed-in web
+            // clients, and it is the one of those the default chain lacks (issue #22)
+            for (client in fallbackStrategy.resolveClients(ContentHints()) + YouTubeClient.WEB_CREATOR) {
                 if (client.clientName in skip) continue
                 // JVM has no BotGuard for PoTokens, and no login for login-only clients
                 if (client.requirePoToken) continue

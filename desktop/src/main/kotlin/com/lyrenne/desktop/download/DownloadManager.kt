@@ -1,5 +1,6 @@
 package com.lyrenne.desktop.download
 
+import com.metrolist.innertube.models.YouTubeClient
 import com.metrolist.innertube.NewPipeUtils
 import com.metrolist.innertube.YouTube
 import com.metrolist.innertube.strategy.ContentAwareFallbackStrategy
@@ -500,7 +501,9 @@ object DownloadManager {
 
     internal suspend fun getStreamInfo(videoId: String): StreamInfo? {
         var unchecked: StreamInfo? = null
-        for (client in fallbackStrategy.resolveClients(ContentHints())) {
+        // WEB_CREATOR last: songs uploaded to your own library play only through signed-in web
+        // clients, and it is the one of those the default chain lacks (issue #22)
+        for (client in fallbackStrategy.resolveClients(ContentHints()) + YouTubeClient.WEB_CREATOR) {
             if (client.requirePoToken) continue
             if (client.loginRequired && YouTube.cookie == null) continue
             try {

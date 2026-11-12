@@ -44,7 +44,8 @@ fun ArtistScreen(
     onBack: () -> Unit,
     onAlbumClick: (String) -> Unit,
     onArtistClick: (String) -> Unit,
-    onPlaylistClick: (String) -> Unit
+    onPlaylistClick: (String) -> Unit,
+    onSectionMore: (BrowseEndpoint, String) -> Unit = { _, _ -> }
 ) {
     val scope = rememberCoroutineScope()
     // rememberSaveable: App keeps this screen's state while it is under another on the back
@@ -141,11 +142,17 @@ fun ArtistScreen(
                     // Sections (Songs, Albums, Singles, etc.)
                     page.sections.forEach { section ->
                         item {
-                            Text(
-                                section.title,
-                                style = MaterialTheme.typography.titleLarge,
-                                modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
-                            )
+                            // The page carries only the first ten or so of a section; See all opens
+                            // all of it (every album, not just those since 1979 for Pink Floyd)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp)
+                            ) {
+                                Text(section.title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                                section.moreEndpoint?.let { more ->
+                                    TextButton(onClick = { onSectionMore(more, section.title) }) { Text("See all") }
+                                }
+                            }
                         }
 
                         val songItems = section.items.filterIsInstance<SongItem>()

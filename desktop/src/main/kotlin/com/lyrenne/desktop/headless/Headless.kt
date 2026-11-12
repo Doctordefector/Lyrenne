@@ -282,13 +282,13 @@ object Headless {
             name to dbSongs(DatabaseHelper.getSongsForPlaylist(localId).first())
         }
         else -> {
-            val page = YouTube.playlist(id.removePrefix("VL")).getOrThrow()
+            val (page, signedOut) = com.lyrenne.desktop.ui.screens.loadPlaylistFirstPage(id.removePrefix("VL")).getOrThrow()
             val songs = page.songs.toMutableList()
             var cont = page.songsContinuation
             // ponytail: caps big playlists at ~10 pages (about 1000 songs)
             repeat(10) {
                 val c = cont ?: return@repeat
-                val next = YouTube.playlistContinuation(c).getOrNull() ?: return@repeat
+                val next = YouTube.playlistContinuation(c, anonymous = signedOut).getOrNull() ?: return@repeat
                 songs += next.songs; cont = next.continuation
             }
             page.playlist.title to songs.map { it.toPlayerSongInfo() }

@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.lyrenne.desktop.db.DatabaseHelper
+import com.lyrenne.desktop.auth.AuthManager
 import com.lyrenne.desktop.db.Playlist
 import com.lyrenne.desktop.media.suppressMediaKeys
 import com.lyrenne.desktop.playback.SongInfo
@@ -30,6 +31,7 @@ fun PlaylistPickerDialog(
     val duplicateMap = remember(song.id, playlists) {
         playlists.associate { it.id to DatabaseHelper.isSongInPlaylist(it.id, song.id) }
     }
+    val signedIn = AuthManager.authState.collectAsState().value.isLoggedIn
     var creating by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
 
@@ -100,12 +102,19 @@ fun PlaylistPickerDialog(
                     )
                 } else {
                     playlists.forEach { playlist ->
-                        val alreadyIn = duplicateMap[playlist.id] == true
+                        // A YouTube playlist's page shows YouTube's copy, and the local record can hold
+                        // songs that never reached it (added while signed out, or a failed push), so
+                        // it may not block adding them again (issue #21). Signed out, adding to one
+                        // would only reach that local record.
+                        val remote = YouTubeWrites.isRemote(playlist.id)
+                        val needsSignIn = remote && !signedIn
+                        val addedBefore = duplicateMap[playlist.id] == true
+                        val alreadyIn = addedBefore && !remote
                         ListItem(
                             headlineContent = {
                                 Text(
                                     playlist.name,
-                                    color = if (alreadyIn)
+                                    color = if (alreadyIn || needsSignIn)
                                         MaterialTheme.colorScheme.onSurfaceVariant
                                     else
                                         MaterialTheme.colorScheme.onSurface
@@ -113,8 +122,12 @@ fun PlaylistPickerDialog(
                             },
                             supportingContent = {
                                 Text(
-                                    if (alreadyIn) "Already added"
-                                    else "${playlist.remoteSongCount ?: 0} songs"
+                                    when {
+                                        needsSignIn -> "Sign in to add to YouTube playlists"
+                                        alreadyIn -> "Already added"
+                                        addedBefore -> "Added before. Add again if it's missing"
+                                        else -> "${playlist.remoteSongCount ?: 0} songs"
+                                    }
                                 )
                             },
                             leadingContent = {
@@ -128,7 +141,7 @@ fun PlaylistPickerDialog(
                                         MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             },
-                            modifier = Modifier.clickable(enabled = !alreadyIn) {
+                            modifier = Modifier.clickable(enabled = !alreadyIn && !needsSignIn) {
                                 addToPlaylist(playlist.id)
                             }
                         )

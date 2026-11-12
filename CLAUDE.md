@@ -94,6 +94,8 @@ Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop 
 - Play All / Shuffle All buttons (library songs tab, local/auto playlists)
 - Search within one playlist (YouTube, local and auto playlists; issue #14). A YouTube playlist loads its remaining pages once a search starts, so it searches all of it. Move Up/Down is hidden while filtering
 - Smart Shuffle on every playlist (issue #15). See Smart Shuffle
+- Artist sections with more than YouTube puts on the artist page (Albums, Singles & EPs, Live, Playlists) have a "See all" opening `ArtistItemsScreen`, a paged grid of the whole section. Top songs' and Videos' See all is a playlist and opens PlaylistScreen
+- Add to Playlist never blocks a YouTube playlist on the local "already added" record (issue #21): that record can hold songs that never reached YouTube (added signed out, failed push), and the playlist page shows YouTube's copy. Signed out, YouTube playlists are disabled in the picker
 - Mouse wheel steps any slider (issue #13): volume 5%, seek 5 s, EQ 1 dB, lyrics size 2 pt. `ui/components/WheelStep.kt`. The tray icon itself cannot: AWT's `TrayIcon` delivers no wheel events
 - Car / USB export (`CarExport.kt`): "Export to Folder" button on Album/Playlist/LocalPlaylist writes loudness-normalized 320k MP3s named `01 - Artist - Title.mp3`; Settings → Storage → "Normalize Folder for Car / USB" runs the same pass over an existing folder into `<folder>/Normalized/`. Needs ffmpeg (bundled next to the exe or on PATH); "Force Dual Mono on Export" setting folds L+R for one-sided tracks
 
@@ -209,6 +211,7 @@ Porting Lyrenne (Android YouTube Music client) to desktop using Compose Desktop 
 | File | Change |
 |------|--------|
 | Thumbnails.kt, ThumbnailRenderer.kt | Thumbnail fields carry empty defaults so a tile with no artwork (e.g. an empty playlist in the library grid) decodes instead of aborting the whole browse response with a MissingFieldException (issue #2). Re-apply after every upstream sync |
+| InnerTube.browse, YouTube.playlist / playlistContinuation | `anonymous` flag sends a browse signed out even when `useLoginForBrowse` is on. The owner's view of a playlist with voting on stops at 100 songs with no next-page token, the signed-out view pages normally (issue #20), so `loadPlaylistFirstPage` (PlaylistScreen.kt) pages that case signed out. Re-apply after every upstream sync |
 
 ### Build
 - `desktop/build.gradle.kts` — Compose Desktop config, JVM 21, SQLDelight, protobuf
@@ -859,6 +862,7 @@ a pending read on a synchronous pipe handle blocks writes on it.
   event therefore retries once per start of a song: refused at 0:00, `getStreamUrl(skip = ...)` asks the
   other clients (`lastStreamClient` remembers which gave the URL); died mid-song, a fresh URL resumes
   where it stopped. `recoveredSongId` resets in `playMedia`
+- WEB_CREATOR is appended as the last client in both chains: songs uploaded to your own library need a signed-in web client (issue #22, not reproduced here: no uploads on the dev account)
 - This working copy IS a git clone with a working `origin`. Commit and push directly; older notes describing a robocopy-to-temp-dir push workflow are obsolete
 - **Nothing is written outside the app folder, with one exception.** All state lives in
   `<app-dir>/data/`: `lyrenne.db`, `credentials.json`, `accounts/`, `lyrics-overrides.json`,

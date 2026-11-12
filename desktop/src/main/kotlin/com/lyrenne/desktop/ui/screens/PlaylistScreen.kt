@@ -46,6 +46,19 @@ import timber.log.Timber
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
+/**
+ * The first page and where its next page comes from. True when the rest must be paged signed out:
+ * the owner's view of a playlist with voting on (issue #20) holds 100 songs and no next-page token,
+ * while the signed-out view of the same playlist pages normally.
+ */
+suspend fun loadPlaylistFirstPage(playlistId: String): Result<Pair<PlaylistPage, Boolean>> =
+    YouTube.playlist(playlistId).map { page ->
+        if (page.songsContinuation != null || page.songs.size < 100) return@map page to false
+        val token = YouTube.playlist(playlistId, anonymous = true).getOrNull()?.songsContinuation
+        Timber.i("Playlist $playlistId: no next page signed in, signed out ${if (token != null) "has one" else "has none either"}")
+        if (token == null) page to false else page.copy(songsContinuation = token) to true
+    }
+
 @Composable
 fun PlaylistScreen(
     playlistId: String,
@@ -62,6 +75,7 @@ fun PlaylistScreen(
     var isLoadingMore by remember { mutableStateOf(false) }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     var continuation by rememberSaveable { mutableStateOf<String?>(null) }
+    var pageSignedOut by rememberSaveable { mutableStateOf(false) }
     var pageFailed by remember { mutableStateOf(false) }
     val playingId by player.select { it.currentSong?.id }
     var query by remember { mutableStateOf("") }
@@ -74,10 +88,11 @@ fun PlaylistScreen(
         if (playlistPage != null) return@LaunchedEffect // restored from the back stack
         isLoading = true
         error = null
-        YouTube.playlist(playlistId).onSuccess { page ->
+        loadPlaylistFirstPage(playlistId).onSuccess { (page, signedOut) ->
             playlistPage = page
             allSongs = page.songs
             continuation = page.songsContinuation
+            pageSignedOut = signedOut
         }.onFailure {
             error = friendlyErrorMessage(it, "Failed to load playlist")
         }
@@ -92,7 +107,7 @@ fun PlaylistScreen(
     suspend fun loadNextPage(): Boolean = pageLock.withLock {
         repeat(3) { attempt ->
             val cont = continuation ?: return false
-            val result = YouTube.playlistContinuation(cont)
+            val result = YouTube.playlistContinuation(cont, anonymous = pageSignedOut)
             result.onSuccess { page ->
                 allSongs = allSongs + page.songs
                 continuation = page.continuation
@@ -173,10 +188,11 @@ fun PlaylistScreen(
                             scope.launch {
                                 isLoading = true
                                 error = null
-                                YouTube.playlist(playlistId).onSuccess { page ->
+                                loadPlaylistFirstPage(playlistId).onSuccess { (page, signedOut) ->
                                     playlistPage = page
                                     allSongs = page.songs
                                     continuation = page.songsContinuation
+                                    pageSignedOut = signedOut
                                 }.onFailure { error = friendlyErrorMessage(it, "Failed to load playlist") }
                                 isLoading = false
                             }

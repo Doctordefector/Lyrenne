@@ -66,6 +66,7 @@ sealed class DetailScreen {
     data class AutoPlaylist(val type: AutoPlaylistType) : DetailScreen()
     data class Podcast(val podcastId: String) : DetailScreen()
     data class Browse(val browseId: String, val params: String?, val title: String) : DetailScreen()
+    data class ArtistItems(val browseId: String, val params: String?, val title: String) : DetailScreen()
     data object ListenTogether : DetailScreen()
     data object Recognition : DetailScreen()
     data object Equalizer : DetailScreen()
@@ -377,6 +378,21 @@ fun App(player: DesktopPlayer) {
                                     )
                                     is DetailScreen.Artist -> ArtistScreen(
                                         browseId = currentDetail.browseId,
+                                        player = player,
+                                        onBack = ::navigateBack,
+                                        onAlbumClick = ::navigateToAlbum,
+                                        onArtistClick = ::navigateToArtist,
+                                        onPlaylistClick = ::navigateToPlaylist,
+                                        onSectionMore = { endpoint, title ->
+                                            // Top songs' "more" is a playlist; the rest are grids
+                                            if (endpoint.browseId.startsWith("VL")) navigateToPlaylist(endpoint.browseId.removePrefix("VL"))
+                                            else detailStack.add(DetailScreen.ArtistItems(endpoint.browseId, endpoint.params, title))
+                                        }
+                                    )
+                                    is DetailScreen.ArtistItems -> ArtistItemsScreen(
+                                        browseId = currentDetail.browseId,
+                                        params = currentDetail.params,
+                                        title = currentDetail.title,
                                         player = player,
                                         onBack = ::navigateBack,
                                         onAlbumClick = ::navigateToAlbum,

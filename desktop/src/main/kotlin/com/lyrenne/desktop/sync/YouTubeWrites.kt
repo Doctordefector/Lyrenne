@@ -41,7 +41,7 @@ object YouTubeWrites {
      * Playlists created before this existed — or while signed out — carry an "LP" id and have
      * no counterpart on YouTube, so there is nothing to push them to.
      */
-    private fun isRemote(playlistId: String) = !playlistId.startsWith(LOCAL_PLAYLIST_PREFIX)
+    fun isRemote(playlistId: String) = !playlistId.startsWith(LOCAL_PLAYLIST_PREFIX)
 
     const val LOCAL_PLAYLIST_PREFIX = "LP"
 
@@ -72,8 +72,15 @@ object YouTubeWrites {
         if (!isRemote(playlistId)) return
         push("remove from playlist") {
             val page = YouTube.playlist(playlistId).getOrThrow()
-            val setVideoId = page.songs.firstOrNull { it.id == videoId }?.setVideoId
-                ?: return@push Result.failure<Unit>(
+            var setVideoId = page.songs.firstOrNull { it.id == videoId }?.setVideoId
+            // Past the first 100 songs it is on a later page
+            var cont = page.songsContinuation
+            while (setVideoId == null && cont != null) {
+                val next = YouTube.playlistContinuation(cont).getOrThrow()
+                setVideoId = next.songs.firstOrNull { it.id == videoId }?.setVideoId
+                cont = next.continuation
+            }
+            setVideoId ?: return@push Result.failure<Unit>(
                     IllegalStateException("song not found in remote playlist")
                 )
             YouTube.removeFromPlaylist(playlistId, videoId, setVideoId)

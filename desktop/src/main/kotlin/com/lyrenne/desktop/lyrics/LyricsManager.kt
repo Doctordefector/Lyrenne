@@ -57,6 +57,8 @@ object LyricsManager {
     fun fetchLyrics(songId: String, title: String, artist: String, durationSec: Int, album: String? = null) {
         // Don't re-fetch if we already have lyrics for this song
         if (_state.value.songId == songId && _state.value.lyrics != null) return
+        // Nor while a lookup for it is running: the lyrics panel and the Game Mode overlay both ask.
+        if (_state.value.songId == songId && _state.value.isLoading && fetchJob?.isActive == true) return
 
         fetchJob?.cancel()
         fetchJob = scope.launch {

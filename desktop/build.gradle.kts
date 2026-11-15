@@ -119,6 +119,9 @@ dependencies {
 
     // OkHttp WebSocket (Listen Together) — already pulled by ktor-client-okhttp but declare explicitly
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    // QR code for pairing the Lyrenne Link phone remote (core only, no Android/Swing parts)
+    implementation("com.google.zxing:core:3.5.3")
 }
 
 compose.desktop {

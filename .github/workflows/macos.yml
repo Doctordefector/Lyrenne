@@ -6,7 +6,7 @@ name: macos
 # (packaging/macos/smoke.sh). release.yml calls this with release: true to put the DMGs in the draft.
 on:
   push:
-    branches: [main, feat/macos]
+    branches: [main]
   workflow_dispatch:
   workflow_call:
     inputs:

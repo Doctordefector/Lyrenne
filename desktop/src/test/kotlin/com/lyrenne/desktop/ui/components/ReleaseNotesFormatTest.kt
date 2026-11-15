@@ -42,6 +42,14 @@ class ReleaseNotesFormatTest {
     }
 
     @Test
+    fun loneBoldLineIsAHeading() {
+        assertEquals(
+            listOf(Block.Heading("New"), Block.Bullet("Thing", 0), Block.Paragraph("**Mixed** text")),
+            ReleaseNotesFormat.parse("**New**\n- Thing\n\n**Mixed** text")
+        )
+    }
+
+    @Test
     fun stripsImagesCommentsAndTags() {
         val md = "<!-- hidden -->\n![shot](a.png)\nSee <b>this</b> [the docs](https://x.y)\r\n"
         assertEquals(listOf(Block.Paragraph("See this [the docs](https://x.y)")), ReleaseNotesFormat.parse(md))

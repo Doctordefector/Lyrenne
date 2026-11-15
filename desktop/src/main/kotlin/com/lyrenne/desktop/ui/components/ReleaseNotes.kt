@@ -49,7 +49,11 @@ object ReleaseNotesFormat {
         val blocks = mutableListOf<Block>()
         val para = StringBuilder()
         fun flush() {
-            if (para.isNotBlank()) blocks += Block.Paragraph(para.toString().trim())
+            val p = para.toString().trim()
+            // Our notes title sections as a lone bold line ("**New**"), so treat that as a heading.
+            val boldOnly = Regex("""^\*\*([^*]+)\*\*:?$""").matchEntire(p)
+            if (boldOnly != null) blocks += Block.Heading(boldOnly.groupValues[1])
+            else if (p.isNotEmpty()) blocks += Block.Paragraph(p)
             para.clear()
         }
         for (raw in text.lines()) {

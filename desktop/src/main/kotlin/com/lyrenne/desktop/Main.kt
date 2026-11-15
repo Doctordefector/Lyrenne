@@ -489,7 +489,9 @@ private fun runApp() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    App(player = player)
+                    androidx.compose.runtime.CompositionLocalProvider(
+                        com.lyrenne.desktop.ui.stage.LocalMainWindowState provides windowState
+                    ) { App(player = player) }
                 }
             }
         }

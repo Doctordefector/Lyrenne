@@ -90,7 +90,12 @@ fun StatsScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(LyrenneTokens.contentPadding)) {
-        ToolHeader("Listening stats", onBack)
+        ToolHeader("Listening stats", onBack) {
+            // A recap of the same history, as story cards.
+            com.lyrenne.desktop.ui.components.PrimaryAction(
+                "Rewind", Icons.Default.History, onClick = { com.lyrenne.desktop.ui.stage.RewindMode.open() }
+            )
+        }
 
         Spacer(Modifier.height(16.dp))
 

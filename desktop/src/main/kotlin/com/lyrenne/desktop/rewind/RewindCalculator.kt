@@ -272,3 +272,45 @@ object RewindCalculator {
         return RewindReplay(songOf(best.key.songId, best.value.first, best.value.second), best.key.date, best.value.first)
     }
 }
+
+/** The cards a Rewind steps through, in order. Cards with nothing to say are left out. */
+enum class RewindCardKind { INTRO, MINUTES, TOP_SONGS, TOP_ARTISTS, TOP_ALBUMS, CLOCK, STREAK, DISCOVERY, REPLAY, SUMMARY }
+
+object RewindText {
+    fun cards(r: RewindReport): List<RewindCardKind> = if (r.isEmpty) emptyList() else buildList {
+        add(RewindCardKind.INTRO)
+        add(RewindCardKind.MINUTES)
+        add(RewindCardKind.TOP_SONGS)
+        if (r.topArtists.isNotEmpty()) add(RewindCardKind.TOP_ARTISTS)
+        if (r.topAlbums.isNotEmpty()) add(RewindCardKind.TOP_ALBUMS)
+        // One or two plays do not make a daily rhythm.
+        if (r.peakHour != null && r.plays >= 5) add(RewindCardKind.CLOCK)
+        if ((r.streak?.days ?: 0) >= 2) add(RewindCardKind.STREAK)
+        if (r.discovery != null) add(RewindCardKind.DISCOVERY)
+        if (r.replay != null) add(RewindCardKind.REPLAY)
+        add(RewindCardKind.SUMMARY)
+    }
+
+    /** "11 PM", "12 AM", with a no-break space so the hour never wraps away from its AM or PM. */
+    fun hour(h: Int): String = when (val h12 = h % 12) {
+        0 -> if (h < 12) "12\u00A0AM" else "12\u00A0PM"
+        else -> "$h12\u00A0${if (h < 12) "AM" else "PM"}"
+    }
+
+    /** What kind of listener the peak hour makes you. */
+    fun listener(peakHour: Int): String = when (peakHour) {
+        in 5..10 -> "an early riser"
+        in 11..16 -> "a daytime listener"
+        in 17..21 -> "an evening listener"
+        else -> "a night owl"
+    }
+
+    /** A sense of scale for a number of minutes. */
+    fun minutesInContext(minutes: Long): String = when {
+        minutes >= 2 * 24 * 60 -> "That's about ${minutes / (24 * 60)} days of music."
+        minutes >= 120 -> "That's about ${minutes / 60} hours of music."
+        minutes >= 60 -> "That's over an hour of music."
+        minutes >= 1 -> "A start. Every Rewind begins somewhere."
+        else -> "Less than a minute so far."
+    }
+}

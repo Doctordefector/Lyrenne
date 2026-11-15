@@ -762,6 +762,11 @@ fun SettingsScreen(
                     )
                 }
 
+                item(key = "section:Stage and Rewind") {
+                    SettingsSectionHeader("Stage and Rewind")
+                    com.lyrenne.desktop.ui.stage.StageRewindSettings(LocalSettingsFilter.current)
+                }
+
                 item(key = "group:Integrations") {
                     SettingsGroupHeader("Integrations")
                 }

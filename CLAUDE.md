@@ -1289,7 +1289,7 @@ folder in `LYRENNE_VLC_DIR` (`DesktopPlayer.findBundledVlc`). Both are audio-onl
   instead of libavcodec, opus/vorbis/flac/mpg123, gnutls, xml, the audio filters and outputs), and their
   libraries placed by linuxdeploy with rpaths. `AppRun` must not set `LD_LIBRARY_PATH`: sign-in spawns
   the user's browser, and it would load our libraries.
-- Flatpak: libVLC built from source as a module, AAC through the runtime's ffmpeg-full extension.
+- Flatpak: libVLC built from source as a module, AAC through libavcodec from the runtime's codecs-extra extension (since 25.08 the runtime carries full FFmpeg itself; apps no longer add ffmpeg-full).
 - Neither may carry VLC's `control/` (dbus) module: it would register a second MPRIS player.
 - The MPRIS session is named `Lyrenne` now (`org.mpris.MediaPlayer2.Lyrenne`, the name the Flatpak
   owns). mediasession-kt's default identity was `mediasessionkt`, which is what desktop widgets showed.

@@ -141,7 +141,7 @@ left to the host, per the AppImage excludelist.
 `packaging/flatpak/io.github.doctordefector.Lyrenne.yml`, on `org.freedesktop.Platform` 25.08.
 
 - **libVLC** is built from the VideoLAN tarball as a module, configured down to what an audio player
-  needs. AAC decodes through the runtime's `ffmpeg-full` extension; Opus needs nothing extra.
+  needs. AAC decodes through libavcodec, which the 26.08 runtime brings in full through its own `codecs-extra` extension (the old per-app `ffmpeg-full` extension is gone); Opus needs nothing extra.
   `vlc-ignore-time-for-cache.patch` comes from Flathub's own VLC: ostree resets mtimes on install, so
   without it the plugin cache is always stale.
 - **The app** is the release's Linux tarball (app plus its own Java runtime), per arch via

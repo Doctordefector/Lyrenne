@@ -1582,7 +1582,9 @@ it closes panels or pops the detail stack.
 - **Paced at about 30 fps** (`STAGE_FRAME_MS`). Compose Desktop redraws the whole window on every
   frame, and an unpaced Stage on this machine's monitor measured 45 to 58% of one core while
   playing (normal UI while playing: 1.6%). The loop only runs while playing and not minimised;
-  paused, Stage measured 1.6% of one core, the same as any still window.
+  paused, Stage measured 1.6% of one core, the same as any still window. Measured again with
+  `StageCpuProbe` (real 1280x720 window, lyrics playing, `-PstageCpu`): paced 18%, unpaced 48%,
+  paused 0.6% of one core. Re-run it after any change to Stage's drawing.
 - **Karaoke fill is two draws of one layout**, not an AnnotatedString per frame: the line is drawn
   dim, then drawn again in full colour clipped to the sung part, with a soft gradient edge inside
   the word being sung (`fillPoint`, `wordSpans`; RTL fills from the right). No glow: a text shadow

@@ -423,6 +423,11 @@ tasks.withType<Test>().configureEach {
         systemProperty("snapshots", "1")
         outputs.upToDateWhen { false } // the step script is not a task input
     }
+    // StageCpuProbe opens a real window and measures Stage's CPU cost; a dev tool, off unless asked for.
+    if (project.hasProperty("stageCpu")) {
+        systemProperty("stageCpu", "1")
+        outputs.upToDateWhen { false }
+    }
 }
 
 sqldelight {

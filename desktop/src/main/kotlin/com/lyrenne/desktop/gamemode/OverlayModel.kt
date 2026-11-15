@@ -32,9 +32,12 @@ data class OverlayInputs(
  *   the card briefly on a song change. It hides while paused, so a frozen line is not left over
  *   the game.
  * - **Peek** shows the card, and the lyrics line when there is one, for [PEEK_MS], in any mode.
+ * - **Always on** mode keeps the card, and the lyrics when there are any, up the whole time.
+ * - **Pin** (the Home hotkey) does the same on demand, in any mode, until pressed again. Both show
+ *   while paused: the user asked for them to stay.
  * - **Toggle** hides whatever the mode shows, or, from Off, pins the overlay on until toggled back.
- * - While Lyrenne itself is the active window the mode shows nothing on its own (its own player
- *   is in view); peeks, a pinned overlay and flashes still show.
+ * - While Lyrenne itself is the active window the mode and the pin show nothing (its own player is
+ *   in view, and the overlay would sit on top of it); peeks and flashes still show.
  * - **Flashes** confirm a hotkey for [FLASH_MS] and always show, since the user just asked for
  *   something and wants to know it happened.
  */
@@ -42,6 +45,9 @@ class OverlayModel {
     var mode: OverlayMode = OverlayMode.OFF
     /** Flipped by the show/hide hotkey. Its meaning depends on [mode], see [effectiveMode]. */
     var toggled: Boolean = false
+        private set
+    /** Set by the pin hotkey: card and lyrics stay up until it is pressed again. */
+    var pinned: Boolean = false
         private set
 
     private var cardUntil = 0L
@@ -58,6 +64,7 @@ class OverlayModel {
                 OverlayMode.OFF -> Effective.OFF
                 OverlayMode.TOAST -> Effective.TOAST
                 OverlayMode.LYRICS -> Effective.LYRICS
+                OverlayMode.ALWAYS -> Effective.PINNED
             }
             mode == OverlayMode.OFF -> Effective.PINNED
             else -> Effective.HIDDEN
@@ -72,6 +79,13 @@ class OverlayModel {
 
     fun peek(now: Long, durationMs: Long = PEEK_MS) {
         peekUntil = maxOf(peekUntil, now + durationMs)
+    }
+
+    /** Pins or unpins the card and lyrics. True when they are now pinned. */
+    fun togglePin(): Boolean {
+        pinned = !pinned
+        if (!pinned) peekUntil = 0
+        return pinned
     }
 
     fun toggle() {
@@ -95,9 +109,11 @@ class OverlayModel {
         val effective = effectiveMode
         val byMode = !inputs.appFocused
         val timedCard = byMode && now < cardUntil && (effective == Effective.TOAST || effective == Effective.LYRICS)
-        val card = peeking || timedCard || (effective == Effective.PINNED && !inputs.hasSyncedLyrics)
+        // Pinned (by the hotkey, Always on, or a toggle from Off): card and lyrics, paused or not.
+        val pin = byMode && (pinned || effective == Effective.PINNED)
+        val card = peeking || timedCard || pin
         val lyrics = inputs.hasSyncedLyrics && (
-            peeking || effective == Effective.PINNED || (byMode && effective == Effective.LYRICS && inputs.isPlaying)
+            peeking || pin || (byMode && effective == Effective.LYRICS && inputs.isPlaying)
         )
         return OverlayView(card = card, lyrics = lyrics, flash = flashNow)
     }

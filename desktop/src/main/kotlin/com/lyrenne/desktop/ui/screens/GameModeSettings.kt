@@ -81,7 +81,7 @@ fun LazyListScope.gameModeSettings(prefs: GameModePrefs) {
             ) {
                 Row(Modifier.padding(start = 56.dp, end = 16.dp, bottom = 8.dp)) {
                     Segmented(
-                        modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
+                        modifier = Modifier.widthIn(max = 520.dp).fillMaxWidth(),
                         options = OverlayMode.entries,
                         selected = prefs.overlayMode,
                         label = { it.label },
@@ -90,9 +90,10 @@ fun LazyListScope.gameModeSettings(prefs: GameModePrefs) {
                 }
                 Text(
                     when (prefs.overlayMode) {
-                        OverlayMode.OFF -> "Nothing shows on its own. The peek hotkey and hotkey confirmations still do."
+                        OverlayMode.OFF -> "Nothing shows on its own. The pin hotkey and hotkey confirmations still do."
                         OverlayMode.TOAST -> "The cover, title and artist slide in when the song changes, then hide."
                         OverlayMode.LYRICS -> "The line being sung and the next one, while a song with synced lyrics plays."
+                        OverlayMode.ALWAYS -> "The song and its lyrics stay on screen the whole time, paused or playing."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -55,7 +55,7 @@ sealed class PaletteAction(val label: String, val icon: ImageVector, val categor
 
     // Game Mode
     data object GoGameMode : PaletteAction("Game Mode Settings (Overlay, Hotkeys)", Icons.Default.SportsEsports, "Game Mode")
-    data object PeekOverlay : PaletteAction("Peek at the In-Game Overlay", Icons.Default.Visibility, "Game Mode")
+    data object PeekOverlay : PaletteAction("Pin or Unpin the In-Game Overlay", Icons.Default.Visibility, "Game Mode")
     data object ToggleOverlay : PaletteAction("Show or Hide the In-Game Overlay", Icons.Default.Layers, "Game Mode")
     // Lyrenne Link
     data object ShowRemoteQr : PaletteAction("Show phone remote QR", Icons.Default.QrCode2, "Lyrenne Link")
@@ -280,7 +280,7 @@ private fun executeAction(
         is PaletteAction.PrevTrack -> { /* handled via onNavigate */ }
         is PaletteAction.ToggleShuffle -> player.toggleShuffle()
         is PaletteAction.ToggleRepeat -> player.toggleRepeat()
-        is PaletteAction.PeekOverlay -> com.lyrenne.desktop.gamemode.GameMode.peek()
+        is PaletteAction.PeekOverlay -> com.lyrenne.desktop.gamemode.GameMode.togglePin()
         is PaletteAction.ToggleOverlay -> com.lyrenne.desktop.gamemode.GameMode.toggleOverlay()
         is PaletteAction.ShowRemoteQr -> com.lyrenne.desktop.link.LyrenneLink.pairingRequested.value = true
         is PaletteAction.CopyOverlayUrl -> com.lyrenne.desktop.link.LyrenneLink.copyOverlayUrl()

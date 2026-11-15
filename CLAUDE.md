@@ -1272,8 +1272,8 @@ command palette entries.
   window's own shortcuts run first in Compose and Ctrl+K would open the palette. A combo another app
   owns never reaches the recorder at all; the hint under the row says so.
 - **Defaults: Ctrl+Alt around the arrows**, so one hand finds them without looking: Enter
-  play/pause, Left/Right previous/next, Up/Down volume, Home peek (all on), Insert like, End show/hide,
-  Shift+Left/Right seek (off). History, so nobody re-tries them: the first 2.21.0 test build used
+  play/pause, Left/Right previous/next, Up/Down volume, Home pin (all on), Insert like, End show/hide,
+  Page Down peek, Shift+Left/Right seek (off). History, so nobody re-tries them: the first 2.21.0 test build used
   Home / Page Down / Page Up, which testing found scattered; the next used Ctrl+Alt+Space and
   Ctrl+Alt+Backspace, both already registered by other apps on the test PC (launchers commonly own
   Ctrl+Alt+Space). Probe a candidate with `RegisterHotKey` from PowerShell before choosing one.
@@ -1306,7 +1306,9 @@ command palette entries.
   flipping it straight to the screen, which can cost frames. Exclusive fullscreen hides it entirely;
   the Settings line says so.
 - **What shows when** is `OverlayModel`, clock-free and tested with numbers: Song toast (5 s on a song
-  change), Lyrics strip (while synced lyrics play; hidden while paused), Off. Peek shows card and line
+  change), Lyrics strip (while synced lyrics play; hidden while paused), Always on (card and lyrics the
+  whole time, paused too), Off. The pin hotkey (Ctrl+Alt+Home) gives Always on on demand, in any mode,
+  until pressed again; testers wanted the lyrics up for a whole session, which a 5 s peek is not. Peek shows card and line
   in any mode; show/hide hides the mode, or from Off pins it; flashes confirm every hotkey for 1.4 s
   and always show. Nothing shows on its own while a Lyrenne window is active, since the real player is
   in view.

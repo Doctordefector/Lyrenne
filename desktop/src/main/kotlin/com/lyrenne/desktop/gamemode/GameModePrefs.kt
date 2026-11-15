@@ -7,6 +7,8 @@ enum class OverlayMode(val label: String) {
     OFF("Off"),
     TOAST("Song toast"),
     LYRICS("Lyrics strip"),
+    /** The song card and lyrics stay up the whole time, for people who want them permanently. */
+    ALWAYS("Always on"),
 }
 
 /** Which corner or edge of the screen the overlay sits against. */

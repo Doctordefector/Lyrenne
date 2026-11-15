@@ -73,7 +73,8 @@ class OverlayModelTest {
 
     @Test
     fun `peek shows the card and lyrics line in any mode, then goes`() {
-        for (mode in OverlayMode.entries) {
+        // Always on never goes, which is its point; it has its own test.
+        for (mode in OverlayMode.entries - OverlayMode.ALWAYS) {
             val m = model(mode)
             m.peek(0)
             val v = m.view(0, pausedSynced)
@@ -112,12 +113,46 @@ class OverlayModelTest {
         val m = model(OverlayMode.OFF)
         m.toggle()
         assertTrue(m.isShownByToggle)
-        // Lyrics when there are synced ones (even paused), the song card otherwise.
-        assertEquals(OverlayView(card = false, lyrics = true), m.view(99_000, pausedSynced))
+        // The card always, the lyrics too when there are synced ones, paused or not.
+        assertEquals(OverlayView(card = true, lyrics = true), m.view(99_000, pausedSynced))
         assertEquals(OverlayView(card = true, lyrics = false), m.view(99_000, playingPlain))
         m.toggle()
         assertFalse(m.isShownByToggle)
         assertFalse(m.view(99_000, playingSynced).visible)
+    }
+
+    @Test
+    fun `the pin hotkey keeps card and lyrics up in any mode until pressed again`() {
+        for (mode in OverlayMode.entries) {
+            val m = model(mode)
+            assertTrue(m.togglePin())
+            assertEquals(mode.name, OverlayView(card = true, lyrics = true), m.view(99_000, pausedSynced))
+            assertEquals(mode.name, OverlayView(card = true, lyrics = false), m.view(99_000, playingPlain))
+            assertFalse(m.togglePin())
+        }
+        // Unpinned, Off shows nothing again.
+        val off = model(OverlayMode.OFF)
+        off.togglePin(); off.togglePin()
+        assertFalse(off.view(99_000, playingSynced).visible)
+    }
+
+    @Test
+    fun `always on keeps card and lyrics up, paused too, and steps aside for Lyrenne`() {
+        val m = model(OverlayMode.ALWAYS)
+        assertEquals(OverlayView(card = true, lyrics = true), m.view(0, playingSynced))
+        assertEquals(OverlayView(card = true, lyrics = true), m.view(99_000, pausedSynced))
+        assertFalse(m.view(0, playingSynced.copy(appFocused = true)).visible)
+        // The show/hide hotkey still clears the screen.
+        m.toggle()
+        assertFalse(m.view(0, playingSynced).visible)
+    }
+
+    @Test
+    fun `a pinned overlay also steps aside while Lyrenne is the active window`() {
+        val m = model(OverlayMode.OFF)
+        m.togglePin()
+        assertFalse(m.view(0, playingSynced.copy(appFocused = true)).visible)
+        assertTrue(m.view(0, playingSynced).card)
     }
 
     @Test

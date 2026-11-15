@@ -112,6 +112,19 @@ object GameMode {
         wake.trySend(Unit)
     }
 
+    /** Pins or unpins the song card and lyrics, as the pin hotkey does. */
+    fun togglePin() {
+        val pinned = synchronized(model) { model.togglePin() }
+        // The song may have started before anything asked for its lyrics (window minimised).
+        val p = player
+        val song = p?.state?.value?.currentSong
+        if (pinned && p != null && song != null && overlaySupported) scope.launch { fetchLyricsFor(p, song) }
+        flash(
+            if (pinned) OverlayFlash.Kind.OVERLAY_ON else OverlayFlash.Kind.OVERLAY_OFF,
+            if (pinned) "Pinned until you press it again" else "Unpinned"
+        )
+    }
+
     /** Shows the song card and lyrics line for a few seconds, as the peek hotkey does. */
     fun peek() {
         synchronized(model) { model.peek(now()) }
@@ -162,6 +175,7 @@ object GameMode {
             HotkeyAction.VOLUME_DOWN -> changeVolume(player, -VOLUME_STEP)
             HotkeyAction.SEEK_FORWARD -> seek(player, +SEEK_MS)
             HotkeyAction.SEEK_BACK -> seek(player, -SEEK_MS)
+            HotkeyAction.PIN -> togglePin()
             HotkeyAction.PEEK -> peek()
             HotkeyAction.TOGGLE_OVERLAY -> toggleOverlay()
         }

@@ -109,14 +109,14 @@ class HotkeysTest {
     }
 
     @Test
-    fun `defaults are all valid, all different, and transport, volume and peek are on`() {
+    fun `defaults are all valid, all different, and transport, volume and pin are on`() {
         val combos = HotkeyAction.entries.map { it.defaultCombo }
         assertEquals(combos.size, combos.toSet().size)
         combos.forEach { assertNull(it.format(), KeyCombo.problem(it)) }
         assertEquals(
             setOf(
                 HotkeyAction.PLAY_PAUSE, HotkeyAction.NEXT, HotkeyAction.PREVIOUS,
-                HotkeyAction.VOLUME_UP, HotkeyAction.VOLUME_DOWN, HotkeyAction.PEEK
+                HotkeyAction.VOLUME_UP, HotkeyAction.VOLUME_DOWN, HotkeyAction.PIN
             ),
             HotkeyAction.entries.filter { it.defaultOn }.toSet()
         )
@@ -160,7 +160,7 @@ class HotkeysTest {
         )
         val (register, status) = HotkeyPlan.plan(bindings)
         assertEquals(
-            setOf(HotkeyAction.PLAY_PAUSE, HotkeyAction.NEXT, HotkeyAction.PREVIOUS, HotkeyAction.VOLUME_DOWN, HotkeyAction.PEEK),
+            setOf(HotkeyAction.PLAY_PAUSE, HotkeyAction.NEXT, HotkeyAction.PREVIOUS, HotkeyAction.VOLUME_DOWN, HotkeyAction.PIN),
             register.keys
         )
         assertEquals(same, register[HotkeyAction.PLAY_PAUSE])

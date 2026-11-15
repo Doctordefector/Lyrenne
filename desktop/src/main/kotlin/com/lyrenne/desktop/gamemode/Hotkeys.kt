@@ -177,7 +177,8 @@ data class KeyCombo(val mods: Set<HotkeyMod>, val key: HotkeyKey) {
  * What a hotkey can do. [id] is the stored name, so the enum names may change but these may not.
  *
  * Defaults sit around the arrows with Ctrl+Alt held, so one hand finds them without looking: Enter
- * plays or pauses, Left and Right skip, Up and Down set the volume, Home peeks, Insert likes, End
+ * plays or pauses, Left and Right skip, Up and Down set the volume, Home pins the song and lyrics on
+ * screen until pressed again (Page Down peeks for a few seconds, off by default), Insert likes, End
  * shows or hides the overlay, and Shift on the arrows seeks. Games rarely bind Ctrl+Alt, and none of
  * these keys types a character, so AltGr (which Windows reports as Ctrl+Alt) cannot swallow one on a
  * European layout. Space and Backspace were tried and dropped: launchers commonly own Ctrl+Alt+Space,
@@ -193,7 +194,8 @@ enum class HotkeyAction(val id: String, val label: String, val defaultCombo: Key
     VOLUME_DOWN("volumeDown", "Volume down", KeyCombo.of("Down", HotkeyMod.CTRL, HotkeyMod.ALT), true),
     SEEK_FORWARD("seekForward", "Skip ahead 10 seconds", KeyCombo.of("Right", HotkeyMod.CTRL, HotkeyMod.ALT, HotkeyMod.SHIFT), false),
     SEEK_BACK("seekBack", "Go back 10 seconds", KeyCombo.of("Left", HotkeyMod.CTRL, HotkeyMod.ALT, HotkeyMod.SHIFT), false),
-    PEEK("peek", "Peek at the song and lyrics", KeyCombo.of("Home", HotkeyMod.CTRL, HotkeyMod.ALT), true),
+    PIN("pin", "Pin the song and lyrics on screen (press again to hide)", KeyCombo.of("Home", HotkeyMod.CTRL, HotkeyMod.ALT), true),
+    PEEK("peek", "Peek at the song and lyrics for a few seconds", KeyCombo.of("Page Down", HotkeyMod.CTRL, HotkeyMod.ALT), false),
     TOGGLE_OVERLAY("toggleOverlay", "Show or hide the overlay", KeyCombo.of("End", HotkeyMod.CTRL, HotkeyMod.ALT), false);
 
     /** The id handed to RegisterHotKey. Any value in 0..0xBFFF is the app's to use. */

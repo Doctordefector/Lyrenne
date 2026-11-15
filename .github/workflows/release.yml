@@ -125,7 +125,7 @@ jobs:
           if ($p.ExitCode -ne 0) { throw "smoke test from PATH failed" }
           if (-not (Select-String "$env:LOCALAPPDATA\Lyrenne\smoke-test.txt" -Pattern '^layout: WINGET$')) { throw 'not detected as winget' }
           # --force: the package exe was swapped for this build, so its hash no longer matches the install record.
-          winget uninstall --id Doctordefector.Lyrenne --force --disable-interactivity
+          winget uninstall --id Doctordefector.Lyrenne --force --disable-interactivity --accept-source-agreements
           if (Test-Path $pkg.FullName) { throw 'package folder still there after uninstall' }
           if (-not (Test-Path "$env:LOCALAPPDATA\Lyrenne\lyrenne.db")) { throw 'library did not survive uninstall' }
           Write-Host 'OK: uninstall removed the package and kept the library'

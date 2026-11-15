@@ -51,6 +51,10 @@ sealed class PaletteAction(val label: String, val icon: ImageVector, val categor
     data object ToggleShuffle : PaletteAction("Toggle Shuffle", PlayerIcons.Shuffle, "Playback")
     data object ToggleRepeat : PaletteAction("Toggle Repeat", Icons.Default.Repeat, "Playback")
 
+    // Move in
+    data object ImportMetroList : PaletteAction("Import from MetroList", Icons.Default.MoveToInbox, "Library")
+    data object ImportPlaylist : PaletteAction("Import a playlist from Spotify, Apple Music, a link or text", Icons.Default.PlaylistAdd, "Library")
+
     // Songs from library
     data class PlaySong(val song: SongInfo) : PaletteAction("Play: ${song.title}", Icons.Default.MusicNote, "Songs")
 }
@@ -84,6 +88,8 @@ fun CommandPalette(
             PaletteAction.PrevTrack,
             PaletteAction.ToggleShuffle,
             PaletteAction.ToggleRepeat,
+            PaletteAction.ImportMetroList,
+            PaletteAction.ImportPlaylist,
         )
     }
 
@@ -253,6 +259,8 @@ private fun executeAction(
         is PaletteAction.PrevTrack -> { /* handled via onNavigate */ }
         is PaletteAction.ToggleShuffle -> player.toggleShuffle()
         is PaletteAction.ToggleRepeat -> player.toggleRepeat()
+        is PaletteAction.ImportMetroList -> com.lyrenne.desktop.movein.MoveInController.openBackup()
+        is PaletteAction.ImportPlaylist -> com.lyrenne.desktop.movein.MoveInController.openPlaylist()
         else -> {}
     }
     onNavigate(action)

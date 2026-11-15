@@ -1177,6 +1177,8 @@ fun SettingsScreen(
                     SettingsSectionHeader("Backup & Restore")
                 }
 
+                item { com.lyrenne.desktop.ui.movein.MoveInSettingsRows(LocalSettingsFilter.current) }
+
                 item {
                     var backupStatus by remember { mutableStateOf<String?>(null) }
                     SettingsItem(

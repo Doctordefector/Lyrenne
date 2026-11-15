@@ -34,12 +34,13 @@ import javax.swing.JFileChooser
 
 private const val STEP_WELCOME = 0
 private const val STEP_SIGN_IN = 1
-private const val STEP_LOOK = 2
-private const val STEP_FILES = 3
-private const val STEP_CONTENT = 4
-private const val STEP_INTEGRATIONS = 5
-private const val STEP_DONE = 6
-private const val STEP_COUNT = 7
+private const val STEP_MOVE_IN = 2 // Move in: optional MetroList import, Next skips it
+private const val STEP_LOOK = 3
+private const val STEP_FILES = 4
+private const val STEP_CONTENT = 5
+private const val STEP_INTEGRATIONS = 6
+private const val STEP_DONE = 7
+private const val STEP_COUNT = 8
 
 /** Sub-state of the sign-in step. Mirrors LoginScreen's flow without its Scaffold and back button. */
 private enum class SignInPhase { IDLE, WAITING, VALIDATING, ERROR }
@@ -74,6 +75,7 @@ fun OnboardingScreen(onFinish: () -> Unit) {
             when (step) {
                 STEP_WELCOME -> WelcomeStep()
                 STEP_SIGN_IN -> SignInStep()
+                STEP_MOVE_IN -> com.lyrenne.desktop.ui.movein.MoveInOnboardingStep()
                 STEP_LOOK -> LookStep()
                 STEP_FILES -> FilesStep()
                 STEP_CONTENT -> ContentStep()

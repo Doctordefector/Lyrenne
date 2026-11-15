@@ -58,6 +58,9 @@ sealed class PaletteAction(val label: String, val icon: ImageVector, val categor
     // Lyrenne Link
     data object ShowRemoteQr : PaletteAction("Show phone remote QR", Icons.Default.QrCode2, "Lyrenne Link")
     data object CopyOverlayUrl : PaletteAction("Copy OBS overlay URL", Icons.Default.Videocam, "Lyrenne Link")
+    // Move in
+    data object ImportMetroList : PaletteAction("Import from MetroList", Icons.Default.MoveToInbox, "Library")
+    data object ImportPlaylist : PaletteAction("Import a playlist from Spotify, Apple Music, a link or text", Icons.Default.PlaylistAdd, "Library")
 
     // Songs from library
     data class PlaySong(val song: SongInfo) : PaletteAction("Play: ${song.title}", Icons.Default.MusicNote, "Songs")
@@ -97,6 +100,8 @@ fun CommandPalette(
             PaletteAction.ToggleOverlay,
             PaletteAction.ShowRemoteQr,
             PaletteAction.CopyOverlayUrl,
+            PaletteAction.ImportMetroList,
+            PaletteAction.ImportPlaylist,
         )
     }
 
@@ -270,6 +275,8 @@ private fun executeAction(
         is PaletteAction.ToggleOverlay -> com.lyrenne.desktop.gamemode.GameMode.toggleOverlay()
         is PaletteAction.ShowRemoteQr -> com.lyrenne.desktop.link.LyrenneLink.pairingRequested.value = true
         is PaletteAction.CopyOverlayUrl -> com.lyrenne.desktop.link.LyrenneLink.copyOverlayUrl()
+        is PaletteAction.ImportMetroList -> com.lyrenne.desktop.movein.MoveInController.openBackup()
+        is PaletteAction.ImportPlaylist -> com.lyrenne.desktop.movein.MoveInController.openPlaylist()
         else -> {}
     }
     onNavigate(action)

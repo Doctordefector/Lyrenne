@@ -592,6 +592,15 @@ fun App(player: DesktopPlayer) {
             }
         }
     }
+
+    // Move in: the MetroList and playlist import windows, over onboarding or the main screens
+    com.lyrenne.desktop.ui.movein.MoveInHost(
+        onOpenPlaylist = if (currentAppScreen != AppScreen.Main) null else { id, local ->
+            currentScreen = Screen.Library
+            detailStack.clear()
+            detailStack.add(if (local) DetailScreen.LocalPlaylist(id) else DetailScreen.Playlist(id))
+        }
+    )
 }
 
 /**

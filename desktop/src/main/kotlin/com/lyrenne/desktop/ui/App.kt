@@ -574,6 +574,7 @@ fun App(player: DesktopPlayer) {
                             is PaletteAction.GoSearch -> { currentScreen = Screen.Search; detailStack.clear() }
                             is PaletteAction.GoLibrary -> { currentScreen = Screen.Library; detailStack.clear() }
                             is PaletteAction.GoSettings -> { currentScreen = Screen.Settings; detailStack.clear() }
+                            is PaletteAction.GoGameMode -> { currentScreen = Screen.Settings; detailStack.clear(); settingsScrollTarget = com.lyrenne.desktop.ui.screens.SETTINGS_GROUP_GAME_MODE }
                             is PaletteAction.GoEqualizer -> { detailStack.clear(); detailStack.add(DetailScreen.Equalizer) }
                             is PaletteAction.GoStats -> { detailStack.clear(); detailStack.add(DetailScreen.Stats) }
                             is PaletteAction.GoQueue -> { showQueueScreen = true; showLyricsPanel = false }

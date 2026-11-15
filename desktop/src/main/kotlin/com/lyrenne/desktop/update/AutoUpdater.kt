@@ -37,11 +37,19 @@ object AutoUpdater {
         ?: error("version.properties missing from the build")
 
     /**
-     * Windows replaces itself. On Linux the install belongs to the package manager under a
-     * root-owned /opt, so an update downloads the signed .rpm/.deb and hands it to dnf/apt through
-     * pkexec. Anything else on Linux (a dev run, an unpacked tree) only points at the release page.
+     * A portable Windows copy replaces itself. On Linux the install belongs to the package manager
+     * under a root-owned /opt, so an update downloads the signed .rpm/.deb and hands it to dnf/apt
+     * through pkexec. Everything else (winget, Program Files, Flatpak, AppImage, a dev run) says how
+     * to update instead: see [UpdateRoute].
      */
-    val canSelfUpdate: Boolean get() = Platform.isWindows || linuxPackage != null
+    private val route: UpdateRoute by lazy {
+        UpdateRoute.decide(Platform.isWindows, com.lyrenne.desktop.AppPaths.layout.kind, linuxPackage, System.getenv())
+    }
+
+    val canSelfUpdate: Boolean get() = route.canSelfUpdate
+
+    /** What to do instead when [canSelfUpdate] is false, e.g. "Update with: winget upgrade Lyrenne". */
+    val updateHint: String get() = route.hint
 
     /** "rpm" or "deb" when this copy is the one the lyrenne package installed in /opt, else null. */
     private val linuxPackage: String? by lazy {

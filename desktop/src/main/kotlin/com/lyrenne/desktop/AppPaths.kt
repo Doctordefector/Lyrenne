@@ -1,5 +1,7 @@
 package com.lyrenne.desktop
 
+import com.sun.jna.platform.win32.Advapi32Util
+import com.sun.jna.platform.win32.WinReg
 import timber.log.Timber
 import java.io.File
 import java.nio.file.AtomicMoveNotSupportedException
@@ -32,10 +34,15 @@ object Platform {
 /**
  * Centralized path resolution for all app data.
  *
- * Windows: everything lives next to the executable in a `data/` subfolder, making the app fully
- * portable. Linux (and macOS): packages install to a read-only location, so data goes to
- * `$XDG_DATA_HOME/lyrenne` (`~/.local/share/lyrenne`) unless a `portable` marker file sits next
- * to the app, which restores the Windows layout for tarball users.
+ * Where data goes is decided once by [InstallLocation]:
+ * - Windows portable (an unzipped copy, Scoop): everything lives next to the executable in a
+ *   `data/` subfolder, so the app is fully portable.
+ * - Windows managed (winget, Program Files, any folder the user cannot write): data goes to
+ *   `%LOCALAPPDATA%\Lyrenne` and downloads to `~/Music/Lyrenne`, because the package manager
+ *   replaces or deletes the app folder on upgrade.
+ * - Linux (and macOS): packages install to a read-only location, so data goes to
+ *   `$XDG_DATA_HOME/lyrenne` (`~/.local/share/lyrenne`) unless a `portable` marker file sits next
+ *   to the app, which restores the Windows layout for tarball users.
  *
  * There is deliberately no migration from the pre-2.9.4 layout. The old database filename and
  * the old %APPDATA% directory both carried the previous project name, and carrying them forward
@@ -44,29 +51,38 @@ object Platform {
  * release notes explain how. This was a deliberate trade of upgrade smoothness for a clean break.
  */
 object AppPaths {
-    /** The directory the executable lives in — used to find bundled tools like ffmpeg */
+    /** The directory the executable lives in, used to find bundled tools like ffmpeg. */
     val appDir: File by lazy { getAppDirectory() }
 
-    /** True when data lives next to the app (Windows, or a `portable` marker on other OSes). */
-    val isPortable: Boolean by lazy { Platform.isWindows || File(appDir, "portable").exists() }
+    /** Where data lives, and who owns the app folder. See [InstallLocation]. */
+    val layout: InstallLocation.Layout by lazy {
+        InstallLocation.decide(
+            InstallLocation.Inputs(
+                isWindows = Platform.isWindows,
+                appDir = appDir,
+                env = System.getenv(),
+                userHome = File(System.getProperty("user.home")),
+                hasPortableMarker = !Platform.isWindows && File(appDir, "portable").exists(),
+                wingetInstallLocations = if (Platform.isWindows) wingetInstallLocations() else emptyList(),
+                appDirWritable = { canReallyWrite(appDir) },
+                xdgDataHome = ::xdgDataHome,
+                xdgMusicDir = ::xdgMusicDir,
+            )
+        ).also { Timber.i("Install layout: ${it.kind}, data in ${it.dataDir}") }
+    }
 
-    /**
-     * Set when the app folder could not be written and data fell back to the working directory.
-     * Main shows a one-time explanation, because the fallback depends on how the app was launched.
-     */
-    @Volatile var appDirNotWritable = false
-        private set
+    /** True when data lives next to the app (portable ZIP, Scoop, or a `portable` marker off Windows). */
+    val isPortable: Boolean get() = layout.portable
 
-    /** The root data directory: `<app-dir>/data/`, or the XDG data dir off Windows. */
+    /** The root data directory: `<app-dir>/data/`, `%LOCALAPPDATA%\Lyrenne`, or the XDG data dir. */
     val dataDir: File by lazy {
-        val dir = if (isPortable) File(appDir, "data") else File(xdgDataHome(), "lyrenne")
+        val dir = layout.dataDir
         dir.mkdirs()
         dir
     }
 
     /** Default downloads folder: next to the app when portable, `~/Music/Lyrenne` otherwise. */
-    val defaultDownloadsDir: File get() =
-        if (isPortable) File(appDir, "Downloads") else File(xdgMusicDir(), "Lyrenne")
+    val defaultDownloadsDir: File get() = layout.downloadsDir
 
     /** preferences.properties */
     val preferencesFile: File get() = File(dataDir, "preferences.properties")
@@ -137,9 +153,8 @@ object AppPaths {
                 } else {
                     jarFile
                 }
-                // Off Windows the app dir is only written when portable, so it need not be writable.
-                if (appDir.exists() && (!Platform.isWindows || canReallyWrite(appDir))) return appDir
-                if (appDir.exists()) appDirNotWritable = true
+                // Whether it can be written decides where data goes (InstallLocation), not this.
+                if (appDir.exists()) return appDir
             }
         } catch (e: Exception) {
             Timber.w("Could not resolve app directory from code source: ${e.message}")
@@ -147,6 +162,27 @@ object AppPaths {
         // Fallback: current working directory
         return File(System.getProperty("user.dir", "."))
     }
+
+    /**
+     * InstallLocation of this package's winget ARP entries. winget records a portable install under
+     * `Uninstall\<PackageIdentifier>_<SourceIdentifier>`, which is the only place a `--location`
+     * install can be recognised from. Reads at most a handful of keys, so it costs nothing at startup.
+     */
+    private fun wingetInstallLocations(): List<String> = runCatching {
+        val uninstall = "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall"
+        listOf(WinReg.HKEY_CURRENT_USER, WinReg.HKEY_LOCAL_MACHINE).flatMap { root ->
+            runCatching {
+                Advapi32Util.registryGetKeys(root, uninstall)
+                    .filter { it.startsWith(WINGET_PACKAGE_ID + "_", ignoreCase = true) }
+                    .mapNotNull { key ->
+                        runCatching { Advapi32Util.registryGetStringValue(root, "$uninstall\\$key", "InstallLocation") }.getOrNull()
+                    }
+            }.getOrDefault(emptyList())
+        }
+    }.getOrDefault(emptyList())
+
+    /** The winget package this app is published as (packaging/winget). */
+    const val WINGET_PACKAGE_ID = "Doctordefector.Lyrenne"
 
     /**
      * `File.canWrite()` on a Windows directory only reflects the read-only attribute, not ACLs, so

@@ -79,6 +79,14 @@ object SystemMediaSession {
                     return false
                 }
 
+            // MPRIS: the identity is also the D-Bus name (org.mpris.MediaPlayer2.Lyrenne), which the
+            // Flatpak manifest must be allowed to own. The library default is "mediasessionkt",
+            // which is what desktop widgets showed. Set before the first enable requests the name.
+            if (Platform.isLinux) runCatching {
+                mediaSession.setIdentity("Lyrenne")
+                mediaSession.setDesktopEntry(System.getenv("FLATPAK_ID")?.takeIf { it.isNotBlank() } ?: "lyrenne")
+            }.onFailure { Timber.w("Could not name the MPRIS session: ${it.message}") }
+
             scope = integrationScope
             session = mediaSession
 

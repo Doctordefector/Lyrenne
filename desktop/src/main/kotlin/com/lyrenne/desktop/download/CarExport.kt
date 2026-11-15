@@ -81,7 +81,10 @@ object CarExport {
             // User-supplied, next to the exe
             File(AppPaths.appDir, ffmpegExe),
             File(AppPaths.appDir, "ffmpeg/$ffmpegExe"),
-            File(AppPaths.appDir, "ffmpeg/bin/$ffmpegExe")
+            File(AppPaths.appDir, "ffmpeg/bin/$ffmpegExe"),
+            // macOS: an app opened from Finder gets a PATH without Homebrew on it.
+            File("/opt/homebrew/bin/ffmpeg").takeIf { Platform.isMac },
+            File("/usr/local/bin/ffmpeg").takeIf { Platform.isMac },
         )
         candidates.firstOrNull { it.isFile }?.let { return it }
 
@@ -95,6 +98,7 @@ object CarExport {
     private val FFMPEG_MISSING =
         if (Platform.isWindows) "ffmpeg not found. It ships with Lyrenne, so this build may be incomplete. " +
             "Reinstall, or put ffmpeg.exe next to Lyrenne.exe."
+        else if (Platform.isMac) "ffmpeg not found. Install it with Homebrew (brew install ffmpeg), then try again."
         else "ffmpeg not found. Install it with your package manager, e.g. sudo apt install ffmpeg."
 
     /**

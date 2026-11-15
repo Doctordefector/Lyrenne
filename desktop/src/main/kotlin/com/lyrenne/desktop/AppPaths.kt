@@ -33,9 +33,10 @@ object Platform {
  * Centralized path resolution for all app data.
  *
  * Windows: everything lives next to the executable in a `data/` subfolder, making the app fully
- * portable. Linux (and macOS): packages install to a read-only location, so data goes to
+ * portable. Linux: packages install to a read-only location, so data goes to
  * `$XDG_DATA_HOME/lyrenne` (`~/.local/share/lyrenne`) unless a `portable` marker file sits next
- * to the app, which restores the Windows layout for tarball users.
+ * to the app, which restores the Windows layout for tarball users. macOS: the signed .app is
+ * sealed, so data goes to `~/Library/Application Support/Lyrenne`.
  *
  * There is deliberately no migration from the pre-2.9.4 layout. The old database filename and
  * the old %APPDATA% directory both carried the previous project name, and carrying them forward
@@ -57,14 +58,21 @@ object AppPaths {
     @Volatile var appDirNotWritable = false
         private set
 
-    /** The root data directory: `<app-dir>/data/`, or the XDG data dir off Windows. */
+    /**
+     * The root data directory: `<app-dir>/data/`, the XDG data dir on Linux, or
+     * `~/Library/Application Support/Lyrenne` on macOS (a signed .app must never write inside itself).
+     */
     val dataDir: File by lazy {
-        val dir = if (isPortable) File(appDir, "data") else File(xdgDataHome(), "lyrenne")
+        val dir = when {
+            isPortable -> File(appDir, "data")
+            Platform.isMac -> File(System.getProperty("user.home"), "Library/Application Support/Lyrenne")
+            else -> File(xdgDataHome(), "lyrenne")
+        }
         dir.mkdirs()
         dir
     }
 
-    /** Default downloads folder: next to the app when portable, `~/Music/Lyrenne` otherwise. */
+    /** Default downloads folder: next to the app when portable, `~/Music/Lyrenne` otherwise (macOS too). */
     val defaultDownloadsDir: File get() =
         if (isPortable) File(appDir, "Downloads") else File(xdgMusicDir(), "Lyrenne")
 

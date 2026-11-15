@@ -138,8 +138,11 @@ fun main(args: Array<String>) {
     val log = installCrashReporting()
     // Before any window or the media session exists: both are named by the process's app id.
     WindowsAppIdentity.apply()
+    com.lyrenne.desktop.mac.MacIntegration.configureEarly()
     try {
-        if ("--headless" in args) com.lyrenne.desktop.headless.Headless.run(args) else runApp()
+        if ("--headless" in args) com.lyrenne.desktop.headless.Headless.run(args)
+        else if ("--smoke-test" in args) SmokeTest.run(args)
+        else runApp()
     } catch (e: Throwable) {
         reportFatal(e, log)
         exitProcess(1)
@@ -270,6 +273,11 @@ private fun runApp() {
 
         // Initialize VLC, auth, media keys, queue restore, and integrations off the main thread
         LaunchedEffect(player) {
+            // First, so Cmd+Q during startup already goes through quit().
+            com.lyrenne.desktop.mac.MacIntegration.install(
+                onQuit = quit,
+                onShowWindow = { windowVisible = true; windowState.isMinimized = false }
+            )
             withContext(Dispatchers.IO) {
                 player.ensureVlcInitialized()
             }
@@ -343,7 +351,10 @@ private fun runApp() {
                 // Anchor above-left of the cursor (the tray sits bottom-right), clamped on screen.
                 // Moved before it is shown, so it never flashes at the last spot.
                 val x = (clickX - TRAY_PANEL_WIDTH / 2).coerceIn(8, screen.width - TRAY_PANEL_WIDTH - 8)
-                val y = (clickY - TRAY_PANEL_HEIGHT - 16).coerceIn(8, screen.height - TRAY_PANEL_HEIGHT - 8)
+                // The macOS menu bar is at the top, so there the panel opens below the click.
+                val below = clickY < screen.height / 2
+                val y = (if (below) clickY + 16 else clickY - TRAY_PANEL_HEIGHT - 16)
+                    .coerceIn(8, screen.height - TRAY_PANEL_HEIGHT - 8)
                 trayPanelState.position = WindowPosition(x.dp, y.dp)
                 trayPanelAt = x to y
             }
@@ -364,21 +375,26 @@ private fun runApp() {
             if (song != null) "♪ ${song.title} · ${song.artist} | Lyrenne" else "Lyrenne"
         }
 
+        val closeMainWindow = {
+            // Only hide when a tray icon exists to bring the window back; GNOME has none.
+            if (prefs.minimizeToTray && DesktopNotification.trayActive) {
+                // Minimize to tray instead of exiting
+                windowVisible = false
+            } else {
+                quit()
+            }
+        }
         Window(
-            onCloseRequest = {
-                // Only hide when a tray icon exists to bring the window back; GNOME has none.
-                if (prefs.minimizeToTray && DesktopNotification.trayActive) {
-                    // Minimize to tray instead of exiting
-                    windowVisible = false
-                } else {
-                    quit()
-                }
-            },
+            onCloseRequest = closeMainWindow,
             visible = windowVisible,
             title = windowTitle,
             state = windowState,
             icon = appIcon,
-            onPreviewKeyEvent = { com.lyrenne.desktop.ui.AppShortcuts.preview(it) },
+            onPreviewKeyEvent = {
+                // Cmd+W closes the window on a Mac, the same as its close button.
+                if (com.lyrenne.desktop.ui.ShortcutKeys.isCloseWindow(it)) { closeMainWindow(); true }
+                else com.lyrenne.desktop.ui.AppShortcuts.preview(it)
+            },
             onKeyEvent = { com.lyrenne.desktop.ui.AppShortcuts.bubble(it) },
         ) {
             // Middle-click autoscroll. Registered on the toolkit rather than the window so it
@@ -581,6 +597,9 @@ private fun runApp() {
                 }
                 LaunchedEffect(trayPanelAt) {
                     if (trayPanelAt != null) {
+                        // A menu bar click does not activate the app, and an inactive app's
+                        // window never gets focus, so it would never lose it and never close.
+                        com.lyrenne.desktop.mac.MacIntegration.activate()
                         window.toFront()
                         window.requestFocus()
                     }

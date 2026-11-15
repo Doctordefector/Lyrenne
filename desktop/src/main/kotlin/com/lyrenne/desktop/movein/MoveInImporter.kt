@@ -67,12 +67,12 @@ internal object AppLyricsSink : LyricsSink {
  * skipped if one for the same song at the same millisecond exists, playlists get an id derived
  * from MetroList's so a re-import finds and tops up the same one.
  *
- * Two choices keep the library sync from undoing an import (see CLAUDE.md "Move in"):
- * - A like made by the import is written with `inLibrary` null. Sync only prunes liked songs that
- *   have `inLibrary` set, which is exactly how it already spares a like whose push failed. If the
- *   like is pushed to YouTube, the next sync sees it there and sets `inLibrary` itself.
- * - Saved albums are kept through `inLibrary`, which sync never prunes, and followed artists are
- *   recorded in [MoveInLedger], which the artist prune consults.
+ * Imported likes and library songs get `inLibrary` so they show under Library > Songs like
+ * MetroList showed them. Sync prunes liked songs with `inLibrary` set that YouTube does not have,
+ * so every imported like is recorded in [MoveInLedger], which that prune skips, until YouTube
+ * itself has the song liked and owns it from then on. Followed artists go in the ledger for the
+ * same reason. Saved albums are kept through `inLibrary`, which sync never prunes. See CLAUDE.md
+ * "Move in".
  */
 class MoveInImporter(
     private val transaction: ((LyrenneQueries) -> Unit) -> Unit,
@@ -83,15 +83,23 @@ class MoveInImporter(
     fun import(lib: MetroListLibrary, options: MoveInOptions): MoveInResult {
         var result = MoveInResult()
         val followedHere = ArrayList<String>()
+        val protectedLikes = ArrayList<String>()
         transaction { q ->
-            result = write(q, lib, options, followedHere)
+            result = write(q, lib, options, followedHere, protectedLikes)
         }
         if (followedHere.isNotEmpty()) ledger.addLocalArtists(followedHere)
+        if (protectedLikes.isNotEmpty()) ledger.addLocalLikes(protectedLikes)
         if (options.lyrics) result = result.copy(lyrics = importLyrics(lib))
         return result
     }
 
-    private fun write(q: LyrenneQueries, lib: MetroListLibrary, o: MoveInOptions, followedHere: MutableList<String>): MoveInResult {
+    private fun write(
+        q: LyrenneQueries,
+        lib: MetroListLibrary,
+        o: MoveInOptions,
+        followedHere: MutableList<String>,
+        protectedLikes: MutableList<String>,
+    ): MoveInResult {
         val stamp = now().toString()
 
         // Which songs this import needs rows for
@@ -137,6 +145,9 @@ class MoveInImporter(
                 val before = q.moveInSongState(id).executeAsOneOrNull()
                 if (before?.liked == 1L) { alreadyLiked++; continue }
                 q.markSongLiked(at.toString(), id)
+                // Shown under Songs, as MetroList showed it, and kept safe from the sync prune
+                q.moveInSetInLibrary(at.toString(), id)
+                protectedLikes += id
                 newLikes++
                 likedNow += id
             }
@@ -144,18 +155,14 @@ class MoveInImporter(
 
         var newLibrary = 0
         if (o.library) {
-            val likedNow = likedNow.toHashSet()
             for ((id, at) in lib.librarySongs) {
                 if (id !in lib.songs) continue
-                // A like made by this import stays out of inLibrary, see the class comment. If it
-                // is pushed to YouTube, the next sync sets inLibrary once YouTube has it, and a
-                // push that failed leaves it safely local.
-                if (id in likedNow) continue
                 val before = q.moveInSongState(id).executeAsOneOrNull() ?: continue
                 if (before.inLibrary != null) continue
-                // The same goes for one liked by an earlier import, or liked here while signed out
-                if (before.liked == 1L) continue
                 q.moveInSetInLibrary(at.toString(), id)
+                // A song liked here while signed out had no inLibrary, which is what spared it
+                // from the prune. Now it has one, the ledger has to spare it instead.
+                if (before.liked == 1L) protectedLikes += id
                 newLibrary++
             }
         }
@@ -268,13 +275,14 @@ class MoveInImporter(
 }
 
 /**
- * Artists followed by an import, which YouTube does not know about. The library sync's artist
- * prune skips them; without this the next sync would unfollow every one the YouTube account
- * does not also subscribe to. Lives in `data/`, so Lyrenne's own backups carry it.
+ * Likes and followed artists that came from an import, which YouTube may not know about. The
+ * library sync's prunes skip them; without this the next sync would unlike or unfollow everything
+ * the YouTube account does not also have. A like leaves the ledger once sync sees it on YouTube.
+ * Lives in `data/`, so Lyrenne's own backups carry it.
  */
 object MoveInLedger {
     @Serializable
-    private data class State(val localArtists: Set<String> = emptySet())
+    private data class State(val localArtists: Set<String> = emptySet(), val localLikes: Set<String> = emptySet())
 
     private val json = Json { ignoreUnknownKeys = true }
     private val lock = Any()
@@ -296,8 +304,25 @@ object MoveInLedger {
 
     fun isLocalArtist(id: String): Boolean = synchronized(lock) { id in load().localArtists }
 
-    fun addLocalArtists(ids: Collection<String>) = synchronized(lock) {
-        val next = State(load().localArtists + ids)
+    fun addLocalArtists(ids: Collection<String>) = update { it.copy(localArtists = it.localArtists + ids) }
+
+    /** True for a song liked by an import that YouTube has not been seen to have liked yet. */
+    fun isLocalLike(id: String): Boolean = synchronized(lock) { id in load().localLikes }
+
+    fun addLocalLikes(ids: Collection<String>) = update { it.copy(localLikes = it.localLikes + ids) }
+
+    /**
+     * Called by sync with YouTube's liked songs: those are YouTube's now, so an unlike made there
+     * is mirrored here like any other.
+     */
+    fun releaseLikes(onYouTube: Set<String>) = synchronized(lock) {
+        val s = load()
+        if (s.localLikes.none { it in onYouTube }) return@synchronized
+        update { it.copy(localLikes = it.localLikes - onYouTube) }
+    }
+
+    private fun update(change: (State) -> State) = synchronized(lock) {
+        val next = change(load())
         cache = next
         runCatching {
             file.parentFile?.mkdirs()

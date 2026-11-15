@@ -85,7 +85,8 @@ object LibrarySync {
             try {
                 // Liked songs already mirrored from YouTube; quick sync stops once it reaches them.
                 val known = if (full) null else DatabaseHelper.getLikedSongsOnce()
-                    .filter { it.inLibrary != null }.mapTo(HashSet()) { it.id }
+                    .filter { it.inLibrary != null && !com.lyrenne.desktop.movein.MoveInLedger.isLocalLike(it.id) } // Move in: not YouTube's
+                    .mapTo(HashSet()) { it.id }
 
                 // Phase 1: Fetch all data from YouTube API (network-bound), in parallel
                 val songsDeferred = async {
@@ -441,8 +442,10 @@ object LibrarySync {
      */
     private fun pruneSongs(remote: List<SongItem>, editedHere: (String) -> Boolean) {
         val remoteIds = remote.mapTo(HashSet()) { it.id }
+        com.lyrenne.desktop.movein.MoveInLedger.releaseLikes(remoteIds) // Move in: on YouTube now, so YouTube's
         val stale = DatabaseHelper.getLikedSongsOnce()
             .filter { it.inLibrary != null && it.id !in remoteIds && !editedHere(it.id) }
+            .filterNot { com.lyrenne.desktop.movein.MoveInLedger.isLocalLike(it.id) } // Move in: imported, not on YouTube
         stale.forEach { DatabaseHelper.updateSongLiked(it.id, false) }
         if (stale.isNotEmpty()) Timber.i("Sync: unliked ${stale.size} songs removed on YouTube")
     }

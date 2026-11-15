@@ -11,7 +11,7 @@ class TextPlaylistTest {
             listOf(
                 "# my list",
                 "Daft Punk - One More Time",
-                "1. Queen – Bohemian Rhapsody (5:55)",
+                "1. Queen \u2013 Bohemian Rhapsody (5:55)",
                 "02 - Tame Impala - The Less I Know The Better",
                 "Blinding Lights by The Weeknd",
                 // Splits into two names; matching only needs one of them to overlap

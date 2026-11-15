@@ -61,10 +61,10 @@ class MoveInImporterTest {
         val liked = q.getLikedSongs().executeAsList()
         assertEquals(listOf("FGBhQbmPwH8", "fJ9rUzIMcZQ"), liked.map { it.id })
         assertEquals("2025-04-15T21:30", liked[0].likedDate)
-        // Imported likes stay out of inLibrary so sync's prune cannot unlike them
-        assertTrue(liked.all { it.inLibrary == null })
-        // The library song that was not liked shows in Songs
-        assertEquals(listOf("x8VYWazR5mE"), q.getAllSongs().executeAsList().map { it.id })
+        // Imported likes show under Songs too, and the ledger keeps sync's prune off them
+        assertTrue(liked.all { it.inLibrary == it.likedDate })
+        assertTrue(MoveInLedger.isLocalLike("FGBhQbmPwH8") && MoveInLedger.isLocalLike("fJ9rUzIMcZQ"))
+        assertEquals(setOf("x8VYWazR5mE", "FGBhQbmPwH8", "fJ9rUzIMcZQ"), q.getAllSongs().executeAsList().map { it.id }.toSet())
         assertEquals(1, r.newLibrarySongs)
 
         // Credits, with names
@@ -148,6 +148,25 @@ class MoveInImporterTest {
         assertEquals(1, r.mergedPlaylists)
 
         assertEquals("Mine" to "my words", lyrics.texts["fJ9rUzIMcZQ"])
+    }
+
+    @Test
+    fun `the ledger lets go of a like once YouTube has it`() {
+        importer().import(fixture("metrolist13.backup"), MoveInOptions())
+        MoveInLedger.releaseLikes(setOf("FGBhQbmPwH8", "somethingElse"))
+        assertTrue(!MoveInLedger.isLocalLike("FGBhQbmPwH8"))
+        assertTrue(MoveInLedger.isLocalLike("fJ9rUzIMcZQ"))
+        // and it was written down, not only cached
+        MoveInLedger.file = ledgerFile
+        assertTrue(MoveInLedger.isLocalLike("fJ9rUzIMcZQ"))
+    }
+
+    @Test
+    fun `a like made here while signed out is protected once the import shows it in Songs`() {
+        q.insertSong("x8VYWazR5mE", "t", 1, null, null, null, 0, null, 1, "2026-01-01T00:00", 0, null, null, 0, 0, null)
+        importer().import(fixture("metrolist13.backup"), MoveInOptions(likes = false))
+        assertNotNull(q.getSongById("x8VYWazR5mE").executeAsOne().inLibrary)
+        assertTrue(MoveInLedger.isLocalLike("x8VYWazR5mE"))
     }
 
     @Test

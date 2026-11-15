@@ -1242,6 +1242,85 @@ reached any other way, the Downloaded auto playlist included, was streamed, whic
 `DownloadedPlaybackTest` pins it offline, with the lookup (`DesktopPlayer.downloadedFileFor`) and
 the stream (`DesktopPlayer.streamFor`) both stubbed.
 
+## Move in (MetroList import, playlist links)
+
+`movein/` and `ui/movein/MoveInUi.kt`. Two importers behind one set of windows (`MoveInHost`,
+drawn once at the end of `App`, so it also covers onboarding). Entry points: the optional
+onboarding step after sign-in ("Coming from MetroList?", which made the wizard eight steps), two
+rows under Settings > Backup & Restore (`MoveInSettingsRows`), and two command palette actions.
+
+### MetroList backups
+
+- **Formats.** A 13.x backup is a ZIP of `song.db` (Room, schema 35 and earlier) plus
+  `settings.preferences_pb`. A 14.x backup (the KMP rewrite) is `backup.json` + `settings.json` +
+  `song.db` (Room 36 and up), sometimes `song.db-wal`. InnerTune and its forks share the Room
+  family. `MetroListBackup` looks up every table and column before reading it, so a fork missing
+  one imports less instead of failing. A bare `song.db` is accepted too.
+- **14.x likes live in `settings.json`**, under the `likedSongsJson` key, newest first, not in the
+  database. Both sources are merged. A renamed song keeps its real title (`canonicalTitle`).
+- **Room dates are wall-clock time written as UTC milliseconds.** `wallClock()` turns them back
+  into the LocalDateTime strings Lyrenne stores, and plays into true epoch ms for `Event`.
+- **Both settings files carry the MetroList login cookie.** The 13.x protobuf is never read; of
+  `settings.json` only `likedSongsJson` is. `MetroListBackupTest` checks the cookie never surfaces.
+- **Skipped on purpose:** phone-local files (`isLocal`, `content://`, `file:` ids), podcast
+  channels, LM / SE, and 14.x plays pulled from YouTube's history (`playTimeKnown = 0`), which were
+  never played in MetroList and would only inflate stats. The 13.x `lyrics` table is a provider
+  cache; only rows with provider `Manual` are the user's. 14.x has `userLyrics` and
+  `isUserSelected`. Offsets (`song.lyricsOffset`, 14.x `lyrics.offsetMs`) keep their sign.
+- **Merge, never overwrite.** `MoveInImporter` runs one transaction through
+  `DatabaseHelper.moveInTransaction` with the `moveIn*` queries in `Lyrenne.sq`: INSERT OR IGNORE
+  plus gap filling, likes only on unliked rows, credits only for songs with none. A play is
+  skipped when one exists for the same song at the same millisecond, which is what makes a second
+  import add nothing. A MetroList playlist gets the local id `LPML-<its id>`, so a re-import tops
+  up the same playlist (new songs on the end) and keeps the user's name and order. YouTube
+  playlists come over as references (id = browseId, no songs): Lyrenne opens them from YouTube.
+  12,000 songs and 40,000 plays import in about 1.3 s.
+- **Sync must not undo it.** Imported likes get `inLibrary` so they show under Songs as they did
+  in MetroList, but sync's song prune unlikes any `inLibrary` like YouTube lacks. `MoveInLedger`
+  (`data/movein.json`) records imported likes and followed artists; `LibrarySync.pruneSongs` and
+  `pruneArtists` skip them, and the quick-sync `known` set leaves them out. A like leaves the
+  ledger once a full sync sees it on YouTube, after which an unlike there is mirrored as usual.
+  Saved albums use `inLibrary`, which sync never prunes, rather than `bookmarkedAt`, which it does.
+- **Likes stay local unless asked.** "Also like them on YouTube" is off by default: MetroList
+  usually synced its likes already, the account may differ, and a thousand likes are not undone by
+  hand. When on, new likes go through `YouTubeWrites.likeSong` one at a time, 350 ms apart, oldest
+  first so YouTube's order matches. Going through `likeSong` keeps `likeEditedSince` honest for a
+  sync running meanwhile.
+
+### Playlist links and pasted text
+
+- `PlaylistSources` reads only what anyone can see without a login or key: Spotify's embed page
+  (`__NEXT_DATA__`, first 100 songs), Apple Music's page data (`serialized-server-data`, total from
+  its ld+json), Deezer's open API (paged), TIDAL's embed player (first 50, no total), SoundCloud's
+  page hydration (first 5 in full, the rest as ids, filled from api-v2 with the client id that same
+  page hands out, as its web player does). Every cap is reported in `limitNote` with the way
+  around it (paste a CSV, e.g. from Exportify). Share links (link.deezer.com and friends) are
+  followed first. Each parser is a pure function of the page text; fixtures are trimmed real pages
+  captured 2026-11-15, and `PlaylistSourcesSmokeTest` checks the live pages still match.
+- `TextPlaylist` takes "Artist - Title" lines (also "Title by Artist", tabs, numbering, a trailing
+  "3:45") or a CSV/TSV whose columns are found by header name (Exportify, TuneMyMusic, Soundiiz,
+  a Music app export).
+- `TrackMatcher` scores 0..1: half title, three tenths artist, a fifth duration, minus penalties
+  for a version the source did not ask for. Karaoke, cover, sped up, slowed and 8D count anywhere
+  in a title; live, remix, acoustic and instrumental only in brackets or after " - ", or
+  "Live Forever" would be a live version. A song off a live album counts as live. Remasters are
+  neutral. Videos lose a little to songs, uploads more. Titles in scripts without spaces are
+  compared by character bigrams. Above 0.72 is saved as is, 0.45 to 0.72 is highlighted with its
+  alternatives, below is "not found". Songs are searched first; videos only when no song scores
+  well. `TrackMatcherTest` is the table of awkward cases; add to it before retuning.
+- Matching runs three searches at once and fills rows as they finish. Saving writes the local
+  playlist in one transaction first; with "Also create it on YouTube" it then adds songs to the
+  new YouTube playlist one at a time, in order, because concurrent adds land shuffled.
+
+### Testing it
+
+`./gradlew :desktop:test --tests 'com.lyrenne.desktop.movein.*'` covers the readers, importer,
+parsers and matcher. The fixture backups are real Room databases built from the CREATE statements
+in upstream's own schema JSON (`metrolist13-schema35.sql`, `metrolist14-schema65.sql`) and the
+`-data.sql` files beside them. `MoveInSnapshot` and `MoveInEndToEnd` (both `-Psnapshots`) render
+the windows in both themes and run a fixture import through the real App and database, then
+the Library and Stats.
+
 ## Version Management
 - **Current version**: v2.20.5
 - **One place**: `desktop/build.gradle.kts` → `lyrenneVersion = "X.Y.Z"`. `processResources` expands it into

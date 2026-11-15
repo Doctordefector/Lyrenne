@@ -1321,7 +1321,9 @@ It runs before crash reporting takes stderr and never opens a window or claims t
 
 **CI does it now** (`.github/workflows/release.yml`). Bump `lyrenneVersion`, commit, push, then
 `git tag vX.Y.Z && git push origin vX.Y.Z` (or Actions → release → Run workflow). It builds the ZIP on
-Windows and the .deb/.rpm on Ubuntu and attaches them to a **draft** release. Since 2.16.1 the
+Windows, and .deb/.rpm, AppImage and tarball for x86_64 and arm64, launch-tests every one of them (see
+"Install anywhere"), test-builds the Flatpak, and attaches the packages to a **draft** release. The
+`winget-manifests` artifact of that run holds the manifests for the winget-pkgs PR. Since 2.16.1 the
 `LYRENNE_SIGNING_KEY` Actions secret holds the key file's contents, so CI ships the `.sig` too. Chosen
 deliberately (the user releases from several PCs); the cost is that a compromised GitHub account can sign
 updates. If that secret is ever deleted, sign the draft's ZIP (and the .deb/.rpm the same way) before publishing:
@@ -1407,7 +1409,8 @@ hand-roll the 7z command.
 - **ALWAYS pass `--repo Doctordefector/Lyrenne` to every `gh release` command.** This repo has two
   remotes and bare `gh release list` resolves to `upstream` (MetrolistGroup/Metrolist), silently showing
   v13.x Android releases instead of our v2.x desktop ones
-- Upload ONLY the portable ZIP to each GitHub release
+- Release assets come from `release.yml` only; do not hand-upload extra files (an extra `.deb`/`.rpm`
+  ahead of the x86_64 ones would be picked up by old Linux updaters, see "Install anywhere")
 
 ## Auto-Updater System
 
@@ -1426,7 +1429,7 @@ hand-roll the 7z command.
 
 ### Key file
 - `desktop/.../update/AutoUpdater.kt` — entire update lifecycle (check, download, extract, install script generation)
-- `desktop/.../update/UpdateRoute.kt` — whether this copy may update itself at all. Only a portable
+- `desktop/.../update/UpdateRoute.kt`: whether this copy may update itself at all. Only a portable
   Windows copy and a /opt .deb/.rpm do; winget, Program Files, Flatpak and AppImage copies show what to
   run instead ("Update with: winget upgrade Lyrenne") in Settings and the launch notification
 
@@ -1516,7 +1519,7 @@ Plan and rationale: `AUDIT_AND_LINUX_PLAN.md`. What is in place:
   runs `/opt/lyrenne/lib/runtime/lib/jspawnhelper`, and once a package swaps /opt under a running copy the
   new helper's version no longer matches, so every spawn failed ("Failed to exec spawn helper", seen 2.20.0).
 - **Packaging**: `packaging/linux/nfpm.yaml` builds .deb/.rpm from `createDistributable` with VLC as a
-  dependency. CI: `.github/workflows/linux.yml` (`-Pci` skips the network smoke tests).
+  dependency (x86_64 and arm64; release.yml rewrites `arch:`). AppImage and Flatpak: "Install anywhere". CI: `.github/workflows/linux.yml` (`-Pci` skips the network smoke tests).
   `fetchFfmpeg` and `packagePortableZip` only run on a Windows host.
 - **Verified in CI** (every push): unit tests on Ubuntu; the .deb installs on Ubuntu and the .rpm on
   Fedora with their VLC dependencies, the app starts under Xvfb, loads the distro libvlc, and writes
@@ -1539,7 +1542,7 @@ whose Python backend starts it with `systemd-run --user` and whose Quick Access 
   tries the claim once more after 1.5 s. A windowed copy poked this way is simply shown twice.
 - **SteamOS 3.9** ships libvlc 3.0.23 (https, mkv/mp4, opus, faad, ALSA output only), so nothing
   VLC needs bundling there. It ships no Java: the tarball's own runtime is used.
-- **Shipping**: release CI adds `lyrenne-<v>-linux-x86_64.tar.gz` (the `createDistributable` folder);
+- **Shipping**: release CI adds `lyrenne-<v>-linux-x86_64.tar.gz` and `-aarch64.tar.gz` (the `createDistributable` folder);
   the plugin pins its sha256. `linux.yml` smoke-tests `--headless` (token accepted, 401 without).
 - Anonymous playback is bot-checked by YouTube ("Sign in to confirm you're not a bot") on every
   client in the fallback chain, so the plugin must get the user signed in before anything plays.

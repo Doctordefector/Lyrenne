@@ -184,6 +184,15 @@ object DatabaseHelper {
         }
     }
 
+    // --- Move in ---
+
+    /**
+     * The MetroList importer's whole write, as one transaction against the raw queries. Flows
+     * hear about it once, at commit, rather than once per imported row. See `movein/`.
+     */
+    fun <T> moveInTransaction(body: (LyrenneQueries) -> T): T =
+        database.transactionWithResult { body(queries) }
+
     // ============ Song Operations ============
 
     fun getAllSongs() =

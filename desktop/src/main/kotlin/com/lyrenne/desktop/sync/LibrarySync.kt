@@ -460,6 +460,7 @@ object LibrarySync {
         val remoteIds = remote.mapTo(HashSet()) { it.id }
         val stale = DatabaseHelper.getAllArtistsOnce()
             .filter { it.bookmarkedAt != null && it.id !in remoteIds }
+            .filterNot { com.lyrenne.desktop.movein.MoveInLedger.isLocalArtist(it.id) } // Move in: followed by an import, not on YouTube
         stale.forEach { DatabaseHelper.updateArtistBookmarked(it.id, false) }
         if (stale.isNotEmpty()) Timber.i("Sync: unsubscribed ${stale.size} artists")
     }

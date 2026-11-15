@@ -541,3 +541,58 @@ SELECT COUNT(DISTINCT SongArtistMap.artistId)
 FROM Event
 INNER JOIN SongArtistMap ON SongArtistMap.songId = Event.songId
 WHERE Event.timestamp >= ? AND Event.timestamp <= ?;
+
+-- ============ MOVE IN (MetroList backup import) ============
+-- Every write here fills gaps and never overwrites: importing the same backup twice, or one
+-- whose songs Lyrenne already knows, must leave what is already here alone.
+
+moveInInsertSong:
+INSERT OR IGNORE INTO Song(id, title, duration, thumbnailUrl, albumId, albumName, explicit, year)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+moveInFillSong:
+UPDATE Song SET
+    duration = CASE WHEN duration <= 0 THEN :duration ELSE duration END,
+    thumbnailUrl = COALESCE(thumbnailUrl, :thumbnailUrl),
+    albumId = COALESCE(albumId, :albumId),
+    albumName = COALESCE(albumName, :albumName),
+    year = COALESCE(year, :year)
+WHERE id = :id;
+
+moveInSongState:
+SELECT liked, inLibrary FROM Song WHERE id = ?;
+
+moveInSetInLibrary:
+UPDATE Song SET inLibrary = ? WHERE id = ? AND inLibrary IS NULL;
+
+moveInSongArtistCount:
+SELECT COUNT(*) FROM SongArtistMap WHERE songId = ?;
+
+moveInInsertAlbum:
+INSERT OR IGNORE INTO Album(id, playlistId, title, year, thumbnailUrl, songCount, duration, explicit, lastUpdateTime)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- Kept through inLibrary, not bookmarkedAt: sync prunes bookmarkedAt albums YouTube does not
+-- have, and an album saved in MetroList is often only saved there.
+moveInKeepAlbum:
+UPDATE Album SET inLibrary = ? WHERE id = ? AND inLibrary IS NULL AND bookmarkedAt IS NULL;
+
+moveInFollowArtist:
+UPDATE Artist SET
+    bookmarkedAt = :bookmarkedAt,
+    thumbnailUrl = COALESCE(thumbnailUrl, :thumbnailUrl),
+    channelId = COALESCE(channelId, :channelId)
+WHERE id = :id AND bookmarkedAt IS NULL;
+
+moveInInsertPlaylist:
+INSERT OR IGNORE INTO Playlist(id, name, browseId, createdAt, lastUpdateTime, isEditable, bookmarkedAt, remoteSongCount, thumbnailUrl)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+moveInPlaylistSongIds:
+SELECT songId FROM PlaylistSongMap WHERE playlistId = ?;
+
+moveInMaxPlaylistPosition:
+SELECT MAX(position) FROM PlaylistSongMap WHERE playlistId = ?;
+
+moveInEventExists:
+SELECT COUNT(*) FROM Event WHERE timestamp = ? AND songId = ?;

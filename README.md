@@ -1,23 +1,25 @@
 <div align="center">
 
 <img src=".github/lyrenne-banner.svg?v=1" width="100%"
-     alt="Lyrenne, a free open source YouTube Music player for Windows and Linux">
+     alt="Lyrenne Music Player, a free open source YouTube Music player for Windows, macOS and Linux">
 
-# Lyrenne: a YouTube Music Player for Windows and Linux
+# Lyrenne Music Player: YouTube Music for Windows, macOS and Linux
 
 [![Latest release](https://img.shields.io/github/v/release/Doctordefector/Lyrenne?style=for-the-badge&label=download&labelColor=0a0a0a&color=A37C43)](https://github.com/Doctordefector/Lyrenne/releases/latest)
 [![Portable](https://img.shields.io/badge/install-portable%20zip-A37C43?style=for-the-badge&labelColor=0a0a0a)](https://github.com/Doctordefector/Lyrenne/releases/latest)
 [![License](https://img.shields.io/badge/license-GPL--3.0-777777?style=for-the-badge&labelColor=0a0a0a)](LICENSE)
 [![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-777777?style=for-the-badge&labelColor=0a0a0a)](https://github.com/Doctordefector/Lyrenne/releases/latest)
-[![Linux](https://img.shields.io/badge/Linux-.deb%20%7C%20.rpm-777777?style=for-the-badge&labelColor=0a0a0a)](#linux)
+[![macOS](https://img.shields.io/badge/macOS-Apple%20Silicon%20%7C%20Intel-777777?style=for-the-badge&labelColor=0a0a0a)](#macos)
+[![Linux](https://img.shields.io/badge/Linux-AppImage%20%7C%20.deb%20%7C%20.rpm-777777?style=for-the-badge&labelColor=0a0a0a)](#linux)
 
-**A free, open source YouTube Music desktop player for Windows 10 and 11, and Linux.**
-Your real library, your real playlists, synced lyrics and offline downloads. No ads, no
-telemetry. On Windows you unzip it and it runs; on Linux it is one `.deb` or `.rpm`.
+**A free, open source YouTube Music desktop player for Windows, macOS and Linux, built for people
+who play music while they game and stream.** Your real library, your real playlists, synced
+lyrics and offline downloads, plus global hotkeys and lyrics over your game, an OBS overlay, a
+phone remote with no app to install, and a full-screen karaoke Stage. No ads, no telemetry.
 
 [**Download**](https://github.com/Doctordefector/Lyrenne/releases/latest) ·
 [Website](https://doctordefector.github.io/Lyrenne/) ·
-[Features](#features) · [Other versions](#other-versions) · [Troubleshooting](#troubleshooting) · [Build from source](#build-from-source)
+[Features](#features) · [For gamers and streamers](#for-gamers-and-streamers) · [Coming from MetroList?](#coming-from-metrolist) · [Other versions](#other-versions) · [Troubleshooting](#troubleshooting) · [Build from source](#build-from-source)
 
 </div>
 
@@ -30,6 +32,24 @@ telemetry. On Windows you unzip it and it runs; on Linux it is one `.deb` or `.r
 | **PC VR** | [Lyrenne VR](https://github.com/Doctordefector/Lyrenne-VR): your music on your wrist in any SteamVR or Virtual Desktop (VDXR) game. Glance to see the song and synced lyrics, point to play, skip or change the volume. |
 | **iPad** | [Lyrenne for iPad](https://github.com/Doctordefector/Lyrenne-iPad): a sideloadable version with synced lyrics. |
 | **Steam Deck** | [Lyrenne for Decky](https://github.com/Doctordefector/Lyrenne-Decky): play your music in Game Mode from the Quick Access Menu while you game. |
+
+## For gamers and streamers
+
+| | |
+|---|---|
+| **Game Mode** | Global hotkeys that work while a game has focus (play/pause, skip, like, volume, seek), and a click-through overlay that shows the song or karaoke lyrics over borderless and windowed games without ever stealing focus. Settings > Game Mode |
+| **Stream overlay** | An OBS Browser Source with the song, cover art and word-by-word lyrics, in card, lyrics or ticker layouts. Optional `now-playing.txt`, `.json` and `cover.jpg` for text sources and Streamer.bot. Settings > Integrations > Lyrenne Link |
+| **Phone remote** | Scan a QR code and control Lyrenne from your phone's browser: play, skip, seek, search, queue and live lyrics. Off until you turn it on, and only on your own network |
+| **Stage** | Full-window karaoke lyrics over a background that moves with the cover's colours. Ctrl+Shift+F, then F11 for full screen |
+| **Also plays** | On your wrist in VR, and in the Steam Deck's Quick Access Menu (see [Other versions](#other-versions)) |
+
+## Coming from MetroList?
+
+Make a backup in MetroList (Settings > Backup and restore > Backup), then in Lyrenne choose
+**Settings > Backup & Restore > Import from MetroList** (or the step offered during setup). Your liked
+songs, playlists, saved albums, followed artists and play history come over in one go, from
+MetroList 13 or 14. Nothing already in Lyrenne is overwritten. Playlists from Spotify, Apple Music,
+Deezer, TIDAL or SoundCloud can be imported from a link, or from a pasted list of songs.
 
 ## Install
 
@@ -59,10 +79,23 @@ own Java runtime. Windows 10 or 11, 64-bit.
 > `Lyrenne.exe`. A sync client that reopens those files mid-write will corrupt the database or
 > lock it on startup. `C:\Lyrenne` is a good home; the Desktop usually is not.
 
+### macOS
+
+Grab `Lyrenne-X.Y.Z-macos-arm64.dmg` (Apple Silicon) or `-macos-x64.dmg` (Intel) from
+[the latest release](https://github.com/Doctordefector/Lyrenne/releases/latest), open it and drag
+Lyrenne into Applications. VLC is included. The app is not notarized by Apple, so the first time
+you open it macOS says it can't verify the developer: open **System Settings > Privacy & Security**
+and click **Open Anyway** (once). Control Center, the lock screen, AirPods and the media keys all
+control Lyrenne. Updates are a download of the new DMG; the app tells you when one is out.
+
 ### Linux
 
-Every release ships a `.deb` (Debian, Ubuntu and their derivatives) and an `.rpm` (Fedora),
-64-bit. Grab the one for your distro from [the latest release](https://github.com/Doctordefector/Lyrenne/releases/latest):
+**AppImage (any distro):** `Lyrenne-X.Y.Z-x86_64.AppImage` or `-aarch64.AppImage` brings its own
+VLC, so there is nothing else to install. Make it executable and run it. Needs glibc 2.34 or newer.
+
+**Packages:** every release also ships a `.deb` (Debian, Ubuntu and their derivatives) and an
+`.rpm` (Fedora), for 64-bit x86 and ARM. Grab the one for your distro from
+[the latest release](https://github.com/Doctordefector/Lyrenne/releases/latest):
 
 ```bash
 sudo apt install ./lyrenne_*_amd64.deb
@@ -89,13 +122,15 @@ installs it through your system's password prompt.
 
 | | |
 |---|---|
-| **Playback** | Streaming and local files through a bundled VLC engine, gapless queue, shuffle and repeat, Smart Shuffle that mixes songs like your playlist into it, crossfade, playback speed 0.25×–3×, sleep timer, 10-band equalizer with presets, skip silence, volume normalization, mouse wheel on any slider |
+| **Playback** | Streaming and local files through a bundled VLC engine, gapless queue, shuffle and repeat, Smart Shuffle that mixes songs like your playlist into it, crossfade, playback speed 0.25×–3×, sleep timer, skip silence, volume normalization, mouse wheel on any slider |
+| **Sound** | 10-band equalizer with typed values and shareable presets, AutoEQ headphone correction for 8,000+ models fitted so nothing clips, SponsorBlock skipping of non-music parts and sponsor reads (private hashed lookup, off until you turn it on) with Undo and marks on the seek bar |
 | **Library** | Full two-way sync with YouTube Music: liked songs, albums, artists and playlists, and every edit you make locally is pushed back to your account. Local playlists, auto playlists, sorting, search across the library or within one playlist, and grid/list views |
 | **Discovery** | Home feed with continuations, Explore (new releases, moods & genres, charts), search with filters and suggestions, Start Radio, autoplay that keeps similar songs coming when your queue runs out, quick picks, podcasts |
 | **Lyrics** | Synced and plain, from a five-provider chain (BetterLyrics → LrcLib → KuGou → YouTube lyrics → YouTube transcript), word-by-word highlighting where the provider has word timing, manual search when the automatic match is wrong, and size, alignment and click-to-seek options |
-| **Social** | Listen Together rooms with live playback sync, Discord Rich Presence, Last.fm scrobbling |
+| **Social** | Listen Together rooms with live playback sync, Discord Rich Presence, Last.fm and ListenBrainz scrobbling |
+| **Rewind** | A listening recap for any week, month, year or custom dates, built only from your own play history: top songs, artists and albums, listening clock, streaks, biggest discovery. Save any card as an image or play your top 50 |
 | **Accounts** | Keep several YouTube accounts signed in and switch between them with one click, handy on a shared PC |
-| **Extras** | Guided first-run setup, floating always-on-top mini player, music recognition through Shazam, listening stats and history, offline downloads with progress, played from disk wherever they are queued, car/USB export to loudness-normalized MP3, backup and restore, proxy support, region and language settings, system tray with a mini player, Windows Now Playing and media controls, media-key and keyboard shortcuts, Material 3 theming that follows your system |
+| **Extras** | Guided first-run setup, floating always-on-top mini player, music recognition through Shazam, listening stats and history, offline downloads with progress, played from disk wherever they are queued, car/USB export to loudness-normalized MP3, backup and restore, proxy support, region and language settings, system tray (menu bar on macOS) with a mini player, Windows and macOS Now Playing and media controls, MPRIS on Linux, media-key and keyboard shortcuts, Material 3 theming that follows your system |
 
 Everything the app writes (database, credentials, preferences, cache, downloads) stays in the
 app's own folder, and there is no telemetry. One setting is the single exception: "Name Lyrenne in

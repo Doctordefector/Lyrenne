@@ -11,6 +11,7 @@ import com.metrolist.innertube.models.YouTubeClient
 import com.lyrenne.desktop.db.DatabaseHelper
 import com.lyrenne.desktop.download.DownloadManager
 import com.lyrenne.desktop.settings.PreferencesManager
+import com.lyrenne.desktop.sound.sponsorblock.SponsorBlock
 import kotlinx.coroutines.*
 import timber.log.Timber
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -466,6 +467,7 @@ class DesktopPlayer {
                 audioPlayer?.mediaPlayer()?.let { player ->
                     val position = player.status().time()
                     _state.value = _state.value.copy(position = position)
+                    SponsorBlock.onPositionTick(this@DesktopPlayer, position)
                     applyCrossfadeTail(position)
                 }
                 delay(200)
@@ -1080,6 +1082,8 @@ class DesktopPlayer {
     }
 
     fun seekTo(positionMs: Long) {
+        // A seek someone chose: a SponsorBlock segment it lands in plays
+        SponsorBlock.onUserSeek(positionMs)
         audioPlayer?.mediaPlayer()?.controls()?.setTime(positionMs)
         _state.value = _state.value.copy(position = positionMs)
     }
@@ -1510,6 +1514,30 @@ class DesktopPlayer {
         PreferencesManager.setEqEnabled(enabled)
         applyEqualizer()
     }
+
+    // --- Sound and scrobbling ---
+
+    /** Jumps past a SponsorBlock segment. Not [seekTo]: that is how someone chooses to hear one. */
+    internal fun skipSegmentTo(positionMs: Long) {
+        audioPlayer?.mediaPlayer()?.controls()?.setTime(positionMs)
+        _state.value = _state.value.copy(position = positionMs)
+    }
+
+    /**
+     * A SponsorBlock segment runs to the end of the track: go on to what follows now, so it starts
+     * (and fades in, with crossfade on) instead of the outro playing out. With nothing queued after
+     * it, or the sleep timer waiting for the end of the track, it jumps to the last moment instead
+     * and VLC's own finished event takes over, so autoplay and the timer behave as they always do.
+     */
+    internal fun endTrackEarly() {
+        val follows = currentIndex < queue.size - 1 || (repeatMode != RepeatMode.OFF && queue.isNotEmpty())
+        if (follows && _sleepTimer.value?.endOfTrack != true) scope.launch { onTrackFinished() }
+        else skipSegmentTo((_state.value.duration - 300).coerceAtLeast(0))
+    }
+
+    /** VLC's equalizer as it stands (preamp, band gains), or null when it is off. */
+    internal fun equalizerSnapshot(): Pair<Float, List<Float>>? =
+        vlcEqualizer?.let { eq -> eq.preamp() to eq.amps().toList() }
 
     fun release() {
         // Record final play event before shutdown

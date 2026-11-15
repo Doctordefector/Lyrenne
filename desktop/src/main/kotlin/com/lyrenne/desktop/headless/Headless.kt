@@ -97,6 +97,8 @@ object Headless {
         runBlocking { player.restoreQueue() }
         player.setVolume(PreferencesManager.preferences.value.volume)
         LastFmManager.initialize(player)
+        com.lyrenne.desktop.sound.listenbrainz.ListenBrainzManager.initialize(player)
+        com.lyrenne.desktop.sound.sponsorblock.SponsorBlock.initialize(player)
 
         scope.launch {
             if (PreferencesManager.preferences.value.autoSyncOnStartup) LibrarySync.syncLibrary()

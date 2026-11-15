@@ -260,6 +260,7 @@ private fun runApp() {
                     player::release,
                     DesktopNotification::release,
                     LastFmManager::release,
+                    com.lyrenne.desktop.sound.listenbrainz.ListenBrainzManager::release,
                     DiscordRPC::release,
                     SystemMediaSession::release,
                     MediaKeyHandler::release
@@ -327,6 +328,8 @@ private fun runApp() {
             // Integrations
             DiscordRPC.initialize(player)
             LastFmManager.initialize(player)
+            com.lyrenne.desktop.sound.listenbrainz.ListenBrainzManager.initialize(player)
+            com.lyrenne.desktop.sound.sponsorblock.SponsorBlock.initialize(player)
             DesktopNotification.initialize(player)
 
             // Set up tray callbacks for minimize-to-tray

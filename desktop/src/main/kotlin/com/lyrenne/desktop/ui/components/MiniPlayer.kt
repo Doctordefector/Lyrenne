@@ -515,6 +515,7 @@ private fun SeekRow(player: DesktopPlayer, duration: Long) {
             value = if (duration > 0) position.toFloat() / duration else 0f,
             onValueChange = { fraction -> player.seekTo((fraction * duration).toLong()) },
             idleThumb = 0.dp,
+            marks = rememberSkipMarks(player, duration),
             modifier = Modifier.weight(1f).height(16.dp).padding(horizontal = 8.dp)
                 .wheelStep(
                     value = { player.state.value.position.toFloat() },

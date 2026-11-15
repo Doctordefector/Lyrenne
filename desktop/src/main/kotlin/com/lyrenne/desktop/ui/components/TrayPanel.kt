@@ -310,6 +310,7 @@ private fun TraySeekBar(player: DesktopPlayer) {
             scrubbing = null
         },
         idleThumb = 0.dp,
+        marks = rememberSkipMarks(player, duration),
         modifier = Modifier.fillMaxWidth().height(16.dp)
             .wheelStep(
                 value = { player.state.value.position.toFloat() },

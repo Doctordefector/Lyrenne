@@ -45,6 +45,8 @@ fun PlayerSlider(
     onValueChangeFinished: (() -> Unit)? = null,
     /** Thumb size while idle; 0 hides it until hover or drag. */
     idleThumb: Dp = 10.dp,
+    /** Stretches of the track drawn in [markColor], as fractions of it (SponsorBlock segments). */
+    marks: List<ClosedFloatingPointRange<Float>> = emptyList(),
 ) {
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
@@ -53,6 +55,7 @@ fun PlayerSlider(
     val thumbSize by animateDpAsState(if (hovered || dragged || pressed) 14.dp else idleThumb)
     val active = MaterialTheme.colorScheme.primary
     val inactive = MaterialTheme.colorScheme.outline
+    val markColor = if (marks.isEmpty()) inactive else skipMarkColor()
     val colors = SliderDefaults.colors(
         thumbColor = MaterialTheme.colorScheme.primary,
         activeTrackColor = MaterialTheme.colorScheme.primary,
@@ -80,6 +83,9 @@ fun PlayerSlider(
                 val stroke = 4.dp.toPx()
                 drawLine(inactive, Offset(0f, y), Offset(size.width, y), stroke, StrokeCap.Round)
                 drawLine(active, Offset(0f, y), Offset(x, y), stroke, StrokeCap.Round)
+                marks.forEach { m ->
+                    drawLine(markColor, Offset(size.width * m.start, y), Offset(size.width * m.endInclusive, y), stroke, StrokeCap.Butt)
+                }
                 drawCircle(active, thumbSize.toPx() / 2, Offset(x, y))
             }
         },

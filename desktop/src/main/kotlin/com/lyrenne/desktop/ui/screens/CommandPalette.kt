@@ -51,6 +51,11 @@ sealed class PaletteAction(val label: String, val icon: ImageVector, val categor
     data object ToggleShuffle : PaletteAction("Toggle Shuffle", PlayerIcons.Shuffle, "Playback")
     data object ToggleRepeat : PaletteAction("Toggle Repeat", Icons.Default.Repeat, "Playback")
 
+    // Game Mode
+    data object GoGameMode : PaletteAction("Game Mode Settings (Overlay, Hotkeys)", Icons.Default.SportsEsports, "Game Mode")
+    data object PeekOverlay : PaletteAction("Peek at the In-Game Overlay", Icons.Default.Visibility, "Game Mode")
+    data object ToggleOverlay : PaletteAction("Show or Hide the In-Game Overlay", Icons.Default.Layers, "Game Mode")
+
     // Songs from library
     data class PlaySong(val song: SongInfo) : PaletteAction("Play: ${song.title}", Icons.Default.MusicNote, "Songs")
 }
@@ -84,6 +89,9 @@ fun CommandPalette(
             PaletteAction.PrevTrack,
             PaletteAction.ToggleShuffle,
             PaletteAction.ToggleRepeat,
+            PaletteAction.GoGameMode,
+            PaletteAction.PeekOverlay,
+            PaletteAction.ToggleOverlay,
         )
     }
 
@@ -253,6 +261,8 @@ private fun executeAction(
         is PaletteAction.PrevTrack -> { /* handled via onNavigate */ }
         is PaletteAction.ToggleShuffle -> player.toggleShuffle()
         is PaletteAction.ToggleRepeat -> player.toggleRepeat()
+        is PaletteAction.PeekOverlay -> com.lyrenne.desktop.gamemode.GameMode.peek()
+        is PaletteAction.ToggleOverlay -> com.lyrenne.desktop.gamemode.GameMode.toggleOverlay()
         else -> {}
     }
     onNavigate(action)

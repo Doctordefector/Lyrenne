@@ -262,7 +262,8 @@ private fun runApp() {
                     LastFmManager::release,
                     DiscordRPC::release,
                     SystemMediaSession::release,
-                    MediaKeyHandler::release
+                    MediaKeyHandler::release,
+                    com.lyrenne.desktop.gamemode.GameMode::release
                 ).forEach { runCatching { it() }.onFailure { e -> Timber.e("Release failed on quit: ${e.message}") } }
                 exitProcess(0)
             }
@@ -328,6 +329,8 @@ private fun runApp() {
             DiscordRPC.initialize(player)
             LastFmManager.initialize(player)
             DesktopNotification.initialize(player)
+            // Game Mode: global hotkeys and the in-game overlay
+            com.lyrenne.desktop.gamemode.GameMode.start(player)
 
             // Set up tray callbacks for minimize-to-tray
             DesktopNotification.onShowWindow = {
@@ -550,6 +553,9 @@ private fun runApp() {
                 }
             }
         }
+
+        // Game Mode's in-game overlay: click-through, never focused, hidden while it has nothing to show
+        com.lyrenne.desktop.gamemode.GameOverlayWindow(player, quitting)
 
         // Tray popup — replaces AWT's unthemeable native PopupMenu.
         // The window is created once and only shown/hidden: building a transparent window on

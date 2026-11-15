@@ -1242,6 +1242,80 @@ reached any other way, the Downloaded auto playlist included, was streamed, whic
 `DownloadedPlaybackTest` pins it offline, with the lookup (`DesktopPlayer.downloadedFileFor`) and
 the stream (`DesktopPlayer.streamFor`) both stubbed.
 
+## Game Mode (global hotkeys and the in-game overlay)
+
+Control the music and see lyrics from inside a flat-screen game without alt-tabbing. Code in
+`gamemode/` (plus `ui/screens/GameModeSettings.kt`); the pure parts are `Hotkeys.kt` and
+`OverlayModel.kt`, pinned by `HotkeysTest` and `OverlayModelTest`. Settings > Game Mode, and three
+command palette entries.
+
+**Global hotkeys** (`GlobalHotkeys.kt`)
+
+- **Windows: `RegisterHotKey` with no window, on a thread of its own** (`lyrenne-hotkeys`) running
+  `GetMessage`. A windowless hotkey belongs to the thread that registered it: WM_HOTKEY lands in that
+  thread's queue and only that thread may unregister it. So every register/unregister is a task posted
+  to that thread (`PostThreadMessage` wakes it), and the queue is created with a `PeekMessage` before
+  anyone may post. `MOD_NOREPEAT` on everything: holding the keys must not skip ten songs.
+- **One code path for every change.** Any change to the Game Mode preferences re-registers the whole
+  set; turning one off, rebinding, the master switch and quitting all unregister through it.
+- **The OS refusing a combo is the conflict check.** `ERROR_HOTKEY_ALREADY_REGISTERED` (1409) means
+  another app owns it, and the row says so ("Taken"). There is no other reliable way to know. Two
+  actions on one combo are caught before that (`HotkeyPlan`; the first listed keeps it), as are combos
+  that would break typing (no Ctrl, Alt or Win, except F13 to F24) and ones Windows keeps
+  (Ctrl+Alt+Del with anything, Win+L, Alt+F4, Alt+Space).
+- **Recording a combo pauses every hotkey.** A registered hotkey is swallowed before any window sees
+  it, so without the pause the current combo could never be recorded again, and pressing it would also
+  play or pause. The recorder listens through an AWT `KeyEventDispatcher`, not a Compose handler: the
+  window's own shortcuts run first in Compose and Ctrl+K would open the palette. A combo another app
+  owns never reaches the recorder at all; the hint under the row says so.
+- **Defaults: Ctrl+Alt plus a navigation key, and only play/pause, next and previous on.**
+  Ctrl+Alt+Home / Page Down / Page Up. Games rarely bind Ctrl+Alt, and the navigation cluster types
+  nothing, which matters because AltGr arrives as Ctrl+Alt: Ctrl+Alt+E would eat the euro sign on a
+  German layout, Ctrl+Alt+L the Polish l-stroke. On by default because media control is the whole
+  point and these three cost nothing; any that collide show as taken instead of fighting. Like,
+  volume, seek, peek and show/hide stay suggestions a switch away: they are less universal, and the
+  arrow combos clash with some Intel graphics drivers' screen rotation.
+- **Linux: X11 `XGrabKey` on the root window**, own display connection, polled on its own thread.
+  Every combo is grabbed four times (Caps Lock and Num Lock states), or a lit Num Lock kills them all.
+  A grab someone else holds fails asynchronously with BadAccess, whose default handler exits the
+  process, so an error handler is installed only around the grab and its `XSync` and passes other
+  connections' errors to the handler it replaced. **Not run on real Linux hardware yet**; any failure
+  turns hotkeys off with a line in Settings. **Wayland** cannot do global grabs (XWayland only sees
+  keys while an X window has focus), so the controls are hidden and the line points at binding
+  `playerctl play-pause` in the desktop's own shortcuts, which works because Lyrenne publishes MPRIS.
+
+**The overlay** (`OverlayWindow.kt`, `OverlayPlacement.kt`), Windows only for now
+
+- **A Compose window through the `create` overload**, like the floating player: UTILITY type,
+  undecorated, transparent, always on top, `focusableWindowState = false`, `isAutoRequestFocus =
+  false`. `addNotify()` makes the native window before it is ever shown, so the extended styles are in
+  place first: `WS_EX_LAYERED | WS_EX_TRANSPARENT` (clicks fall through), `WS_EX_NOACTIVATE` (never
+  takes focus), `WS_EX_TOOLWINDOW` without `WS_EX_APPWINDOW` (no taskbar button, no Alt+Tab). Compose's
+  transparent window is already layered, so adding the flags keeps per-pixel alpha. They are re-applied
+  on every show because AWT rewrites the extended style for some changes. Verified live:
+  `0x080800A8`, foreground window unchanged after showing.
+- **Hidden whenever it has nothing to draw**, and created 3 s after launch. A visible window over a
+  borderless game, even an empty one, makes Windows compose the game through the desktop instead of
+  flipping it straight to the screen, which can cost frames. Exclusive fullscreen hides it entirely;
+  the Settings line says so.
+- **What shows when** is `OverlayModel`, clock-free and tested with numbers: Song toast (5 s on a song
+  change), Lyrics strip (while synced lyrics play; hidden while paused), Off. Peek shows card and line
+  in any mode; show/hide hides the mode, or from Off pins it; flashes confirm every hotkey for 1.4 s
+  and always show. Nothing shows on its own while a Lyrenne window is active, since the real player is
+  in view.
+- **Placement**: the monitor the foreground window is on (`MonitorFromWindow`, matched to an AWT
+  screen by its physical bounds, AWT bounds times the screen's scale), re-checked every 1.5 s while
+  shown, or a chosen screen. Size is one 420x270 dp layout scaled by a density override, so DPI needs
+  nothing extra: window geometry is in dp (see Window sizing).
+- **Reuse, not copies**: lyrics come from `LyricsManager` with the song's `LyricsOffsets`, the line
+  from `currentLineIndex`, the word fill from `highlightWords` and `rememberSmoothPosition`
+  (LyricsPanel), the tint from `rememberArtTint`. The lookup moved into `fetchLyricsFor` so the
+  overlay can start it while the main window is hidden, and `fetchLyrics` now drops a second request
+  for a song whose lookup is still running.
+- Always the dark scheme, whatever the app theme: it sits over games, not over Lyrenne.
+- To screenshot it, capture with `CAPTUREBLT` (as for the floating player). To drive hotkeys, send
+  `SendInput` key events from another process while another window is foreground.
+
 ## Version Management
 - **Current version**: v2.20.5
 - **One place**: `desktop/build.gradle.kts` → `lyrenneVersion = "X.Y.Z"`. `processResources` expands it into

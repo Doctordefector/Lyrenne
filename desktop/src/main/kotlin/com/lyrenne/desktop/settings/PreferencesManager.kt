@@ -57,6 +57,9 @@ data class AppPreferences(
     /** Where the floating player was last left, in dp. Null until it has been moved. */
     val floatingPlayerX: Int? = null,
     val floatingPlayerY: Int? = null,
+    // --- Game Mode ---
+    /** Global hotkeys and the in-game overlay, stored under `gameMode.*` keys. */
+    val gameMode: com.lyrenne.desktop.gamemode.GameModePrefs = com.lyrenne.desktop.gamemode.GameModePrefs(),
     val volume: Float = 1f,
     val isMuted: Boolean = false,
     val volumeBeforeMute: Float = 1f,
@@ -155,6 +158,8 @@ object PreferencesManager {
                     floatingPlayer = props.getProperty("floatingPlayer")?.toBoolean() ?: false,
                     floatingPlayerX = props.getProperty("floatingPlayerX")?.toIntOrNull(),
                     floatingPlayerY = props.getProperty("floatingPlayerY")?.toIntOrNull(),
+                    // --- Game Mode ---
+                    gameMode = com.lyrenne.desktop.gamemode.GameModePrefs.load(props),
                     volume = props.getProperty("volume")?.toFloatOrNull()?.coerceIn(0f, 1f) ?: 1f,
                     isMuted = props.getProperty("isMuted")?.toBoolean() ?: false,
                     volumeBeforeMute = props.getProperty("volumeBeforeMute")?.toFloatOrNull()?.coerceIn(0f, 1f) ?: 1f,
@@ -240,6 +245,8 @@ object PreferencesManager {
             props.setProperty("floatingPlayer", prefs.floatingPlayer.toString())
             prefs.floatingPlayerX?.let { props.setProperty("floatingPlayerX", it.toString()) }
             prefs.floatingPlayerY?.let { props.setProperty("floatingPlayerY", it.toString()) }
+            // --- Game Mode ---
+            prefs.gameMode.store(props)
             props.setProperty("volume", prefs.volume.toString())
             props.setProperty("isMuted", prefs.isMuted.toString())
             props.setProperty("volumeBeforeMute", prefs.volumeBeforeMute.toString())
@@ -382,6 +389,14 @@ object PreferencesManager {
     fun setFloatingPlayerPosition(x: Int, y: Int) {
         if (_preferences.value.floatingPlayerX == x && _preferences.value.floatingPlayerY == y) return
         _preferences.value = _preferences.value.copy(floatingPlayerX = x, floatingPlayerY = y)
+        savePreferences()
+    }
+
+    // --- Game Mode ---
+    fun updateGameMode(change: (com.lyrenne.desktop.gamemode.GameModePrefs) -> com.lyrenne.desktop.gamemode.GameModePrefs) {
+        synchronized(this) {
+            _preferences.value = _preferences.value.copy(gameMode = change(_preferences.value.gameMode))
+        }
         savePreferences()
     }
 

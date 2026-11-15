@@ -64,6 +64,26 @@ import kotlin.math.roundToLong
  */
 private const val DURATION_WAIT_MS = 4_000L
 
+/**
+ * Looks lyrics up for [song] once its duration is known. Shared by this panel and the Game Mode
+ * overlay, which needs them while the main window is hidden.
+ */
+internal suspend fun fetchLyricsFor(player: DesktopPlayer, song: com.lyrenne.desktop.playback.SongInfo) {
+    // The live duration is only trusted once it belongs to this song. Waiting on it, rather
+    // than reading whatever is in the state right now, is what stops the lookup going out
+    // with "-1" for every track restored from the queue or picked from the library.
+    val durationMs = withTimeoutOrNull(DURATION_WAIT_MS) {
+        player.state.first { it.currentSong?.id == song.id && it.duration > 0 }.duration
+    } ?: song.knownDurationMs()
+    LyricsManager.fetchLyrics(
+        songId = song.id,
+        title = song.title,
+        artist = song.artist,
+        durationSec = (durationMs / 1000).toInt(),
+        album = song.album
+    )
+}
+
 @Composable
 fun LyricsPanel(
     player: DesktopPlayer,
@@ -83,19 +103,7 @@ fun LyricsPanel(
     // Fetch lyrics when song changes
     LaunchedEffect(playerState.currentSong?.id) {
         val song = playerState.currentSong ?: return@LaunchedEffect
-        // The live duration is only trusted once it belongs to this song. Waiting on it, rather
-        // than reading whatever is in the state right now, is what stops the lookup going out
-        // with "-1" for every track restored from the queue or picked from the library.
-        val durationMs = withTimeoutOrNull(DURATION_WAIT_MS) {
-            player.state.first { it.currentSong?.id == song.id && it.duration > 0 }.duration
-        } ?: song.knownDurationMs()
-        LyricsManager.fetchLyrics(
-            songId = song.id,
-            title = song.title,
-            artist = song.artist,
-            durationSec = (durationMs / 1000).toInt(),
-            album = song.album
-        )
+        fetchLyricsFor(player, song)
     }
 
     val currentSong = playerState.currentSong
@@ -497,7 +505,7 @@ internal fun currentLineIndex(lines: List<LyricLine>, positionMs: Long): Int {
  * drift. It is capped at one report interval ahead so a stalled stream does not run away.
  */
 @Composable
-private fun rememberSmoothPosition(reportedMs: Long, isPlaying: Boolean, speed: Float): State<Long> {
+internal fun rememberSmoothPosition(reportedMs: Long, isPlaying: Boolean, speed: Float): State<Long> {
     val smooth = remember { mutableLongStateOf(reportedMs) }
     LaunchedEffect(reportedMs, isPlaying, speed) {
         smooth.longValue = reportedMs

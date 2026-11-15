@@ -112,6 +112,9 @@ data class AppPreferences(
     val sponsorBlockEnabled: Boolean = false,
     /** SponsorBlock category names to skip. */
     val sponsorBlockCategories: Set<String> = setOf("music_offtopic", "sponsor", "selfpromo"),
+    // --- Stage and Rewind ---
+    val rewindReminders: Boolean = true,        // offer a Rewind when a year or a busy month closes
+    val rewindPromptsSeen: Set<String> = emptySet(), // offers already made, e.g. "year-2026"
 )
 
 object PreferencesManager {
@@ -226,6 +229,10 @@ object PreferencesManager {
                     sponsorBlockCategories = props.getProperty("sponsorBlockCategories")
                         ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet()
                         ?: setOf("music_offtopic", "sponsor", "selfpromo"),
+                    // --- Stage and Rewind ---
+                    rewindReminders = props.getProperty("rewindReminders")?.toBoolean() ?: true,
+                    rewindPromptsSeen = props.getProperty("rewindPromptsSeen")?.split(',')
+                        ?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet() ?: emptySet(),
                 )
             }
         } catch (e: Exception) {
@@ -301,6 +308,9 @@ object PreferencesManager {
             prefs.listenBrainzUsername?.let { props.setProperty("listenBrainzUsername", it) }
             props.setProperty("sponsorBlockEnabled", prefs.sponsorBlockEnabled.toString())
             props.setProperty("sponsorBlockCategories", prefs.sponsorBlockCategories.sorted().joinToString(","))
+            // --- Stage and Rewind ---
+            props.setProperty("rewindReminders", prefs.rewindReminders.toString())
+            props.setProperty("rewindPromptsSeen", prefs.rewindPromptsSeen.sorted().joinToString(","))
 
             // Write a sibling temp file and rename over the real one, so a crash mid-write
             // can never leave a truncated file (which would load as all defaults).
@@ -574,6 +584,17 @@ object PreferencesManager {
 
     fun setLyricsClickToSeek(enabled: Boolean) {
         _preferences.value = _preferences.value.copy(lyricsClickToSeek = enabled)
+        savePreferences()
+    }
+
+    // --- Stage and Rewind ---
+    fun setRewindReminders(enabled: Boolean) {
+        _preferences.value = _preferences.value.copy(rewindReminders = enabled)
+        savePreferences()
+    }
+
+    fun markRewindPromptSeen(key: String) {
+        _preferences.value = _preferences.value.copy(rewindPromptsSeen = _preferences.value.rewindPromptsSeen + key)
         savePreferences()
     }
 

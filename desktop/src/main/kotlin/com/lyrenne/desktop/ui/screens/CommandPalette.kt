@@ -43,6 +43,8 @@ sealed class PaletteAction(val label: String, val icon: ImageVector, val categor
     data object GoStats : PaletteAction("View Listening Stats", Icons.Default.BarChart, "Navigate")
     data object GoQueue : PaletteAction("Open Queue", PlayerIcons.Queue, "Navigate")
     data object GoLyrics : PaletteAction("Toggle Lyrics", PlayerIcons.Lyrics, "Navigate")
+    data object OpenStage : PaletteAction("Open Stage (full window lyrics)", Icons.Default.Fullscreen, "Navigate")
+    data object OpenRewind : PaletteAction("Open Rewind (your listening recap)", Icons.Default.History, "Navigate")
 
     // Playback
     data object PlayPause : PaletteAction("Play / Pause", Icons.Default.PlayArrow, "Playback")
@@ -93,6 +95,8 @@ fun CommandPalette(
             PaletteAction.GoStats,
             PaletteAction.GoQueue,
             PaletteAction.GoLyrics,
+            PaletteAction.OpenStage,
+            PaletteAction.OpenRewind,
             PaletteAction.PlayPause,
             PaletteAction.NextTrack,
             PaletteAction.PrevTrack,
@@ -292,6 +296,8 @@ private fun executeAction(
             onDismiss()
             return
         }
+        is PaletteAction.OpenStage -> com.lyrenne.desktop.ui.stage.StageMode.open()
+        is PaletteAction.OpenRewind -> com.lyrenne.desktop.ui.stage.RewindMode.open()
         else -> {}
     }
     onNavigate(action)

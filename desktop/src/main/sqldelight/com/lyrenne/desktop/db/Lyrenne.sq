@@ -542,8 +542,7 @@ FROM Event
 INNER JOIN SongArtistMap ON SongArtistMap.songId = Event.songId
 WHERE Event.timestamp >= ? AND Event.timestamp <= ?;
 
--- ============ MOVE IN (MetroList backup import) ============
--- Every write here fills gaps and never overwrites: importing the same backup twice, or one
+-- ============ MOVE IN (MetroList backup import) =====-- Every write here fills gaps and never overwrites: importing the same backup twice, or one
 -- whose songs Lyrenne already knows, must leave what is already here alone.
 
 moveInInsertSong:
@@ -596,3 +595,23 @@ SELECT MAX(position) FROM PlaylistSongMap WHERE playlistId = ?;
 
 moveInEventExists:
 SELECT COUNT(*) FROM Event WHERE timestamp = ? AND songId = ?;
+
+-- --- Stage and Rewind ---
+-- Every play up to a cutoff, for Rewind. Not limited to the period: the biggest-discovery card
+-- needs to know whether an artist was ever played before it.
+rewindPlays:
+SELECT Event.songId, Event.timestamp, Event.playTime, Song.title, Song.thumbnailUrl, Song.albumId,
+       COALESCE(Album.title, Song.albumName) AS albumTitle, Album.thumbnailUrl AS albumThumbnailUrl,
+       Song.duration
+FROM Event
+INNER JOIN Song ON Song.id = Event.songId
+LEFT JOIN Album ON Album.id = Song.albumId
+WHERE Event.timestamp <= ?
+ORDER BY Event.timestamp;
+
+rewindArtists:
+SELECT SongArtistMap.songId, Artist.id, Artist.name, Artist.thumbnailUrl
+FROM SongArtistMap
+INNER JOIN Artist ON Artist.id = SongArtistMap.artistId
+WHERE SongArtistMap.songId IN (SELECT DISTINCT songId FROM Event)
+ORDER BY SongArtistMap.songId, SongArtistMap.position;

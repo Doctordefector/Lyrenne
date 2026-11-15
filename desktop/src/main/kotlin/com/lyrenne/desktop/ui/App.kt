@@ -180,6 +180,8 @@ fun App(player: DesktopPlayer) {
                 // These use modifier keys so they don't conflict with text input.
                 AppShortcuts.preview = preview@{ event ->
                     if (event.type != KeyEventType.KeyDown) return@preview false
+                    // Stage and Rewind cover the app, so their keys come first.
+                    if (com.lyrenne.desktop.ui.stage.handleStageRewindKey(event)) return@preview true
                     when {
                         event.key == Key.Escape -> when {
                             AutoScroll.isActive -> { AutoScroll.stop(); true }
@@ -594,6 +596,9 @@ fun App(player: DesktopPlayer) {
                     }
                 )
             }
+
+            // Stage, Rewind and the Rewind offer, drawn over the whole window.
+            com.lyrenne.desktop.ui.stage.StageRewindHost(player)
         }
     }
 

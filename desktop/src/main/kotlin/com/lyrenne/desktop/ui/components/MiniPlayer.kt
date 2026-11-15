@@ -15,6 +15,7 @@ import androidx.compose.material.icons.automirrored.filled.VolumeDown
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -200,11 +201,21 @@ fun MiniPlayer(
             Spacer(Modifier.width(12.dp))
 
             // ---- Right: lyrics, queue, overflow, volume
+            // Stage gets its own button when the volume slider can spare the room, else a menu entry.
+            val stageInDock = layout.volumeSliderWidth >= 96.dp
             Row(
                 Modifier.weight(1f),
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                if (stageInDock) LabeledPlayerButton(
+                    onClick = com.lyrenne.desktop.ui.stage.StageMode::open,
+                    icon = Icons.Outlined.Fullscreen,
+                    label = "Stage",
+                    contentDescription = "Open Stage",
+                    selected = false,
+                    shortcut = com.lyrenne.desktop.ui.stage.STAGE_SHORTCUT_LABEL
+                )
                 LabeledPlayerButton(
                     onClick = onLyricsClick,
                     icon = PlayerIcons.Lyrics,
@@ -224,7 +235,7 @@ fun MiniPlayer(
 
                 // Speed and the sleep timer are rare, so they live in the overflow at every width.
                 Box {
-                    Tip("Speed and sleep timer") {
+                    Tip(if (stageInDock) "Speed and sleep timer" else "Stage, speed and sleep timer") {
                         IconButton(onClick = { showMoreMenu = true }, modifier = Modifier.size(40.dp)) {
                             // Tinted while a speed or sleep timer is set, so that state stays visible.
                             Icon(
@@ -235,6 +246,12 @@ fun MiniPlayer(
                         }
                     }
                     DropdownMenu(expanded = showMoreMenu, onDismissRequest = { showMoreMenu = false }) {
+                        if (!stageInDock) DropdownMenuItem(
+                            text = { Text("Stage") },
+                            onClick = { showMoreMenu = false; com.lyrenne.desktop.ui.stage.StageMode.open() },
+                            leadingIcon = { Icon(Icons.Outlined.Fullscreen, null) },
+                            trailingIcon = { Text(com.lyrenne.desktop.ui.stage.STAGE_SHORTCUT_LABEL) }
+                        )
                         DropdownMenuItem(
                             text = { Text("Playback speed") },
                             onClick = { showMoreMenu = false; showSpeedMenu = true },
@@ -312,7 +329,7 @@ fun MiniPlayer(
                         },
                         onValueChangeFinished = { PreferencesManager.setVolume(PreferencesManager.preferences.value.volume) },
                         modifier = Modifier
-                            .width(layout.volumeSliderWidth)
+                            .width(if (stageInDock) layout.volumeSliderWidth - 40.dp else layout.volumeSliderWidth)
                             .wheelStep({ PreferencesManager.preferences.value.volume }, 0.05f, onChange = onVolume)
                     )
                 }

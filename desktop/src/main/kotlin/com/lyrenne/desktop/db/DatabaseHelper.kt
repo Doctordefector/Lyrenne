@@ -772,6 +772,11 @@ object DatabaseHelper {
         return queries.getUniqueArtistCountInRange(fromTimestamp, toTimestamp).executeAsOne()
     }
 
+    // --- Stage and Rewind ---
+    fun getRewindPlays(untilMs: Long): List<RewindPlays> = queries.rewindPlays(untilMs).executeAsList()
+
+    fun getRewindArtists(): List<RewindArtists> = queries.rewindArtists().executeAsList()
+
     // ============ Recognition History ============
 
     data class Recognition(

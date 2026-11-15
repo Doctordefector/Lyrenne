@@ -1,0 +1,9 @@
+[
+  {
+    "type": "archive",
+    "only-arches": ["x86_64"],
+    "url": "https://github.com/Doctordefector/Lyrenne/releases/download/v2.20.5/lyrenne-2.20.5-linux-x86_64.tar.gz",
+    "sha256": "5e1b9ff0779f214021daf620a5de5435a8e1dc49b455faae184d25beac7478e6",
+    "dest": "lyrenne"
+  }
+]

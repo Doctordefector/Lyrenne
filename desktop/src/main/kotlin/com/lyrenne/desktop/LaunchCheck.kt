@@ -22,16 +22,21 @@ import kotlin.system.exitProcess
  * winget folder, AppImage on several distros, Flatpak). The result goes to stdout and to
  * `smoke-test.txt` in the data dir, because the Windows launcher is a GUI exe with no console.
  * Exit code 0 means it played.
+ *
+ * `--smoke-url <https url>` additionally streams a file over HTTPS, which proves the bundled TLS
+ * stack trusts the host's certificate store (a Debian-built libVLC on Fedora, say).
  */
 internal object LaunchCheck {
 
-    fun run(): Nothing {
+    /** @param args the whole command line; `--smoke-url <https url>` also streams that URL through libVLC. */
+    fun run(args: Array<String>): Nothing {
         System.setProperty("java.awt.headless", "true")
         val lines = mutableListOf<String>()
         fun say(line: String) { lines += line; println(line) }
 
         val ok = try {
-            check(::say)
+            check(::say) && args.getOrNull(args.indexOf("--smoke-url") + 1)
+                ?.takeIf { "--smoke-url" in args }?.let { stream(it, ::say) } ?: true
         } catch (e: Throwable) {
             say("FAIL: ${e::class.simpleName}: ${e.message}")
             false
@@ -82,13 +87,54 @@ internal object LaunchCheck {
             val s = player.state.value
             if (s.isPlaying && s.position > 1_000) {
                 say("played: ${s.position} ms")
-                return true
+                return mpris(player, say)
             }
             Thread.sleep(100)
         }
         val s = player.state.value
         say("FAIL: playback did not advance (playing=${s.isPlaying}, position=${s.position}, error=${s.error})")
         return false
+    }
+
+    /**
+     * Linux with a session bus: the MPRIS player must come up under its own name. Inside the
+     * Flatpak that proves the manifest lets the app own org.mpris.MediaPlayer2.Lyrenne.
+     */
+    private fun mpris(player: DesktopPlayer, say: (String) -> Unit): Boolean {
+        if (!Platform.isLinux || System.getenv("DBUS_SESSION_BUS_ADDRESS").isNullOrBlank()) return true
+        val session = com.lyrenne.desktop.integration.SystemMediaSession
+        session.initialize(player)
+        val deadline = System.currentTimeMillis() + 5_000
+        while (System.currentTimeMillis() < deadline && !session.active && session.lastFailure == null) Thread.sleep(100)
+        return if (session.active && session.lastFailure == null) {
+            say("mpris: org.mpris.MediaPlayer2.Lyrenne")
+            true
+        } else {
+            say("FAIL: MPRIS session did not come up: ${session.lastFailure}")
+            false
+        }
+    }
+
+    /** Plays [url] straight through libVLC: HTTPS access, TLS trust, demux and decode. */
+    private fun stream(url: String, say: (String) -> Unit): Boolean {
+        val factory = uk.co.caprica.vlcj.factory.MediaPlayerFactory("--no-video")
+        val mp = factory.mediaPlayers().newMediaPlayer()
+        try {
+            mp.media().play(url)
+            val deadline = System.currentTimeMillis() + 30_000
+            while (System.currentTimeMillis() < deadline) {
+                if (mp.status().isPlaying && mp.status().time() > 1_000) {
+                    say("streamed: ${mp.status().time()} ms of $url")
+                    return true
+                }
+                Thread.sleep(100)
+            }
+            say("FAIL: stream did not advance (state=${mp.status().state()}, time=${mp.status().time()}) for $url")
+            return false
+        } finally {
+            mp.release()
+            factory.release()
+        }
     }
 
     /** A 440 Hz tone, so the check needs no fixture file in the package. */

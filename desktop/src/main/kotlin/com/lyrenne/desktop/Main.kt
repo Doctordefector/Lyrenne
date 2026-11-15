@@ -136,7 +136,7 @@ private fun loadResourceImage(name: String): java.awt.image.BufferedImage? = try
 
 fun main(args: Array<String>) {
     // Before crash reporting takes stderr: CI reads this check's output from the console.
-    if ("--smoke-test" in args) LaunchCheck.run()
+    if ("--smoke-test" in args) LaunchCheck.run(args)
     val log = installCrashReporting()
     // Before any window or the media session exists: both are named by the process's app id.
     WindowsAppIdentity.apply()

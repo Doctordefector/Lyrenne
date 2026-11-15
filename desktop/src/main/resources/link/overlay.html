@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Lyrenne overlay</title>
+<link rel="stylesheet" href="/assets/overlay.css">
+</head>
+<body>
+<div id="anchor" class="hidden">
+  <!-- Card: art, title, artist, progress, and the current lyric line -->
+  <section id="card" class="glass">
+    <div class="art"><img alt=""><img alt=""></div>
+    <div class="meta">
+      <div class="title"></div>
+      <div class="artist"></div>
+      <div class="bar"><div class="fill"></div></div>
+      <div class="times"><span class="cur">0:00</span><span class="dur">0:00</span></div>
+    </div>
+    <div class="cardline"></div>
+  </section>
+
+  <!-- Lyrics: karaoke block with a small now-playing caption -->
+  <section id="lyrics">
+    <div class="caption"><img alt=""><span class="ctext"></span></div>
+    <div class="window"><div class="lines"></div></div>
+  </section>
+
+  <!-- Ticker: one slim bar across the top or bottom -->
+  <section id="ticker" class="glass">
+    <img alt="">
+    <span class="label">Now playing</span>
+    <div class="scroll"><span class="ttext"></span></div>
+    <span class="tline"></span>
+    <div class="tbar"><div class="fill"></div></div>
+  </section>
+</div>
+<script src="/assets/link-common.js"></script>
+<script src="/assets/overlay.js"></script>
+</body>
+</html>

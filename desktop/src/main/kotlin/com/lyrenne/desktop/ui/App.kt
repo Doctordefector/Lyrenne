@@ -563,6 +563,9 @@ fun App(player: DesktopPlayer) {
                     )
                 }
 
+                // Lyrenne Link: pairing dialog and its short notices
+                com.lyrenne.desktop.ui.link.LinkHost()
+
                 // Command palette overlay
                 CommandPalette(
                     visible = showCommandPalette,

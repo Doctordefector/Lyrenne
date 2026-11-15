@@ -1316,6 +1316,81 @@ command palette entries.
 - To screenshot it, capture with `CAPTUREBLT` (as for the floating player). To drive hotkeys, send
   `SendInput` key events from another process while another window is foreground.
 
+## Lyrenne Link (stream overlay and phone remote)
+
+A small HTTP server inside the windowed app (`link/`), with plain HTML/CSS/JS pages in
+`resources/link/` (no build step, no CDN: it must work on a LAN with no internet). Settings,
+Integrations, "Lyrenne Link" holds the overlay builder, the remote toggle and the now playing files;
+the Command Palette has "Show phone remote QR" and "Copy OBS overlay URL".
+
+- **Two features, one server.** `/overlay` is an OBS Browser Source (transparent, card, lyrics or
+  ticker layout, query params `layout pos scale accent font lyrics preview`). `/remote` is the phone
+  remote. Nothing listens unless one of them is on: the overlay alone binds `127.0.0.1`, the remote
+  binds every interface. `LyrenneLink.initialize` restarts the server whenever the switches or the
+  port change. Default port 48712 (headless mode is 48711); a busy port moves to the next free one
+  of 20, and Settings and the copied URL show the real one.
+- **Separate from headless mode on purpose.** `Headless.kt` is the Decky plugin's contract (token in
+  a header, no browser pages, its own JSON shapes) and is untouched. Link reuses its approach
+  (`com.sun.net.httpserver`, already in the jlink module list) but has its own routes.
+- **Settings live in `data/link.properties`** (`LinkSettings`), not preferences.properties, so the
+  pairing token never travels with a settings backup, and the feature stays out of a shared file.
+- **Access levels** (`LinkRoutes`): PUBLIC (pages and assets), READ (`/api/now`, `/api/lyrics`,
+  `/events`, `/art`), CONTROL (everything that changes playback, plus queue and search).
+  - **READ needs no token from loopback, and needs it from the LAN.** OBS URLs end up in scene
+    collections, screenshots and screen shares; a token in them would leak the remote's pairing. What
+    READ returns is what the overlay puts on stream anyway. Other machines cannot reach loopback,
+    browsers cannot read it cross-site (no CORS headers, Origin and `Sec-Fetch-Site` checks), and
+    DNS rebinding is stopped by the Host check. A second streaming PC can add `#t=<token>`.
+  - **CONTROL needs the token and the remote switched on**, even from loopback.
+- **Checks on every request** (`LinkSecurity`, all unit tested): Host must be a loopback name, or one
+  of this PC's addresses/hostnames while the remote is on, with our port (DNS rebinding); Origin, when
+  present, must be the same origin; `Sec-Fetch-Site` must be `none` or `same-origin`; POST bodies must
+  be `application/json` (a cross-site form or `text/plain` cannot be sent without a preflight, and
+  preflights are never answered); the token is compared as SHA-256 digests with
+  `MessageDigest.isEqual`; 10 wrong tokens from one address in a minute lock it out for a minute
+  (429). No `Access-Control-*` header is ever sent. HTML pages carry a CSP with `connect-src 'self'`.
+- **Pairing.** The token is 24 random bytes, base64url, made on first load. The QR code (ZXing core,
+  M level, no ECI header since some phone cameras choke on it) carries
+  `http://<lan-ip>:<port>/remote#t=<token>`: a fragment, so it is never sent to the server, logged, or
+  leaked in a Referer. The page keeps it in localStorage and in the URL hash, and asks for
+  `/manifest.webmanifest?t=` so "Add to Home Screen" opens straight back into the pairing.
+  "Forget paired phones" rotates the token and drops every paired event stream at once.
+  - Home-screen install on plain http: iOS honours the manifest and apple meta tags; Android Chrome
+    only makes a full PWA on https, so there it is a browser shortcut. No service worker for the same
+    reason (it needs a secure context).
+- **Live updates are Server-Sent Events, not WebSocket**: one-way is all that is needed, it works with
+  the JDK server, and `EventSource` reconnects by itself. Each stream is owned by its handler thread
+  with its own queue, so a phone that stops reading stalls only itself (256 events behind and it is
+  dropped). Events: `state` on a discrete change (song, play/pause, shuffle, repeat, volume, liked,
+  accent, duration learned) or a detected seek, plus a 5 s heartbeat; `lyrics` when LyricsManager
+  publishes; `queue` (paired pages only). Position is never streamed: pages interpolate it from the
+  last report, so a 200 ms tick never floods anyone. The client watchdog replaces a stream silent for
+  16 s, and reconnects at once when a sleeping phone wakes.
+- **Lyrics without the panel.** The panel is what normally starts a lookup. Link starts it on song
+  change while a page is connected, and when a page connects, with the same wait for the live
+  duration as the panel. Only lyrics whose `songId` matches the playing song are ever sent. The
+  per-song timing offset goes out with the state, so a nudge in the panel reaches the overlay.
+- **Art is proxied** (`/art?v=<id>`), larger size, cached for the last 4 songs, and only ever the
+  playing song's cover: it is not a general image proxy. It lets the pages work on a LAN with no
+  internet and gives the export a cover. The accent colour is `ArtColor`'s, worked out in the app.
+- **Commands run on the UI thread** (`Dispatchers.Main`), as the window's own buttons do, and answer
+  at once; the result arrives as a `state` event. The remote volume slider writes the settings file
+  once it settles, like the VR slider path.
+- **Now playing files** (off by default): `now-playing.txt` ("Artist - Title", empty when nothing is
+  loaded), `now-playing.json` and `cover.jpg` (re-encoded to JPEG when YouTube sends PNG or WebP),
+  written via a temp file and a move. Windows refuses to replace a file another program holds open,
+  so a failed move falls back to a plain write.
+- **Windows Firewall.** Binding beyond loopback makes Windows ask once. The remote switch says so
+  in one line before it is turned on, and the pairing dialog says where to allow it afterwards.
+- **Tests**: `LinkSecurityTest`, `LinkProtocolTest` (routes, SSE encoding, state and lyrics JSON),
+  `LinkServerTest` (the real server on loopback with a fake player: Host/Origin/token/429/415, SSE
+  delivery and token rotation), `NowPlayingExportTest`. `LinkUiSnapshot` (-Psnapshots) renders the
+  Settings section and pairing dialog.
+- **Checking it live**: anonymous playback is refused by YouTube (HTTP 403 from the CDN), so a dev run
+  plays nothing from search. Mark a song downloaded in `build/data/lyrenne.db` with `localPath`
+  pointing at any WAV to get real playback. Headless Edge over CDP takes screenshots of the pages;
+  `msedge --headless --screenshot` alone never finishes while an event stream is open.
+
 ## Version Management
 - **Current version**: v2.20.5
 - **One place**: `desktop/build.gradle.kts` → `lyrenneVersion = "X.Y.Z"`. `processResources` expands it into

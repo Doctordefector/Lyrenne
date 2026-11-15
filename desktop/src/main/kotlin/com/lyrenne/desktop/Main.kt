@@ -331,6 +331,8 @@ private fun runApp() {
             DesktopNotification.initialize(player)
             // Game Mode: global hotkeys and the in-game overlay
             com.lyrenne.desktop.gamemode.GameMode.start(player)
+            // Lyrenne Link: stream overlay and phone remote. Starts nothing unless switched on.
+            com.lyrenne.desktop.link.LyrenneLink.initialize(player)
 
             // Set up tray callbacks for minimize-to-tray
             DesktopNotification.onShowWindow = {

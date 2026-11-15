@@ -331,6 +331,20 @@ class DesktopPlayer {
                 System.setProperty("jna.library.path",
                     if (currentPath.isEmpty()) bundledPath else "$bundledPath${File.pathSeparator}$currentPath")
             }
+            // vlcj's well-known Linux dirs name only the x86 multiarch ones (/usr/lib/x86_64-linux-gnu),
+            // so Debian and Ubuntu on arm64 never found their libvlc in /usr/lib/aarch64-linux-gnu.
+            if (bundledPath == null && Platform.isLinux) {
+                val multiarch = when (System.getProperty("os.arch")) {
+                    "aarch64", "arm64" -> "/usr/lib/aarch64-linux-gnu"
+                    "arm" -> "/usr/lib/arm-linux-gnueabihf"
+                    else -> null
+                }
+                if (multiarch != null && File(multiarch).isDirectory) {
+                    val currentPath = System.getProperty("jna.library.path", "")
+                    System.setProperty("jna.library.path",
+                        if (currentPath.isEmpty()) multiarch else "$currentPath${File.pathSeparator}$multiarch")
+                }
+            }
             // NativeDiscovery checks jna.library.path, system PATH, and standard install locations
             val found = NativeDiscovery().discover()
 

@@ -1242,6 +1242,76 @@ reached any other way, the Downloaded auto playlist included, was streamed, whic
 `DownloadedPlaybackTest` pins it offline, with the lookup (`DesktopPlayer.downloadedFileFor`) and
 the stream (`DesktopPlayer.streamFor`) both stubbed.
 
+## Install anywhere
+
+Users asked for winget and Flathub (MetroList's own issues #4658 and #4723 ask the same of them), so
+Lyrenne installs through the channels people actually use: portable ZIP, Scoop, winget, .deb/.rpm,
+AppImage, Flatpak, on x86_64 and arm64 Linux. Per-channel facts and the submission steps are in
+`packaging/README.md`; this is the design.
+
+### Data placement is decided by who owns the folder (`InstallLocation.kt`)
+- winget deletes its package folder on `winget upgrade` and `winget uninstall` and has no `persist`,
+  which is why the 2026-07 winget submission was withdrawn: the app kept its library and sign-in in that
+  folder. Now a copy in `\WinGet\Packages\` (either scope), in a folder a winget ARP entry names as its
+  InstallLocation (a `--location` install), under Program Files, or in any folder a write probe says
+  the user cannot write, keeps data in `%LOCALAPPDATA%\Lyrenne` and downloads in `~\Music\Lyrenne`.
+- Everything else on Windows stays portable, byte for byte the old behaviour: an unzipped copy and
+  Scoop (whose `persist: data, Downloads` depends on it) keep `data/` and `Downloads/` beside the exe.
+- **Order matters**: winget, then Program Files, then the write probe. Program Files is managed even
+  when writable, or an elevated run would flip the library to a different place. The probe runs only
+  when the path decided nothing, so a portable start costs one temp file as before.
+- The old fallback (an unwritable folder sent data to the working directory, plus a warning dialog) is
+  gone: data now has one stable home, so the dialog had nothing left to warn about.
+- `appDir` is now always the real app folder, never the working directory, so bundled VLC and ffmpeg
+  are found from a read-only install too.
+- No migration between layouts: a portable user who switches to winget copies `data\*` into
+  `%LOCALAPPDATA%\Lyrenne` by hand. Nobody has a winget install yet, so there is nothing to migrate.
+- `InstallLocationTest` pins every row of the table. Change a row only together with the table in
+  `packaging/README.md`, and think about Scoop's `persist` first.
+
+### Updates defer to whoever installed it (`update/UpdateRoute.kt`)
+Self-update only where it owns the files: a portable Windows copy, and a /opt .deb/.rpm (pkexec). winget
+says "Update with: winget upgrade Lyrenne" (rewriting its folder would desync winget's version record),
+Program Files and read-only folders point at the release page, a Flatpak says "flatpak update", an
+AppImage says to download the new one. Linux packages pick the asset for `os.arch`
+(`AutoUpdater.linuxAssetName`), since releases now carry amd64 and arm64 .deb/.rpm.
+
+**Release asset order protects old updaters.** Every Linux build up to 2.20.5 takes the first asset
+ending in `.deb`/`.rpm`, whatever its arch. `release.yml` creates the draft with the x86_64 packages
+and uploads the arm64 ones in a second step, so the x86_64 asset comes first in the API listing.
+Do not merge those two steps.
+
+### Bundled libVLC on Linux (AppImage, Flatpak)
+The .deb/.rpm still depend on the distro VLC. The AppImage and Flatpak carry their own and pass its
+folder in `LYRENNE_VLC_DIR` (`DesktopPlayer.findBundledVlc`). Both are audio-only cuts:
+- AppImage (`packaging/appimage/build-appimage.sh`, in `debian:bookworm`): Debian's security-maintained
+  VLC 3.0.x, an **allowlist** of plugins (HTTPS/DASH access, mp4/mkv/ogg/wav/flac demux, faad for AAC
+  instead of libavcodec, opus/vorbis/flac/mpg123, gnutls, xml, the audio filters and outputs), and their
+  libraries placed by linuxdeploy with rpaths. `AppRun` must not set `LD_LIBRARY_PATH`: sign-in spawns
+  the user's browser, and it would load our libraries.
+- Flatpak: libVLC built from source as a module, AAC through the runtime's ffmpeg-full extension.
+- Neither may carry VLC's `control/` (dbus) module: it would register a second MPRIS player.
+- The MPRIS session is named `Lyrenne` now (`org.mpris.MediaPlayer2.Lyrenne`, the name the Flatpak
+  owns). mediasession-kt's default identity was `mediasessionkt`, which is what desktop widgets showed.
+
+### `Lyrenne --smoke-test` (`LaunchCheck.kt`)
+Headless check for packaged builds: prints the layout decision and data dir, opens the database there,
+loads libVLC through the player's own path, plays a generated tone until the position moves, and (Linux
+with a session bus) brings up the MPRIS session. Each `--smoke-url <url>` also plays that URL; CI passes
+an HTTPS file (proves the bundled TLS trusts the host's certificates) and AAC/Opus/MP3/FLAC files. Output
+goes to stdout and `smoke-test.txt` in the data dir (the Windows exe has no console); exit code 0 = played.
+It runs before crash reporting takes stderr and never opens a window or claims the single instance.
+
+### What CI proves on every release (`release.yml`)
+- Windows: the ZIP unzipped as a portable copy, into a fake winget folder and into Program Files lands
+  each in the right layout; then a real `winget install --manifest`, the app run from PATH, and
+  `winget uninstall` removing the package while `lyrenne.db` survives.
+- AppImage: on clean containers without VLC (Ubuntu 22.04/24.04, Debian 12, Fedora, Arch on x86_64;
+  Ubuntu 22.04/24.04, Fedora on aarch64) the smoke test plays everything and the window opens.
+- arm64 .deb installs on the ubuntu-24.04-arm runner and passes the smoke test; the unit tests run there too.
+- Flatpak: built with flatpak-builder from that commit's distributable, smoke-tested inside the sandbox,
+  window opened, linted with `flatpak-builder-lint`.
+
 ## Version Management
 - **Current version**: v2.20.5
 - **One place**: `desktop/build.gradle.kts` → `lyrenneVersion = "X.Y.Z"`. `processResources` expands it into

@@ -23,20 +23,21 @@ import kotlin.system.exitProcess
  * `smoke-test.txt` in the data dir, because the Windows launcher is a GUI exe with no console.
  * Exit code 0 means it played.
  *
- * `--smoke-url <https url>` additionally streams a file over HTTPS, which proves the bundled TLS
- * stack trusts the host's certificate store (a Debian-built libVLC on Fedora, say).
+ * Each `--smoke-url <url>` additionally plays that URL. Over HTTPS it proves the bundled TLS stack
+ * trusts the host's certificate store (a Debian-built libVLC on Fedora, say); `file://` URLs of
+ * AAC, Opus, MP3 and FLAC files prove the bundled decoders.
  */
 internal object LaunchCheck {
 
-    /** @param args the whole command line; `--smoke-url <https url>` also streams that URL through libVLC. */
+    /** @param args the whole command line; each `--smoke-url <url>` also plays that URL through libVLC. */
     fun run(args: Array<String>): Nothing {
         System.setProperty("java.awt.headless", "true")
         val lines = mutableListOf<String>()
         fun say(line: String) { lines += line; println(line) }
 
         val ok = try {
-            check(::say) && args.getOrNull(args.indexOf("--smoke-url") + 1)
-                ?.takeIf { "--smoke-url" in args }?.let { stream(it, ::say) } ?: true
+            check(::say) && args.indices.filter { args[it] == "--smoke-url" }
+                .mapNotNull { args.getOrNull(it + 1) }.all { stream(it, ::say) }
         } catch (e: Throwable) {
             say("FAIL: ${e::class.simpleName}: ${e.message}")
             false
@@ -117,7 +118,14 @@ internal object LaunchCheck {
 
     /** Plays [url] straight through libVLC: HTTPS access, TLS trust, demux and decode. */
     private fun stream(url: String, say: (String) -> Unit): Boolean {
-        val factory = uk.co.caprica.vlcj.factory.MediaPlayerFactory("--no-video")
+        // libVLC's own errors name the cause (TLS trust, a missing plugin) that a stuck player hides.
+        val errors = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val factory = object : uk.co.caprica.vlcj.factory.MediaPlayerFactory("--no-video") {
+            val log = uk.co.caprica.vlcj.log.NativeLog(libvlcInstance).apply {
+                setLevel(uk.co.caprica.vlcj.log.LogLevel.ERROR)
+                addLogListener { _, module, _, _, _, _, _, message -> if (errors.size < 8) errors += "[$module] $message" }
+            }
+        }
         val mp = factory.mediaPlayers().newMediaPlayer()
         try {
             mp.media().play(url)
@@ -130,8 +138,10 @@ internal object LaunchCheck {
                 Thread.sleep(100)
             }
             say("FAIL: stream did not advance (state=${mp.status().state()}, time=${mp.status().time()}) for $url")
+            errors.forEach { say("  vlc: $it") }
             return false
         } finally {
+            factory.log.release()
             mp.release()
             factory.release()
         }

@@ -36,16 +36,23 @@ cp -a "$DIST" "$APPDIR/Lyrenne"
 # Never ship what a smoke run left behind (same rule as packagePortableZip).
 rm -rf "$APPDIR/Lyrenne/data" "$APPDIR/Lyrenne/Downloads" "$APPDIR/Lyrenne/updates" "$APPDIR/Lyrenne/lyrenne.log"
 
-# libVLC and the plugins. Lyrenne only plays audio, so the categories that draw, show a UI,
-# script, or announce themselves are left out. `control` especially: its dbus module would
-# register a second MPRIS player named "vlc" next to Lyrenne's own.
+# libVLC and only the plugins an audio player uses (an allowlist: vlc-plugin-base carries ~300,
+# and their libraries were most of the image). What YouTube serves is Opus in WebM and AAC in MP4,
+# over HTTPS with DASH; local downloads add MP3, FLAC, Vorbis and WAV. AAC decodes through faad,
+# not libavcodec, which alone would drag in some 60 codec libraries. Never add `control/`: its dbus
+# module registers a second MPRIS player named "vlc" next to Lyrenne's own.
 cp -L "$VLCLIB/libvlc.so.5" "$VLCLIB/libvlccore.so.9" "$APPDIR/usr/lib/"
-cp -a "$VLCLIB/vlc/plugins" "$APPDIR/usr/lib/vlc/"
-for skip in gui video_output video_filter video_splitter visualization spu text_renderer \
-            control lua services_discovery stream_out mux video_chroma; do
-    rm -rf "$APPDIR/usr/lib/vlc/plugins/$skip"
-done
-rm -f "$APPDIR/usr/lib/vlc/plugins/plugins.dat"
+SRC=$VLCLIB/vlc/plugins
+DST=$APPDIR/usr/lib/vlc/plugins
+keep() { dir=$1; shift; mkdir -p "$DST/$dir"; for m in "$@"; do cp "$SRC/$dir/lib${m}_plugin.so" "$DST/$dir/"; done; }
+keep access filesystem http https
+keep demux adaptive mp4 mkv es ogg wav flacsys
+keep codec faad opus vorbis flac mpg123 araw lpcm
+keep misc gnutls logger xml
+keep keystore memory_keystore
+# Small and self-contained, so whole categories: parsing, filters (EQ, normalize, speed), output.
+for dir in packetizer audio_filter audio_mixer stream_filter; do cp -a "$SRC/$dir" "$DST/"; done
+keep audio_output pulse alsa adummy amem afile
 
 # Every library those link, with rpaths pointing inside the AppDir. linuxdeploy leaves out the
 # base system (glibc, libasound, X11, GL, fontconfig...) per the AppImage excludelist.
@@ -75,9 +82,18 @@ ln -sf lyrenne.png "$APPDIR/.DirIcon"
 # The oldest glibc this runs on: the newest GLIBC_ symbol version anything inside requires.
 GLIBC=$(find "$APPDIR" -type f \( -name '*.so*' -o -perm -u+x \) -exec sh -c 'file -b "$1" | grep -q ELF && objdump -T "$1" 2>/dev/null' _ {} \; \
     | grep -o 'GLIBC_[0-9.]*' | sort -u -V | tail -1)
-echo "Requires $GLIBC or newer"
+echo "Requires $GLIBC or newer, because of:"
+find "$APPDIR" -type f -name '*.so*' -exec sh -c 'objdump -T "$1" 2>/dev/null | grep -q "$2" && echo "  ${1#$3/}"' _ {} "$GLIBC" "$APPDIR" \;
 echo "$GLIBC" > "$WORK/glibc.txt"
 echo "Bundled: $(find "$APPDIR/usr/lib" -maxdepth 1 -name '*.so*' | wc -l) libraries, $(find "$APPDIR/usr/lib/vlc/plugins" -name '*.so' | wc -l) VLC plugins"
+
+# Test media in the formats YouTube serves, for CI's smoke test (not part of the AppImage).
+if [ "${LYRENNE_SMOKE_MEDIA:-}" = 1 ]; then
+    apt-get install -y -qq --no-install-recommends ffmpeg >/dev/null
+    for f in m4a:aac webm:libopus mp3:libmp3lame flac:flac; do
+        ffmpeg -loglevel error -y -f lavfi -i "sine=frequency=440:duration=8" -c:a "${f#*:}" "dist/smoke.${f%%:*}"
+    done
+fi
 
 ARCH=$ARCH "$TOOLS/appimagetool" --no-appstream "$APPDIR" "$OUT" >"$WORK/appimagetool.log" 2>&1 || { tail -50 "$WORK/appimagetool.log"; exit 1; }
 ls -l "$OUT"

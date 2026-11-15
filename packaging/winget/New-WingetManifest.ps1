@@ -111,4 +111,7 @@ if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
     return
 }
 winget validate --manifest $dest --disable-interactivity
-if ($LASTEXITCODE -ne 0) { throw "winget validate failed ($LASTEXITCODE)" }
+# 0x8A150028 is "succeeded with warnings". An older winget (CI runners lag) warns that it does not
+# know the newest schema header; winget-pkgs validates with a current one.
+if ($LASTEXITCODE -eq -1978335192) { Write-Warning 'winget validate passed with warnings (see above)'; $global:LASTEXITCODE = 0 }
+elseif ($LASTEXITCODE -ne 0) { throw "winget validate failed ($LASTEXITCODE)" }

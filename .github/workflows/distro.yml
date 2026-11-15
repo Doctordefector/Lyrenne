@@ -107,12 +107,14 @@ jobs:
       - name: Build AppImage
         run: |
           V=$(grep -oP 'val lyrenneVersion = "\K[^"]+' desktop/build.gradle.kts)
-          docker run --rm -v "$PWD:/src" -w /src -e LYRENNE_VERSION=$V debian:bookworm sh packaging/appimage/build-appimage.sh
+          docker run --rm -v "$PWD:/src" -w /src -e LYRENNE_VERSION=$V -e LYRENNE_SMOKE_MEDIA=1 debian:bookworm sh packaging/appimage/build-appimage.sh
           sudo chown -R "$(id -u):$(id -g)" dist build
       - uses: actions/upload-artifact@v4
         with:
           name: appimage-${{ matrix.arch }}
-          path: dist/*.AppImage
+          path: |
+            dist/*.AppImage
+            dist/smoke.*
 
   # The AppImage on clean distros: no VLC anywhere, only what any desktop has (X, fonts, a
   # sound server). It must load its own libVLC, play a file, stream over HTTPS, and open a window.
@@ -138,22 +140,28 @@ jobs:
           name: appimage-${{ matrix.arch }}
       - name: A desktop's basics, without VLC
         run: |
+          # What every desktop has and the AppImage leaves to the host: X11 client libraries,
+          # fontconfig, CA certificates, a sound server. Containers start without them.
           if command -v apt-get >/dev/null; then
-            apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq pulseaudio xvfb xauth fonts-dejavu-core procps >/dev/null
+            apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends               ca-certificates pulseaudio xvfb xauth fontconfig fonts-dejavu-core libxtst6 libxi6 libxrender1 libxext6 libgl1 procps >/dev/null
           elif command -v dnf >/dev/null; then
-            dnf install -y -q pulseaudio xorg-x11-server-Xvfb xorg-x11-xauth dejavu-sans-fonts procps-ng which
+            dnf install -y -q ca-certificates pulseaudio xorg-x11-server-Xvfb xorg-x11-xauth fontconfig dejavu-sans-fonts               libXtst libXi libXrender libXext mesa-libGL procps-ng which
           elif command -v pacman >/dev/null; then
-            pacman -Syu --noconfirm --quiet pulseaudio xorg-server-xvfb xorg-xauth ttf-dejavu procps-ng which
+            pacman -Syu --noconfirm --quiet ca-certificates pulseaudio xorg-server-xvfb xorg-xauth fontconfig ttf-dejavu               libxtst libxi libxrender libxext libglvnd procps-ng which
           fi
           if ldconfig -p | grep libvlc; then echo "::error::VLC is installed, the test would prove nothing"; exit 1; fi
       - name: Smoke test (bundled libVLC plays a file and an HTTPS stream)
         run: |
-          pulseaudio -D --exit-idle-time=-1 2>/dev/null || pulseaudio -D --system --disallow-exit 2>/dev/null || true
+          # Containers run as root, which a per-user PulseAudio refuses; system mode serves root.
+          pulseaudio --system --daemonize --disallow-exit --exit-idle-time=-1 2>/dev/null || true
+          export PULSE_SERVER=unix:/var/run/pulse/native
           chmod +x Lyrenne-*.AppImage
-          APPIMAGE_EXTRACT_AND_RUN=1 ./Lyrenne-*.AppImage --smoke-test --smoke-url "$SMOKE_URL" | tee smoke.log
+          M="file://$PWD/smoke"
+          APPIMAGE_EXTRACT_AND_RUN=1 ./Lyrenne-*.AppImage --smoke-test --smoke-url "$SMOKE_URL"             --smoke-url "$M.m4a" --smoke-url "$M.webm" --smoke-url "$M.mp3" --smoke-url "$M.flac" | tee smoke.log
           grep -q "SMOKE OK" smoke.log
           grep -q "layout: XDG" smoke.log
           grep -q "libvlc file: /tmp/" smoke.log
+          grep -aq "failed to create audio output" smoke.log && echo "::warning::no sound server reachable, playback ran without audio output" || true
       - name: Window opens with the bundled libVLC
         run: |
           DATA="$(getent passwd "$(id -u)" | cut -d: -f6)/.local/share/lyrenne"
@@ -164,7 +172,7 @@ jobs:
           tail -60 run.log
           grep -q "Using bundled VLC" run.log
           grep -q "VLC initialized successfully" run.log
-          ! grep -E "Exception in thread|Fatal|FATAL" run.log
+          ! grep -aE "Exception in thread|Fatal|FATAL" run.log
 
   linux-arm64:
     runs-on: ubuntu-24.04-arm
@@ -200,7 +208,7 @@ jobs:
           cat stdout.log ~/.local/share/lyrenne/lyrenne.log > run.log
           tail -40 run.log
           grep -q "VLC initialized successfully" run.log
-          ! grep -E "Exception in thread|Fatal|FATAL" run.log
+          ! grep -aE "Exception in thread|Fatal|FATAL" run.log
       - uses: actions/upload-artifact@v4
         with:
           name: linux-arm64
@@ -275,7 +283,7 @@ jobs:
           tail -60 run.log
           grep -q "Using bundled VLC" run.log
           grep -q "VLC initialized successfully" run.log
-          ! grep -E "Exception in thread|Fatal|FATAL" run.log
+          ! grep -aE "Exception in thread|Fatal|FATAL" run.log
       - uses: actions/upload-artifact@v4
         with:
           name: flatpak

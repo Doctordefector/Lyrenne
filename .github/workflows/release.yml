@@ -347,8 +347,10 @@ jobs:
       - name: Smoke test inside the sandbox
         run: |
           export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
-          # ~/Music/Lyrenne is the only home folder the sandbox sees, so the test files go there.
-          mkdir -p ~/Music/Lyrenne
+          # ~/Music/Lyrenne is the only home folder the sandbox sees, so the test files go there. A runner
+          # has no XDG user dirs, and flatpak drops xdg-music permissions it cannot resolve; a desktop has them.
+          mkdir -p ~/.config ~/Music/Lyrenne
+          echo 'XDG_MUSIC_DIR="$HOME/Music"' > ~/.config/user-dirs.dirs
           for f in m4a:aac webm:libopus mp3:libmp3lame flac:flac; do
             ffmpeg -loglevel error -y -f lavfi -i "sine=frequency=440:duration=8" -c:a "${f#*:}" "$HOME/Music/Lyrenne/smoke.${f%%:*}"
           done

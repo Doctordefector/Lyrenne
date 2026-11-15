@@ -135,13 +135,15 @@ private fun loadResourceImage(name: String): java.awt.image.BufferedImage? = try
 }
 
 fun main(args: Array<String>) {
+    // Before crash reporting takes stderr: CI reads this check's output from the console.
+    if ("--smoke-test" in args) LaunchCheck.run(args)
     val log = installCrashReporting()
     // Before any window or the media session exists: both are named by the process's app id.
     WindowsAppIdentity.apply()
     com.lyrenne.desktop.mac.MacIntegration.configureEarly()
     try {
         if ("--headless" in args) com.lyrenne.desktop.headless.Headless.run(args)
-        else if ("--smoke-test" in args) SmokeTest.run(args)
+        else if ("--smoke-play" in args) SmokeTest.run(args)
         else runApp()
     } catch (e: Throwable) {
         reportFatal(e, log)
@@ -189,20 +191,6 @@ private fun runApp() {
     applyNetworkPreferences()
     // Seeds the OS light/dark read here, before any window, instead of inside composition.
     com.lyrenne.desktop.ui.theme.SystemTheme.isDark.value
-
-    // A Windows app folder the user cannot write (e.g. unzipped into Program Files) sends data to
-    // the working directory, which changes with how the app is launched. Say so rather than
-    // letting the library appear to vanish between launches.
-    if (AppPaths.appDirNotWritable) {
-        javax.swing.JOptionPane.showMessageDialog(
-            null,
-            "Lyrenne can't write to its folder:\n${AppPaths.appDir}\n\n" +
-                "Settings and your library are being kept in\n${AppPaths.dataDir}\ninstead. " +
-                "Move Lyrenne to a folder you own (e.g. Documents) to keep everything together.",
-            "Lyrenne",
-            javax.swing.JOptionPane.WARNING_MESSAGE
-        )
-    }
 
     // Sweep the login profile: cookie store and caches out, saved passwords in.
     //
@@ -452,7 +440,7 @@ private fun runApp() {
                 when (settled) {
                     is AutoUpdater.UpdateState.UpdateAvailable -> DesktopNotification.notify(
                         "Lyrenne ${settled.version} is available",
-                        "Open Settings to download and install it."
+                        if (AutoUpdater.canSelfUpdate) "Open Settings to download and install it." else AutoUpdater.updateHint
                     )
                     is AutoUpdater.UpdateState.Error ->
                         Timber.i("Launch update check failed: ${settled.message}")

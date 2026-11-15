@@ -1,9 +1,14 @@
 name: release
 
 # Ask for a release by pushing a tag that matches lyrenneVersion (git tag v2.16.1 && git push origin v2.16.1),
-# or with "Run workflow" on the Actions tab, which tags the current commit. Builds the Windows portable
-# ZIP, the Linux .deb/.rpm and the macOS DMGs and attaches them to a DRAFT release: write the notes and publish there.
+# or with "Run workflow" on the Actions tab, which tags the current commit. Builds every package (Windows ZIP,
+# Linux .deb/.rpm/AppImage, macOS DMGs), launch-tests each one on clean machines, and attaches them to a
+# DRAFT release: write the notes and publish there.
 # Drafts are invisible to /releases/latest, so the updater never sees a release before it is published.
+#
+# Built here: Windows portable ZIP (also what Scoop and winget install), Linux .deb/.rpm, AppImage and
+# tarball for x86_64 and aarch64, and a test build of the Flatpak. winget and Flathub themselves are PRs
+# to other repos after publishing: packaging/README.md.
 on:
   push:
     tags: ["v*"]
@@ -11,6 +16,10 @@ on:
 
 permissions:
   contents: write
+
+env:
+  # A small public Ogg file: playing it proves the bundled libVLC's HTTPS and TLS trust work on the host.
+  SMOKE_URL: https://upload.wikimedia.org/wikipedia/commons/c/c8/Example.ogg
 
 jobs:
   version:
@@ -53,14 +62,92 @@ jobs:
             ./gradlew :desktop:packagePortableZip
           fi
 
+      # The manifests for the winget-pkgs PR, hashed from the exact ZIP attached to the draft.
+      - name: winget manifests
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem desktop/build/compose/binaries/main/app/Lyrenne-*-portable.zip | Select-Object -First 1
+          ./packaging/winget/New-WingetManifest.ps1 -ZipPath $zip.FullName
+
+      # Where data lands for each kind of install (InstallLocation): next to the exe when unzipped,
+      # %LOCALAPPDATA%\Lyrenne in a winget folder or Program Files, never inside a managed folder.
+      - name: Layout per install location
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = (Get-ChildItem desktop/build/compose/binaries/main/app/Lyrenne-*-portable.zip | Select-Object -First 1).FullName
+          function Smoke($root, $expectLayout, $expectData) {
+            Remove-Item -Recurse -Force $root -ErrorAction SilentlyContinue
+            New-Item -ItemType Directory -Force $root | Out-Null
+            Expand-Archive $zip $root
+            $p = Start-Process "$root\Lyrenne\Lyrenne.exe" -ArgumentList '--smoke-test',"--smoke-url",$env:SMOKE_URL -Wait -PassThru
+            $out = Get-Content "$expectData\smoke-test.txt"
+            $out | Write-Host
+            if ($p.ExitCode -ne 0) { throw "smoke test failed in $root (exit $($p.ExitCode))" }
+            if (-not ($out -match "^layout: $expectLayout$")) { throw "expected layout $expectLayout" }
+            if ($expectData -ne "$root\Lyrenne\data" -and (Test-Path "$root\Lyrenne\data")) { throw "data written into the app folder $root" }
+            Write-Host "OK: $root -> $expectLayout"
+          }
+          $managed = "$env:LOCALAPPDATA\Lyrenne"
+          Smoke 'C:\portable-test' 'PORTABLE' 'C:\portable-test\Lyrenne\data'
+          Smoke "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\Doctordefector.Lyrenne_CI" 'WINGET' $managed
+          Smoke "$env:ProgramFiles\Lyrenne" 'PROGRAM_FILES' $managed
+
+      # The real thing: winget installs the manifest of the last published release, this build replaces
+      # the package files, runs from PATH, and its library must survive `winget uninstall`.
+      - name: winget install, run, uninstall
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+            Install-Module Microsoft.WinGet.Client -Force -Scope CurrentUser -Repository PSGallery
+            Repair-WinGetPackageManager -Latest -Force
+          }
+          winget --version
+          winget settings --enable LocalManifestFiles
+          # Runner images ship with Defender switched off, and winget reads the failed archive scan as
+          # "malware detected". On a real PC the scan runs; here it is skipped.
+          winget settings --enable LocalArchiveMalwareScanOverride
+          Remove-Item -Recurse -Force "$env:LOCALAPPDATA\Lyrenne" -ErrorAction SilentlyContinue
+          $rel = (Invoke-RestMethod https://api.github.com/repos/Doctordefector/Lyrenne/releases/latest).tag_name.TrimStart('v')
+          ./packaging/winget/New-WingetManifest.ps1 -Version $rel -SkipZipCheck -OutDir "$env:RUNNER_TEMP/wg"
+          winget install --manifest "$env:RUNNER_TEMP/wg/manifests/d/Doctordefector/Lyrenne/$rel" --accept-package-agreements --accept-source-agreements --disable-interactivity --ignore-local-archive-malware-scan
+          if ($LASTEXITCODE -ne 0) { throw "winget install failed ($LASTEXITCODE)" }
+          $pkg = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" -Directory | Where-Object Name -like 'Doctordefector.Lyrenne_*' | Where-Object Name -ne 'Doctordefector.Lyrenne_CI' | Select-Object -First 1
+          Write-Host "Package folder: $($pkg.FullName)"
+          $env:Path = [Environment]::GetEnvironmentVariable('Path','User') + ';' + [Environment]::GetEnvironmentVariable('Path','Machine')
+          $exe = (Get-Command lyrenne).Source
+          Write-Host "lyrenne on PATH: $exe"
+          Expand-Archive (Get-ChildItem desktop/build/compose/binaries/main/app/Lyrenne-*-portable.zip)[0].FullName "$env:RUNNER_TEMP/new"
+          Copy-Item -Recurse -Force "$env:RUNNER_TEMP/new/Lyrenne/*" "$($pkg.FullName)\Lyrenne\"
+          $p = Start-Process $exe -ArgumentList '--smoke-test' -Wait -PassThru
+          Get-Content "$env:LOCALAPPDATA\Lyrenne\smoke-test.txt" | Write-Host
+          if ($p.ExitCode -ne 0) { throw "smoke test from PATH failed" }
+          if (-not (Select-String "$env:LOCALAPPDATA\Lyrenne\smoke-test.txt" -Pattern '^layout: WINGET$')) { throw 'not detected as winget' }
+          # By product code (the ARP key, as winget's own UninstallString does): a --manifest install has no
+          # source to look the id up in. --force: the exe was swapped, so its hash no longer matches the record.
+          winget uninstall --product-code "$($pkg.Name)" --force --disable-interactivity --accept-source-agreements
+          if (Test-Path $pkg.FullName) { throw 'package folder still there after uninstall' }
+          if (-not (Test-Path "$env:LOCALAPPDATA\Lyrenne\lyrenne.db")) { throw 'library did not survive uninstall' }
+          Write-Host 'OK: uninstall removed the package and kept the library'
+
       - uses: actions/upload-artifact@v4
         with:
-          name: windows
+          name: release-windows
           path: desktop/build/compose/binaries/main/app/Lyrenne-*-portable.zip*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: winget-manifests
+          path: packaging/winget/out/manifests/
 
   linux:
     needs: version
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - { runner: ubuntu-latest, arch: x86_64, nfpm: amd64 }
+          - { runner: ubuntu-24.04-arm, arch: aarch64, nfpm: arm64 }
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v5
@@ -69,7 +156,7 @@ jobs:
           java-version: "21"
       - uses: gradle/actions/setup-gradle@v4
       - run: ./gradlew :desktop:createDistributable
-      - name: Package .deb and .rpm
+      - name: Package .deb, .rpm and .tar.gz
         env:
           LYRENNE_VERSION: ${{ needs.version.outputs.v }}
         run: |
@@ -77,11 +164,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y nfpm
           mkdir -p dist
-          nfpm package -f packaging/linux/nfpm.yaml -p deb -t dist/
-          nfpm package -f packaging/linux/nfpm.yaml -p rpm -t dist/
-          # For the Steam Deck plugin (SteamOS can install neither package): the plugin pins this
-          # file's sha256, so it is not signed separately.
-          tar -C desktop/build/compose/binaries/main/app -czf "dist/lyrenne-$LYRENNE_VERSION-linux-x86_64.tar.gz" Lyrenne
+          # One nfpm.yaml for both arches; nfpm names the rpm arch (aarch64) itself.
+          sed 's/^arch: amd64$/arch: ${{ matrix.nfpm }}/' packaging/linux/nfpm.yaml > "$RUNNER_TEMP/nfpm.yaml"
+          nfpm package -f "$RUNNER_TEMP/nfpm.yaml" -p deb -t dist/
+          nfpm package -f "$RUNNER_TEMP/nfpm.yaml" -p rpm -t dist/
+          # For the Steam Deck plugin (SteamOS can install neither package), the AppImage and the
+          # Flatpak: the plugin pins this file's sha256, so it is not signed separately.
+          tar -C desktop/build/compose/binaries/main/app -czf "dist/lyrenne-$LYRENNE_VERSION-linux-${{ matrix.arch }}.tar.gz" Lyrenne
       # The in-app updater installs these through pkexec, so they need a .sig like the ZIP.
       - name: Sign .deb and .rpm
         env:
@@ -94,9 +183,17 @@ jobs:
             done
             rm "$RUNNER_TEMP/update-signing.key"
           fi
+      # The .deb pulls the distro VLC, the app finds it (on arm64 too, in /usr/lib/aarch64-linux-gnu),
+      # plays, streams, and owns its MPRIS name.
+      - name: Install .deb and smoke-run
+        run: |
+          sudo apt-get install -y ./dist/*.deb pulseaudio dbus-x11
+          dbus-run-session -- sh -c 'pulseaudio -D --exit-idle-time=-1; lyrenne --smoke-test --smoke-url "$SMOKE_URL"' | tee smoke.log
+          grep -q "SMOKE OK" smoke.log
+          grep -q "mpris: org.mpris.MediaPlayer2.Lyrenne" smoke.log
       - uses: actions/upload-artifact@v4
         with:
-          name: linux
+          name: release-linux-${{ matrix.arch }}
           path: dist/
 
   # The DMGs for Apple Silicon and Intel, built, signed ad hoc and smoke-tested by macos.yml.
@@ -107,19 +204,205 @@ jobs:
     with:
       release: true
 
+  appimage:
+    needs: [version, linux]
+    strategy:
+      matrix:
+        include:
+          - { runner: ubuntu-latest, arch: x86_64 }
+          - { runner: ubuntu-24.04-arm, arch: aarch64 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-linux-${{ matrix.arch }}
+          path: linux
+      # Built from the same distributable as the packages, inside debian:bookworm (see the script).
+      - name: Build AppImage
+        env:
+          V: ${{ needs.version.outputs.v }}
+        run: |
+          mkdir -p desktop/build/compose/binaries/main/app
+          tar -C desktop/build/compose/binaries/main/app -xzf "linux/lyrenne-$V-linux-${{ matrix.arch }}.tar.gz"
+          docker run --rm -v "$PWD:/src" -w /src -e LYRENNE_VERSION=$V -e LYRENNE_SMOKE_MEDIA=1 debian:bookworm sh packaging/appimage/build-appimage.sh
+          sudo chown -R "$(id -u):$(id -g)" dist build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-appimage-${{ matrix.arch }}
+          path: dist/*.AppImage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: smoke-media-${{ matrix.arch }}
+          path: dist/smoke.*
+
+  # The AppImage on clean distros: no VLC anywhere, only what any desktop has (X, fonts, CA
+  # certificates, a sound server). It must load its own libVLC, play a file, stream over HTTPS,
+  # decode what YouTube serves (AAC, Opus) plus MP3 and FLAC, and open a window.
+  appimage-test:
+    needs: appimage
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-latest, arch: x86_64, image: "ubuntu:22.04" }
+          - { runner: ubuntu-latest, arch: x86_64, image: "ubuntu:24.04" }
+          - { runner: ubuntu-latest, arch: x86_64, image: "debian:bookworm" }
+          - { runner: ubuntu-latest, arch: x86_64, image: "fedora:latest" }
+          - { runner: ubuntu-latest, arch: x86_64, image: "archlinux:latest" }
+          - { runner: ubuntu-24.04-arm, arch: aarch64, image: "ubuntu:22.04" }
+          - { runner: ubuntu-24.04-arm, arch: aarch64, image: "ubuntu:24.04" }
+          - { runner: ubuntu-24.04-arm, arch: aarch64, image: "fedora:latest" }
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.image }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-appimage-${{ matrix.arch }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: smoke-media-${{ matrix.arch }}
+      - name: A desktop's basics, without VLC
+        run: |
+          if command -v apt-get >/dev/null; then
+            apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+              ca-certificates pulseaudio xvfb xauth fontconfig fonts-dejavu-core libxtst6 libxi6 libxrender1 libxext6 libgl1 procps >/dev/null
+          elif command -v dnf >/dev/null; then
+            dnf install -y -q ca-certificates pulseaudio xorg-x11-server-Xvfb xorg-x11-xauth fontconfig dejavu-sans-fonts \
+              libXtst libXi libXrender libXext mesa-libGL procps-ng which
+          elif command -v pacman >/dev/null; then
+            pacman -Syu --noconfirm --quiet ca-certificates pulseaudio xorg-server-xvfb xorg-xauth fontconfig ttf-dejavu \
+              libxtst libxi libxrender libxext libglvnd procps-ng which
+          fi
+          if ldconfig -p | grep libvlc; then echo "::error::VLC is installed, the test would prove nothing"; exit 1; fi
+      - name: Smoke test
+        run: |
+          # Containers run as root, which a per-user PulseAudio refuses; system mode serves root.
+          pulseaudio --system --daemonize --disallow-exit --exit-idle-time=-1 2>/dev/null || true
+          export PULSE_SERVER=unix:/var/run/pulse/native
+          chmod +x Lyrenne-*.AppImage
+          M="file://$PWD/smoke"
+          APPIMAGE_EXTRACT_AND_RUN=1 ./Lyrenne-*.AppImage --smoke-test --smoke-url "$SMOKE_URL" \
+            --smoke-url "$M.m4a" --smoke-url "$M.webm" --smoke-url "$M.mp3" --smoke-url "$M.flac" | tee smoke.log
+          grep -q "SMOKE OK" smoke.log
+          grep -q "layout: XDG" smoke.log
+          grep -q "libvlc file: /tmp/" smoke.log
+          grep -aq "failed to create audio output" smoke.log && echo "::warning::no sound server reachable, playback ran without audio output" || true
+      - name: Window opens with the bundled libVLC
+        run: |
+          DATA="$(getent passwd "$(id -u)" | cut -d: -f6)/.local/share/lyrenne"
+          mkdir -p "$DATA"
+          echo "onboardingCompleted=true" > "$DATA/preferences.properties"
+          APPIMAGE_EXTRACT_AND_RUN=1 timeout 60 xvfb-run -a ./Lyrenne-*.AppImage > stdout.log 2>&1 || true
+          cat stdout.log "$DATA/lyrenne.log" > run.log || true
+          tail -60 run.log
+          grep -q "Using bundled VLC" run.log
+          grep -q "VLC initialized successfully" run.log
+          ! grep -aE "Exception in thread|Fatal|FATAL" run.log
+
+  # The arm64 .rpm on Fedora, whose VLC lives in /usr/lib64.
+  rpm-arm64:
+    needs: linux
+    runs-on: ubuntu-24.04-arm
+    container: fedora:latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-linux-aarch64
+          path: dist
+      - name: Install .rpm and smoke-run
+        run: |
+          dnf install -y -q ./dist/*.rpm
+          lyrenne --smoke-test | tee smoke.log
+          grep -q "SMOKE OK" smoke.log
+
+  # Not attached: Flathub builds its own from the flathub repo. This proves the manifest in
+  # packaging/flatpak builds and runs against this release's tarball before anyone submits it.
+  flatpak:
+    needs: [version, linux]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-linux-x86_64
+          path: linux
+      - name: Install flatpak-builder
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq flatpak flatpak-builder xvfb pulseaudio dbus-x11 ffmpeg >/dev/null
+          # Ubuntu 24.04 blocks the unprivileged user namespaces bubblewrap needs.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+      - name: Build from this release's tarball
+        env:
+          V: ${{ needs.version.outputs.v }}
+        run: |
+          cp "linux/lyrenne-$V-linux-x86_64.tar.gz" packaging/flatpak/lyrenne-local.tar.gz
+          echo '[{"type": "archive", "path": "lyrenne-local.tar.gz", "dest": "lyrenne"}]' > packaging/flatpak/lyrenne-sources.json
+          flatpak-builder --user --install-deps-from=flathub --install --force-clean --repo=repo \
+            --mirror-screenshots-url=https://dl.flathub.org/media/ \
+            build packaging/flatpak/io.github.doctordefector.Lyrenne.yml
+          # The runtime's codecs-extra extension (full FFmpeg, for AAC) should have come with it.
+          flatpak list --user --runtime --columns=application,branch
+      - name: Lint (Flathub's linter)
+        continue-on-error: true
+        run: |
+          flatpak install --user -y --noninteractive flathub org.flatpak.Builder
+          git checkout packaging/flatpak/lyrenne-sources.json
+          flatpak run --command=flatpak-builder-lint org.flatpak.Builder manifest packaging/flatpak/io.github.doctordefector.Lyrenne.yml
+          flatpak run --command=flatpak-builder-lint org.flatpak.Builder repo repo
+      - name: Smoke test inside the sandbox
+        run: |
+          export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+          # ~/Music/Lyrenne is the only home folder the sandbox sees, so the test files go there. A runner
+          # has no XDG user dirs, and flatpak drops xdg-music permissions it cannot resolve; a desktop has them.
+          mkdir -p ~/.config ~/Music/Lyrenne
+          echo 'XDG_MUSIC_DIR="$HOME/Music"' > ~/.config/user-dirs.dirs
+          for f in m4a:aac webm:libopus mp3:libmp3lame flac:flac; do
+            ffmpeg -loglevel error -y -f lavfi -i "sine=frequency=440:duration=8" -c:a "${f#*:}" "$HOME/Music/Lyrenne/smoke.${f%%:*}"
+          done
+          M="file://$HOME/Music/Lyrenne/smoke"
+          dbus-run-session -- sh -c "pulseaudio -D --exit-idle-time=-1; flatpak run io.github.doctordefector.Lyrenne --smoke-test --smoke-url '$SMOKE_URL' --smoke-url '$M.m4a' --smoke-url '$M.webm' --smoke-url '$M.mp3' --smoke-url '$M.flac'" 2>&1 | tee smoke.log
+          ! grep -aq "stale plugins cache" smoke.log
+          grep -q "SMOKE OK" smoke.log
+          grep -q "layout: XDG" smoke.log
+          grep -q "data dir: $HOME/.var/app/io.github.doctordefector.Lyrenne/data/lyrenne" smoke.log
+          grep -q "update route: Update with: flatpak update" smoke.log
+          grep -q "mpris: org.mpris.MediaPlayer2.Lyrenne" smoke.log
+      - name: Window opens
+        run: |
+          DATA=$HOME/.var/app/io.github.doctordefector.Lyrenne/data/lyrenne
+          mkdir -p "$DATA"
+          echo "onboardingCompleted=true" > "$DATA/preferences.properties"
+          timeout 60 xvfb-run -a flatpak run io.github.doctordefector.Lyrenne > stdout.log 2>&1 || true
+          cat stdout.log "$DATA/lyrenne.log" > run.log || true
+          tail -60 run.log
+          grep -q "Using bundled VLC" run.log
+          grep -q "VLC initialized successfully" run.log
+          ! grep -aE "Exception in thread|Fatal|FATAL" run.log
+
   release:
-    needs: [version, windows, linux, macos]
+    needs: [version, windows, linux, macos, appimage, appimage-test, rpm-arm64, flatpak]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
+          pattern: release-*
           path: dist
           merge-multiple: true
+      # Two steps on purpose. Linux builds up to 2.20.5 update to the FIRST asset ending in .deb or
+      # .rpm, whatever its arch, so the x86_64 packages must be uploaded before the arm64 ones.
+      # Do not merge these into one `gh release create dist/*`.
       - name: Create draft release
         env:
           GH_TOKEN: ${{ github.token }}
           V: ${{ needs.version.outputs.v }}
         run: |
           ls -l dist
+          mkdir later
+          mv dist/*arm64.deb* dist/*aarch64.rpm* later/
           gh release create "v$V" dist/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --draft --title "Lyrenne v$V" --notes "Draft: write the notes, then publish."
+          gh release upload "v$V" later/* --repo "$GITHUB_REPOSITORY"
+          gh release view "v$V" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name'

@@ -58,11 +58,11 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: macos-${{ matrix.arch }}
+          name: release-macos-${{ matrix.arch }}
           path: dist/*.dmg
 
       # Logs and a screenshot of the running app, for looking at a Mac build without a Mac.
-      # Not in release runs: release.yml attaches every artifact of the run to the draft.
+      # Not in release runs. release.yml only attaches release-* artifacts, but the logs are noise there.
       - uses: actions/upload-artifact@v4
         if: always() && !inputs.release
         with:

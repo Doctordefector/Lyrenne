@@ -37,13 +37,21 @@ object AutoUpdater {
         ?: error("version.properties missing from the build")
 
     /**
-     * Windows replaces itself. On Linux the install belongs to the package manager under a
-     * root-owned /opt, so an update downloads the signed .rpm/.deb and hands it to dnf/apt through
-     * pkexec. Anything else on Linux (a dev run, an unpacked tree) only points at the release page.
-     * macOS never self-updates: replacing a signed .app in place breaks its seal, and the
-     * PowerShell path must never run there. It only links the release page ("Download").
+     * A portable Windows copy replaces itself. On Linux the install belongs to the package manager
+     * under a root-owned /opt, so an update downloads the signed .rpm/.deb and hands it to dnf/apt
+     * through pkexec. Everything else (winget, Program Files, Flatpak, AppImage, a dev run) says how
+     * to update instead: see [UpdateRoute]. macOS never self-updates: replacing a signed .app in
+     * place breaks its seal, and the PowerShell path must never run there.
      */
-    val canSelfUpdate: Boolean get() = Platform.isWindows || linuxPackage != null
+    private val route: UpdateRoute by lazy {
+        if (Platform.isMac) UpdateRoute(false, "Download the new DMG and drag Lyrenne into Applications again")
+        else UpdateRoute.decide(Platform.isWindows, com.lyrenne.desktop.AppPaths.layout.kind, linuxPackage, System.getenv())
+    }
+
+    val canSelfUpdate: Boolean get() = route.canSelfUpdate
+
+    /** What to do instead when [canSelfUpdate] is false, e.g. "Update with: winget upgrade Lyrenne". */
+    val updateHint: String get() = route.hint
 
     /** "rpm" or "deb" when this copy is the one the lyrenne package installed in /opt, else null. */
     private val linuxPackage: String? by lazy {
@@ -160,7 +168,8 @@ object AutoUpdater {
                 Timber.i("Install mode: ${linuxPackage ?: if (portable) "portable" else "installed"}")
 
                 val asset = if (linuxPackage != null) {
-                    release.assets.find { it.name.endsWith(".$linuxPackage") }
+                    linuxAssetName(release.assets.map { it.name }, linuxPackage!!, System.getProperty("os.arch"))
+                        ?.let { name -> release.assets.first { it.name == name } }
                 } else if (portable) {
                     // Portable: need the ZIP
                     release.assets.find {
@@ -661,6 +670,21 @@ object AutoUpdater {
     }
 
     // ==================== Helpers ====================
+
+    /**
+     * The .deb or .rpm for this machine's architecture. Releases carry both x86_64 and arm64
+     * packages, and an arm64 machine handed the amd64 one gets an install failure from dnf/apt.
+     * nfpm names them `lyrenne_X_amd64.deb` / `lyrenne_X_arm64.deb` and
+     * `lyrenne-X-1.x86_64.rpm` / `lyrenne-X-1.aarch64.rpm`.
+     */
+    internal fun linuxAssetName(names: List<String>, pkg: String, osArch: String?): String? {
+        val arm = osArch == "aarch64" || osArch == "arm64"
+        val tag = when (pkg) {
+            "deb" -> if (arm) "_arm64.deb" else "_amd64.deb"
+            else -> if (arm) ".aarch64.rpm" else ".x86_64.rpm"
+        }
+        return names.firstOrNull { it.endsWith(tag) }
+    }
 
     internal fun isNewerVersion(latest: String, current: String): Boolean {
         val lParts = latest.split(".").mapNotNull { it.toIntOrNull() }

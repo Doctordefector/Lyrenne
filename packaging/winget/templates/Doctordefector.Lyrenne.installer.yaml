@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.12.0.schema.json
+
+PackageIdentifier: Doctordefector.Lyrenne
+PackageVersion: {{VERSION}}
+InstallerType: zip
+NestedInstallerType: portable
+# The launcher needs the app/ and runtime/ folders beside it, so winget puts the folder on PATH
+# instead of a symlink to the exe.
+ArchiveBinariesDependOnPath: true
+MinimumOSVersion: 10.0.0.0
+ReleaseDate: {{RELEASE_DATE}}
+Installers:
+- Architecture: x64
+  NestedInstallerFiles:
+  - RelativeFilePath: Lyrenne/Lyrenne.exe
+    PortableCommandAlias: lyrenne
+  InstallerUrl: https://github.com/Doctordefector/Lyrenne/releases/download/v{{VERSION}}/Lyrenne-{{VERSION}}-portable.zip
+  InstallerSha256: {{SHA256}}
+ManifestType: installer
+ManifestVersion: 1.12.0

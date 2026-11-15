@@ -10,7 +10,7 @@ import java.io.File
 import kotlin.system.exitProcess
 
 /**
- * `Lyrenne --smoke-test <audio file>...`: proves a packaged build can play, with no window and no
+ * `Lyrenne --smoke-play <audio file>...`: proves a packaged build can play, with no window and no
  * network. Loads libvlc the way the app does, plays each file until its position passes one
  * second, prints one line per file, and exits 0 only if every file played.
  *
@@ -24,9 +24,9 @@ import kotlin.system.exitProcess
 object SmokeTest {
     fun run(args: Array<String>) {
         System.setProperty("java.awt.headless", "true")
-        val files = args.dropWhile { it != "--smoke-test" }.drop(1).filter { !it.startsWith("--") }.map(::File)
+        val files = args.dropWhile { it != "--smoke-play" }.drop(1).filter { !it.startsWith("--") }.map(::File)
         val requireBundled = "--require-bundled-vlc" in args
-        if (files.isEmpty()) fail("usage: Lyrenne --smoke-test [--require-bundled-vlc] <audio file>...")
+        if (files.isEmpty()) fail("usage: Lyrenne --smoke-play [--require-bundled-vlc] <audio file>...")
         files.firstOrNull { !it.isFile }?.let { fail("no such file: $it") }
 
         DatabaseHelper.initialize()

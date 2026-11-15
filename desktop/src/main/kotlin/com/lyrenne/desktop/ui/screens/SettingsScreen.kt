@@ -1311,8 +1311,7 @@ fun SettingsScreen(
                                             )
                                             Text(
                                                 if (AutoUpdater.canSelfUpdate) "Download size: ${formatBytes(state.downloadSize)}"
-                                                else if (com.lyrenne.desktop.Platform.isMac) "Download the new DMG and drag Lyrenne into Applications again"
-                                                else "Update it with your package manager",
+                                                else AutoUpdater.updateHint,
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )

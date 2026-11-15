@@ -1,0 +1,9 @@
+#!/bin/sh
+# AppImage entry point. The bundled libVLC is handed to the app by name (LYRENNE_VLC_DIR) and
+# finds its plugins through VLC_PLUGIN_PATH. LD_LIBRARY_PATH is deliberately NOT set: the app
+# launches the user's browser for sign-in, xdg-open and pkexec, and those must load the host's
+# libraries, not ours. The bundled ones find each other through their rpaths instead.
+HERE="$(dirname "$(readlink -f "$0")")"
+export LYRENNE_VLC_DIR="$HERE/usr/lib"
+export VLC_PLUGIN_PATH="$HERE/usr/lib/vlc/plugins"
+exec "$HERE/Lyrenne/bin/Lyrenne" "$@"

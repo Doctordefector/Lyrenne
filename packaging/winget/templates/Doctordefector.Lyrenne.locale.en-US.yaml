@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.12.0.schema.json
+
+PackageIdentifier: Doctordefector.Lyrenne
+PackageVersion: {{VERSION}}
+PackageLocale: en-US
+Publisher: Doctordefector
+PublisherUrl: https://github.com/Doctordefector
+PublisherSupportUrl: https://github.com/Doctordefector/Lyrenne/issues
+PackageName: Lyrenne
+PackageUrl: https://github.com/Doctordefector/Lyrenne
+License: GPL-3.0-only
+LicenseUrl: https://github.com/Doctordefector/Lyrenne/blob/main/LICENSE
+ShortDescription: A free, open source YouTube Music player for your desktop.
+Description: |-
+  Lyrenne is a native YouTube Music player for Windows and Linux, written in Compose Desktop.
+  It is not a browser wrapper: it has its own VLC-based player, local database and sync layer.
+
+  Sign in with your own account and it plays your real library, with two-way sync of liked
+  songs, albums, artists and playlists. Synced lyrics, a 10-band equalizer, crossfade,
+  downloads, Discord Rich Presence, Last.fm scrobbling, Listen Together rooms and a mini player.
+
+  VLC, ffmpeg and a Java runtime are bundled, so there is nothing else to install. Installed
+  through winget, Lyrenne keeps your library, sign-in and settings in %LOCALAPPDATA%\Lyrenne,
+  so upgrading or uninstalling the package never touches them.
+
+  Lyrenne is not affiliated with YouTube, Google or Alphabet.
+Moniker: lyrenne
+Tags:
+- discord-rich-presence
+- lastfm
+- lyrics
+- music
+- music-player
+- open-source
+- youtube
+- youtube-music
+- ytmusic
+ReleaseNotesUrl: https://github.com/Doctordefector/Lyrenne/releases/tag/v{{VERSION}}
+ManifestType: defaultLocale
+ManifestVersion: 1.12.0

@@ -320,8 +320,9 @@ class DesktopPlayer {
 
     private fun initializeVlc() {
         try {
-            // Windows: try the VLC bundled in the app folder first. Linux: never bundled, the
-            // distro's libvlc is found by NativeDiscovery in /usr/lib and friends.
+            // Windows: try the VLC bundled in the app folder first. Linux: the AppImage and Flatpak
+            // bundle one (LYRENNE_VLC_DIR); the .deb/.rpm use the distro's libvlc, which
+            // NativeDiscovery finds in /usr/lib and friends.
             val bundledVlcDir = findBundledVlc()
             val bundledPath = bundledVlcDir?.absolutePath
             if (bundledPath != null) {
@@ -330,6 +331,20 @@ class DesktopPlayer {
                 val currentPath = System.getProperty("jna.library.path", "")
                 System.setProperty("jna.library.path",
                     if (currentPath.isEmpty()) bundledPath else "$bundledPath${File.pathSeparator}$currentPath")
+            }
+            // vlcj's well-known Linux dirs name only the x86 multiarch ones (/usr/lib/x86_64-linux-gnu),
+            // so Debian and Ubuntu on arm64 never found their libvlc in /usr/lib/aarch64-linux-gnu.
+            if (bundledPath == null && Platform.isLinux) {
+                val multiarch = when (System.getProperty("os.arch")) {
+                    "aarch64", "arm64" -> "/usr/lib/aarch64-linux-gnu"
+                    "arm" -> "/usr/lib/arm-linux-gnueabihf"
+                    else -> null
+                }
+                if (multiarch != null && File(multiarch).isDirectory) {
+                    val currentPath = System.getProperty("jna.library.path", "")
+                    System.setProperty("jna.library.path",
+                        if (currentPath.isEmpty()) multiarch else "$currentPath${File.pathSeparator}$multiarch")
+                }
             }
             // NativeDiscovery checks jna.library.path, system PATH, and standard install locations
             val found = NativeDiscovery().discover()
@@ -356,6 +371,7 @@ class DesktopPlayer {
     }
 
     private fun vlcMissingMessage(bundled: Boolean): String = when {
+        Platform.isLinux && bundled -> "The VLC bundled with Lyrenne failed to load. Download Lyrenne again."
         Platform.isLinux -> "Lyrenne needs VLC. Install it with your package manager, e.g. " +
             "sudo apt install vlc / sudo dnf install vlc / sudo pacman -S vlc. " +
             "The Snap and Flatpak versions of VLC can't be used."
@@ -380,6 +396,9 @@ class DesktopPlayer {
                 File(com.lyrenne.desktop.AppPaths.appDir, "app/resources/vlc/lib"),
             ).firstOrNull { File(it, "libvlc.dylib").exists() }
         }
+        // The AppImage's AppRun and the Flatpak's wrapper name the folder holding their own libvlc.
+        if (Platform.isLinux) return System.getenv("LYRENNE_VLC_DIR")?.let(::File)
+            ?.takeIf { dir -> dir.listFiles()?.any { it.name.startsWith("libvlc.so") } == true }
         if (!Platform.isWindows) return null
         // Check for bundled VLC in app resources (Compose Desktop native distribution)
         val candidates = listOf(

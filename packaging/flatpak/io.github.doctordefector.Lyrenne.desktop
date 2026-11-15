@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Lyrenne
+GenericName=Music Player
+Comment=YouTube Music player for your desktop
+Exec=lyrenne
+Icon=io.github.doctordefector.Lyrenne
+Terminal=false
+Categories=AudioVideo;Audio;Player;
+Keywords=music;youtube;player;lyrics;
+StartupWMClass=com-lyrenne-desktop-MainKt

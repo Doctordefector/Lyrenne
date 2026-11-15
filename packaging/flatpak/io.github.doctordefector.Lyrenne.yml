@@ -1,0 +1,153 @@
+# Flathub manifest for Lyrenne. Build locally with:
+#   flatpak-builder --user --install-deps-from=flathub --install --force-clean build packaging/flatpak/io.github.doctordefector.Lyrenne.yml
+# Submission steps: packaging/README.md, "Flathub".
+app-id: io.github.doctordefector.Lyrenne
+runtime: org.freedesktop.Platform
+runtime-version: '26.08'
+sdk: org.freedesktop.Sdk
+command: lyrenne
+
+finish-args:
+  - --share=network
+  # The window is AWT, which only speaks X11 (XWayland on a Wayland session).
+  - --share=ipc
+  - --socket=x11
+  # Hardware-accelerated drawing (Skia over OpenGL).
+  - --device=dri
+  # Playback; PipeWire desktops serve this through pipewire-pulse.
+  - --socket=pulseaudio
+  # The default downloads folder (~/Music/Lyrenne), and nothing else of the home folder.
+  - --filesystem=xdg-music/Lyrenne:create
+  # Media keys and desktop media controls.
+  - --own-name=org.mpris.MediaPlayer2.Lyrenne
+  # Song-change and update notifications (notify-send).
+  - --talk-name=org.freedesktop.Notifications
+  # Discord Rich Presence: Discord's IPC socket, native or Flatpak Discord.
+  - --filesystem=xdg-run/discord-ipc-0
+  - --filesystem=xdg-run/app/com.discordapp.Discord:create
+
+# AAC decodes through libavcodec. Since 25.08 the runtime brings the full FFmpeg itself (its
+# codecs-extra extension, downloaded with the runtime), so there is no ffmpeg-full extension to add
+# here any more. Opus, Vorbis, FLAC and MP3 have their own decoders and need nothing extra.
+
+cleanup:
+  - /include
+  - /lib/pkgconfig
+  - /share/doc
+  - /share/man
+  - '*.la'
+  - '*.a'
+cleanup-commands:
+  # libVLC's plugin cache, so it does not scan every plugin on each start. Generated here, after
+  # flatpak-builder strips the binaries: a cache made before that records the unstripped sizes and
+  # libVLC throws all of it away as stale. The patch on the vlc module makes it ignore mtimes, which
+  # ostree resets on install.
+  - rm -f /app/lib/vlc/plugins/plugins.dat
+  - /app/lib/vlc/vlc-cache-gen /app/lib/vlc/plugins
+
+modules:
+  # Matroska/WebM, which YouTube's Opus audio comes in: VLC's mkv demuxer needs libebml and
+  # libmatroska, and libebml needs utfcpp's headers (it would git-clone them, with no network).
+  - name: utfcpp
+    buildsystem: cmake-ninja
+    builddir: true
+    config-opts:
+      - -DUTF8CPP_ENABLE_TESTS=OFF
+    cleanup:
+      - '*'
+    sources:
+      - type: archive
+        url: https://github.com/nemtrif/utfcpp/archive/refs/tags/v4.0.9.tar.gz
+        sha256: 397a9a2a6ed5238f854f490b0177b840abc6b62571ec3e07baa0bb94d3f14d5a
+
+  - name: libebml
+    buildsystem: cmake-ninja
+    builddir: true
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DBUILD_SHARED_LIBS=ON
+      - -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    sources:
+      - type: archive
+        url: https://dl.matroska.org/downloads/libebml/libebml-1.4.7.tar.xz
+        sha256: 5b08214f929ee54c6187c370f84235fc9d0f2a2258c4d320d68eae6e2bdfd3f7
+        x-checker-data:
+          type: anitya
+          project-id: 7879
+          url-template: https://dl.matroska.org/downloads/libebml/libebml-$version.tar.xz
+
+  - name: libmatroska
+    buildsystem: cmake-ninja
+    builddir: true
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DBUILD_SHARED_LIBS=ON
+      - -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    sources:
+      - type: archive
+        url: https://dl.matroska.org/downloads/libmatroska/libmatroska-1.7.2.tar.xz
+        sha256: f3e4d406daf7f1399962c43940e4a87de089474d5bcfbf2e6ca516e98bb87cfc
+        x-checker-data:
+          type: anitya
+          project-id: 1657
+          url-template: https://dl.matroska.org/downloads/libmatroska/libmatroska-$version.tar.xz
+
+  # libVLC only: no player UI, no video output, no Lua, no D-Bus control (which would register
+  # a second MPRIS player named "vlc" next to Lyrenne's own).
+  - name: vlc
+    config-opts:
+      - BUILDCC=/usr/bin/gcc -std=gnu99
+      - --disable-vlc
+      - --disable-qt
+      - --disable-skins2
+      - --disable-lua
+      - --disable-a52
+      - --disable-dbus
+      - --disable-xcb
+      - --disable-wayland
+      - --disable-vdpau
+      - --disable-libva
+      - --disable-ncurses
+      - --disable-avahi
+      - --disable-chromecast
+      - --disable-update-check
+      - --disable-nls
+    cleanup:
+      - /bin
+      - /share/applications
+      - /share/icons
+      - /share/kde4
+      - /share/macosx
+      - /share/metainfo
+      - /share/vlc/lua
+    sources:
+      - type: archive
+        url: https://download.videolan.org/videolan/vlc/3.0.24/vlc-3.0.24.tar.xz
+        sha256: e7cab503d1d7d5849b89d2cf0e1ee60d0ef6d012407791b644b9cfc0cc225fdf
+        x-checker-data:
+          type: anitya
+          project-id: 6504
+          versions:
+            '>=': '3'
+            <: '4'
+          url-template: https://download.videolan.org/videolan/vlc/$version/vlc-$version.tar.xz
+      - type: patch
+        path: vlc-ignore-time-for-cache.patch
+
+  # The release's Linux build (app plus its own Java runtime), as attached to each GitHub release.
+  - name: lyrenne
+    buildsystem: simple
+    build-commands:
+      - cp -a lyrenne /app/lib/lyrenne
+      - install -Dm755 lyrenne.sh /app/bin/lyrenne
+      - install -Dm644 io.github.doctordefector.Lyrenne.desktop -t /app/share/applications
+      - install -Dm644 io.github.doctordefector.Lyrenne.metainfo.xml -t /app/share/metainfo
+      - install -Dm644 lyrenne/lib/Lyrenne.png /app/share/icons/hicolor/512x512/apps/io.github.doctordefector.Lyrenne.png
+    sources:
+      - lyrenne-sources.json
+      - type: file
+        path: lyrenne.sh
+      - type: file
+        path: io.github.doctordefector.Lyrenne.desktop
+      - type: file
+        path: io.github.doctordefector.Lyrenne.metainfo.xml

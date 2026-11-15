@@ -1,7 +1,7 @@
 #!/bin/bash
 # CI check of a built DMG, run on a macOS runner (there is no Mac to look at otherwise):
 #  1. the DMG mounts and its Lyrenne.app has a valid signature,
-#  2. --smoke-test plays a WAV and an AAC .m4a (the codec YouTube streams use) through the libvlc
+#  2. --smoke-play plays a WAV and an AAC .m4a (the codec YouTube streams use) through the libvlc
 #     inside the bundle, and fails if libvlc came from anywhere else,
 #  3. the app starts with its window, writes its data to ~/Library/Application Support/Lyrenne,
 #     logs no exceptions, and quits through the macOS quit handler (the Cmd+Q path).
@@ -39,7 +39,7 @@ EOF
 afconvert -f m4af -d aac "$WORK/tone.wav" "$WORK/tone.m4a"
 mkdir -p "$DATA"
 echo "onboardingCompleted=true" > "$DATA/preferences.properties"
-"$APP/Contents/MacOS/Lyrenne" --smoke-test --require-bundled-vlc "$WORK/tone.wav" "$WORK/tone.m4a" 2>&1 | tee "$DIAG/smoke.txt"
+"$APP/Contents/MacOS/Lyrenne" --smoke-play --require-bundled-vlc "$WORK/tone.wav" "$WORK/tone.m4a" 2>&1 | tee "$DIAG/smoke.txt"
 cp "$DATA/lyrenne.log" "$DIAG/smoke-lyrenne.log" || true
 grep -q "SMOKE OK" "$DIAG/smoke.txt"
 # libvlc says so on stderr when plugins.dat does not match the plugins (see package.sh, signing).

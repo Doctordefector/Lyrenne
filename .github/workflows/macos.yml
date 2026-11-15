@@ -1,0 +1,72 @@
+name: macos
+
+# The macOS build, for Apple Silicon and Intel. There is no Mac to test on, so this is the test:
+# unit tests and the browser sign-in plumbing on macOS, then the packaged DMG is mounted, its
+# bundled libvlc plays a WAV and an AAC file, and the app opens its window and quits cleanly
+# (packaging/macos/smoke.sh). release.yml calls this with release: true to put the DMGs in the draft.
+on:
+  push:
+    branches: [main, feat/macos]
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      release:
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+
+      # -Pci skips the *SmokeTest classes (real YouTube / OS APIs). LYRENNE_MAC_E2E runs
+      # MacBrowserE2ETest against the runner's own Firefox and Chrome.
+      - name: Test and build the app
+        env:
+          LYRENNE_MAC_E2E: "1"
+        run: ./gradlew -Pci :desktop:test :desktop:createDistributable
+
+      - name: Browser sign-in tests ran, not skipped
+        run: |
+          R=desktop/build/test-results/test/TEST-com.lyrenne.desktop.auth.MacBrowserE2ETest.xml
+          cat "$R" | head -5
+          grep -q 'failures="0" errors="0"' "$R"
+          grep -q 'tests="3" skipped="0"' "$R"
+
+      - name: Package DMG
+        run: |
+          V=$(sed -n 's/^val lyrenneVersion = "\(.*\)"/\1/p' desktop/build.gradle.kts)
+          bash packaging/macos/package.sh "$V"
+
+      - name: Smoke test the DMG
+        run: bash packaging/macos/smoke.sh dist/*.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}
+          path: dist/*.dmg
+
+      # Logs and a screenshot of the running app, for looking at a Mac build without a Mac.
+      # Not in release runs: release.yml attaches every artifact of the run to the draft.
+      - uses: actions/upload-artifact@v4
+        if: always() && !inputs.release
+        with:
+          name: diag-macos-${{ matrix.arch }}
+          path: |
+            diag/
+            desktop/build/test-results/test/*.xml
+          if-no-files-found: ignore

@@ -158,7 +158,8 @@ left to the host, per the AppImage excludelist.
   Flatpak the sign-in screen finds no browser and offers "Advanced: paste a cookie" instead.
 - CI builds it with `flatpak-builder` from that commit's distributable, runs `--smoke-test` inside the
   sandbox (plays, streams, data under `~/.var/app/...`, MPRIS name owned), opens the window, and runs
-  `flatpak-builder-lint`.
+  `flatpak-builder-lint`. The manifest lints clean; the repo lint reports the screenshot and icon
+  as "not mirrored", which only Flathub's own build does, so that is expected from any local build.
 
 ### Submitting to Flathub (first time)
 

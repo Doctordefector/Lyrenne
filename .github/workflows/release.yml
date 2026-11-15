@@ -11,7 +11,6 @@ name: release
 on:
   push:
     tags: ["v*"]
-    branches: [feat/distro]  # BRANCH-ONLY, remove before merging
   workflow_dispatch:
 
 permissions:
@@ -376,7 +375,6 @@ jobs:
 
   release:
     needs: [version, windows, linux, appimage, appimage-test, rpm-arm64, flatpak]
-    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'  # BRANCH-ONLY, remove before merging
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

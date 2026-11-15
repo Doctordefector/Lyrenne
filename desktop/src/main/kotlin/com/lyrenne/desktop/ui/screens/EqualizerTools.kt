@@ -46,6 +46,11 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.semantics.contentDescription
@@ -110,14 +115,22 @@ internal fun fmtDb(v: Float): String = String.format(Locale.ROOT, "%.1f", v).rep
  */
 @Composable
 internal fun DbField(value: Float, onCommit: (Float) -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, label: String) {
-    var text by remember(value) { mutableStateOf(fmtDb(value)) }
+    var field by remember(value) { mutableStateOf(TextFieldValue(fmtDb(value))) }
     var focused by remember { mutableStateOf(false) }
+    // Clicking a number selects it, so typing replaces it. After the click has placed its cursor,
+    // or the click would undo the selection.
+    LaunchedEffect(focused) {
+        if (focused) {
+            delay(30)
+            field = field.copy(selection = TextRange(0, field.text.length))
+        }
+    }
     fun commit() {
-        val v = text.replace(',', '.').replace("+", "").trim().toFloatOrNull()
-        if (v == null) text = fmtDb(value)
+        val v = field.text.replace(',', '.').replace("+", "").trim().toFloatOrNull()
+        if (v == null) field = TextFieldValue(fmtDb(value))
         else {
             val clamped = ((v.coerceIn(-20f, 20f) * 10).roundToInt() / 10f)
-            text = fmtDb(clamped)
+            field = TextFieldValue(fmtDb(clamped), TextRange(fmtDb(clamped).length))
             if (clamped != value) onCommit(clamped)
         }
     }
@@ -128,8 +141,8 @@ internal fun DbField(value: Float, onCommit: (Float) -> Unit, modifier: Modifier
         modifier = modifier
     ) {
         BasicTextField(
-            value = text,
-            onValueChange = { new -> if (new.length <= 6 && new.all { it.isDigit() || it in "-+.," }) text = new },
+            value = field,
+            onValueChange = { new -> if (new.text.length <= 6 && new.text.all { it.isDigit() || it in "-+.," }) field = new },
             enabled = enabled,
             singleLine = true,
             textStyle = TextStyle(fontSize = 12.sp, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurface),
@@ -141,9 +154,10 @@ internal fun DbField(value: Float, onCommit: (Float) -> Unit, modifier: Modifier
                 .semantics { contentDescription = label }
                 .onFocusChanged { f -> if (focused && !f.isFocused) commit(); focused = f.isFocused }
                 .onPreviewKeyEvent { e ->
+                    if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     when (e.key) {
                         Key.Enter, Key.NumPadEnter -> { commit(); true }
-                        Key.Escape -> { text = fmtDb(value); false }
+                        Key.Escape -> { field = TextFieldValue(fmtDb(value)); false }
                         else -> false
                     }
                 }

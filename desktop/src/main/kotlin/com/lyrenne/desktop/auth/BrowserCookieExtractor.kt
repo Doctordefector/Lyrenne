@@ -29,7 +29,11 @@ sealed class CookieExtractResult {
  * Chromium's scheme differs per OS. Windows: AES-256-GCM under a DPAPI-wrapped key in
  * `Local State`. Linux: AES-128-CBC under a key derived from a fixed password, *when the browser
  * is launched with `--password-store=basic`* (`v10`); otherwise the key lives in the desktop
- * keyring (`v11`), which this deliberately does not touch. Firefox stores cookies unencrypted.
+ * keyring (`v11`), which this deliberately does not touch. macOS: AES-128-CBC like Linux, under a
+ * key derived from a password in the login Keychain ("Chrome Safe Storage"), which macOS only hands
+ * over after asking the user. The login browser is launched with `--use-mock-keychain`, so its
+ * password is the fixed "mock_password" and no prompt is needed; the real Keychain entry is the
+ * fallback if a browser ignores the flag. Firefox stores cookies unencrypted.
  */
 object BrowserCookieExtractor {
 
@@ -51,6 +55,13 @@ object BrowserCookieExtractor {
         }
         val cookieMap = read.cookies
         val hasAuth = cookieMap.containsKey("SAPISID") || cookieMap.containsKey("__Secure-3PAPISID")
+        if (!hasAuth && read.keyringBlocked && Platform.isMac) {
+            return CookieExtractResult.Error(
+                "Lyrenne couldn't unlock $browserName's cookies. If macOS asked about " +
+                    "\"${macSafeStorageService(browserName)}\", choose Always Allow and try again. " +
+                    "Or sign in with Firefox, or paste your cookie under Advanced."
+            )
+        }
         if (!hasAuth && read.keyringBlocked) {
             return CookieExtractResult.Error(
                 "$browserName saved its cookies in the desktop keyring (it ignored " +
@@ -68,7 +79,12 @@ object BrowserCookieExtractor {
     }
 
     /** Decrypted YouTube/Google cookies, or a [CookieExtractResult.Error]. Split out for the e2e test. */
-    internal fun readChromiumCookies(cookieDbPath: File, localStatePath: File, browserName: String): Any {
+    internal fun readChromiumCookies(
+        cookieDbPath: File,
+        localStatePath: File,
+        browserName: String,
+        allowKeychain: Boolean = true
+    ): Any {
         Timber.i("Extracting cookies from $browserName: db=$cookieDbPath")
         // Linux has no key in Local State: v10 values use the fixed basic-store key instead.
         val masterKey = if (Platform.isWindows) {
@@ -85,7 +101,10 @@ object BrowserCookieExtractor {
         // v20 keys are SYSTEM-DPAPI-scoped, so user-space decryption is impossible by design.
         var appBoundBlocked = false
         // Linux: a v11 cookie means the keyring was used, i.e. --password-store=basic was dropped.
+        // macOS: a v10 cookie neither the mock key nor the Keychain's key opens.
         var keyringBlocked = false
+        // Asked at most once per read, and only if the mock key fails: this is what prompts.
+        val keychainKey by lazy { if (allowKeychain) macKeychainKey(browserName) else null }
         try {
             Class.forName("org.sqlite.JDBC")
             DriverManager.getConnection("jdbc:sqlite:${tempDb.absolutePath}").use { conn ->
@@ -106,6 +125,8 @@ object BrowserCookieExtractor {
                     val value = when {
                         encryptedValue != null && encryptedValue.size > 3 ->
                             if (masterKey != null) decryptCookieValue(encryptedValue, masterKey)
+                            else if (Platform.isMac) decryptCbcV10(encryptedValue, macMockKey)
+                                ?: keychainKey?.let { decryptCbcV10(encryptedValue, it) }
                             else decryptLinuxV10(encryptedValue)
                         !plainValue.isNullOrBlank() -> plainValue
                         else -> null
@@ -113,7 +134,7 @@ object BrowserCookieExtractor {
 
                     val prefix = if (encryptedValue != null && encryptedValue.size >= 3) String(encryptedValue, 0, 3) else null
                     if (value == null && prefix == "v20") appBoundBlocked = true
-                    if (value == null && masterKey == null && prefix == "v11") keyringBlocked = true
+                    if (value == null && masterKey == null && prefix == (if (Platform.isMac) "v10" else "v11")) keyringBlocked = true
 
                     if (!value.isNullOrBlank()) {
                         val safe = value.filter { it.code >= 0x20 && it.code != 0x7F }
@@ -178,6 +199,27 @@ object BrowserCookieExtractor {
         }
         Timber.i("$browserName: found ${cookieMap.size} cookies (keys: ${cookieMap.keys.take(10)})")
         return cookieMap
+    }
+
+    /**
+     * Whether [db] (a Chromium `Cookies` or Firefox `cookies.sqlite`) holds a YouTube session
+     * cookie yet. By name and domain only: nothing is decrypted, so no Keychain is asked.
+     */
+    fun hasYouTubeSession(db: File, kind: BrowserKind): Boolean {
+        val copy = copyDatabase(db) ?: return false
+        return try {
+            Class.forName("org.sqlite.JDBC")
+            val (table, host) = if (kind == BrowserKind.FIREFOX) "moz_cookies" to "host" else "cookies" to "host_key"
+            DriverManager.getConnection("jdbc:sqlite:${copy.absolutePath}").use { conn ->
+                conn.prepareStatement(
+                    "SELECT COUNT(*) FROM $table WHERE $host LIKE '%youtube.com' AND name IN ('SAPISID', '__Secure-3PAPISID')"
+                ).executeQuery().use { it.next() && it.getInt(1) > 0 }
+            }
+        } catch (_: Exception) {
+            false
+        } finally {
+            deleteCopy(copy)
+        }
     }
 
     /**
@@ -347,28 +389,67 @@ object BrowserCookieExtractor {
      * Linux Chromium with `--password-store=basic`: AES-128-CBC, IV of 16 spaces, key from
      * PBKDF2-SHA1("peanuts", "saltysalt", 1 iteration). All fixed in Chromium's source.
      */
-    private val linuxV10Key: ByteArray by lazy {
+    private fun cbcKey(password: String, iterations: Int): ByteArray =
         SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1")
-            .generateSecret(PBEKeySpec("peanuts".toCharArray(), "saltysalt".toByteArray(), 1, 128))
+            .generateSecret(PBEKeySpec(password.toCharArray(), "saltysalt".toByteArray(), iterations, 128))
             .encoded
+
+    private val linuxV10Key: ByteArray by lazy { cbcKey("peanuts", 1) }
+
+    /**
+     * macOS Chromium: the same AES-128-CBC, keyed by PBKDF2-SHA1 of the Safe Storage password with
+     * 1003 iterations. Under `--use-mock-keychain` that password is the fixed "mock_password".
+     */
+    internal val macMockKey: ByteArray by lazy { cbcKey("mock_password", 1003) }
+
+    private fun cbcCipher(mode: Int, key: ByteArray): Cipher = Cipher.getInstance("AES/CBC/PKCS5Padding").apply {
+        init(mode, SecretKeySpec(key, "AES"), IvParameterSpec(ByteArray(16) { ' '.code.toByte() }))
     }
 
-    private fun linuxV10Cipher(mode: Int): Cipher = Cipher.getInstance("AES/CBC/PKCS5Padding").apply {
-        init(mode, SecretKeySpec(linuxV10Key, "AES"), IvParameterSpec(ByteArray(16) { ' '.code.toByte() }))
-    }
+    internal fun decryptLinuxV10(encrypted: ByteArray): String? = decryptCbcV10(encrypted, linuxV10Key)
 
-    internal fun decryptLinuxV10(encrypted: ByteArray): String? {
+    internal fun decryptCbcV10(encrypted: ByteArray, key: ByteArray): String? {
         if (encrypted.size <= 3 || String(encrypted, 0, 3) != "v10") return null
         return try {
-            stripBindingHash(linuxV10Cipher(Cipher.DECRYPT_MODE).doFinal(encrypted, 3, encrypted.size - 3))
+            stripBindingHash(cbcCipher(Cipher.DECRYPT_MODE, key).doFinal(encrypted, 3, encrypted.size - 3))
         } catch (_: Exception) {
             null
         }
     }
 
     /** What Linux Chromium writes for [plain]; the tests build fixtures with it. */
-    internal fun encryptLinuxV10(plain: ByteArray): ByteArray =
-        "v10".toByteArray() + linuxV10Cipher(Cipher.ENCRYPT_MODE).doFinal(plain)
+    internal fun encryptLinuxV10(plain: ByteArray): ByteArray = encryptCbcV10(plain, linuxV10Key)
+
+    /** What Chromium writes for [plain] under [key] (Linux basic store, or macOS); for test fixtures. */
+    internal fun encryptCbcV10(plain: ByteArray, key: ByteArray): ByteArray =
+        "v10".toByteArray() + cbcCipher(Cipher.ENCRYPT_MODE, key).doFinal(plain)
+
+    /** The login Keychain item each Chromium browser keeps its cookie password in. */
+    internal fun macSafeStorageService(browserName: String): String = when (browserName) {
+        "Chrome" -> "Chrome Safe Storage"
+        "Edge" -> "Microsoft Edge Safe Storage"
+        "Brave" -> "Brave Safe Storage"
+        "Vivaldi" -> "Vivaldi Safe Storage"
+        else -> "Chromium Safe Storage"
+    }
+
+    /**
+     * The real Safe Storage password, through `security`. macOS shows its own dialog asking
+     * whether to allow this, so it is only reached when the mock key did not open a cookie.
+     */
+    private fun macKeychainKey(browserName: String): ByteArray? {
+        val service = macSafeStorageService(browserName)
+        Timber.i("Mock key did not open $browserName's cookies, asking the Keychain for \"$service\"")
+        return try {
+            val p = ProcessBuilder("security", "find-generic-password", "-w", "-s", service)
+                .redirectError(ProcessBuilder.Redirect.DISCARD).start()
+            val password = p.inputStream.bufferedReader().readText().trim()
+            if (p.waitFor() == 0 && password.isNotEmpty()) cbcKey(password, 1003) else null
+        } catch (e: Exception) {
+            Timber.w("Keychain read failed: ${e.message}")
+            null
+        }
+    }
 
     private fun stripBindingHash(decrypted: ByteArray): String {
         val HASH_LEN = 32

@@ -30,8 +30,7 @@ object BrowserLoginHelper {
     fun findLoginBrowser(): LoginBrowser? = when {
         Platform.isWindows -> findWindowsBrowser()
         Platform.isLinux -> findLinuxBrowser()
-        Platform.isMac -> File("/Applications/Firefox.app/Contents/MacOS/firefox").takeIf { it.exists() }
-            ?.let { LoginBrowser(BrowserKind.FIREFOX, it, "Firefox", defaultProfileDir()) }
+        Platform.isMac -> findMacBrowser()
         else -> null
     }
 
@@ -39,7 +38,43 @@ object BrowserLoginHelper {
     val supportedBrowserNames: String get() = when {
         Platform.isWindows -> "Edge, Chrome, Brave or Firefox"
         Platform.isLinux -> "Firefox, LibreWolf, Chrome, Chromium, Edge, Brave or Vivaldi (native, snap or Flatpak)"
+        Platform.isMac -> "Firefox, LibreWolf, Chrome, Edge, Brave, Chromium or Vivaldi"
         else -> "Firefox"
+    }
+
+    /**
+     * macOS: Lyrenne closes the sign-in browser itself once the session cookies are on disk. Closing
+     * a Mac browser's window leaves it running, so "close the browser" was a step people would get
+     * wrong; the UI says what happens instead.
+     */
+    val closesBrowserItself: Boolean get() = Platform.isMac
+
+    /** The last sign-in step, in the words this platform needs. */
+    fun finishStep(browserName: String): String =
+        if (closesBrowserItself) "Once you are signed in, Lyrenne closes $browserName for you and takes it from there."
+        else "Close $browserName completely. Lyrenne picks it up from there."
+
+    /**
+     * macOS: Firefox first (plaintext cookies), then the Chromium family, launched with
+     * `--use-mock-keychain` so its cookies use a fixed key instead of one from the login Keychain
+     * (see [BrowserCookieExtractor]). In /Applications or ~/Applications.
+     */
+    private fun findMacBrowser(): LoginBrowser? {
+        val roots = listOf(File("/Applications"), File(System.getProperty("user.home"), "Applications"))
+        val candidates = listOf(
+            Triple(BrowserKind.FIREFOX, "Firefox", "Firefox.app/Contents/MacOS/firefox"),
+            Triple(BrowserKind.FIREFOX, "LibreWolf", "LibreWolf.app/Contents/MacOS/librewolf"),
+            Triple(BrowserKind.CHROMIUM, "Chrome", "Google Chrome.app/Contents/MacOS/Google Chrome"),
+            Triple(BrowserKind.CHROMIUM, "Edge", "Microsoft Edge.app/Contents/MacOS/Microsoft Edge"),
+            Triple(BrowserKind.CHROMIUM, "Brave", "Brave Browser.app/Contents/MacOS/Brave Browser"),
+            Triple(BrowserKind.CHROMIUM, "Chromium", "Chromium.app/Contents/MacOS/Chromium"),
+            Triple(BrowserKind.CHROMIUM, "Vivaldi", "Vivaldi.app/Contents/MacOS/Vivaldi"),
+        )
+        for ((kind, name, path) in candidates) {
+            val exe = roots.map { File(it, path) }.firstOrNull { it.isFile } ?: continue
+            return LoginBrowser(kind, exe, name, defaultProfileDir())
+        }
+        return null
     }
 
     private fun findWindowsBrowser(): LoginBrowser? {
@@ -160,7 +195,9 @@ object BrowserLoginHelper {
     fun pruneLoginProfile() {
         for (dir in allProfileDirs()) {
             // A sign-in still open in the browser (the headless copy restarted under it) keeps its cookies.
-            if (liveLock(dir.toPath().resolve("lock")) || liveLock(dir.toPath().resolve("SingletonLock"))) {
+            if (liveLock(dir.toPath().resolve("lock")) || liveLock(dir.toPath().resolve("SingletonLock")) ||
+                fcntlHeld(File(dir, ".parentlock"))
+            ) {
                 Timber.i("Login profile ${dir.name} is open in a browser, not pruning")
                 continue
             }
@@ -289,7 +326,10 @@ object BrowserLoginHelper {
             )
         }
 
-        onStatus("Sign in to YouTube Music, then close $browserName.")
+        onStatus(
+            if (closesBrowserItself) "Sign in to YouTube Music in $browserName. Lyrenne closes it when you're done."
+            else "Sign in to YouTube Music, then close $browserName."
+        )
 
         // Wait for the browser to close (user closes it after signing in)
         // Check every 2 seconds, timeout after 10 minutes
@@ -297,6 +337,16 @@ object BrowserLoginHelper {
         while (process.isAlive && waited < 600) {
             delay(2000)
             waited += 2
+            if (closesBrowserItself && waited % 4 == 0 && hasYouTubeSession(browser)) {
+                onStatus("Signed in. Closing $browserName...")
+                // The session cookie lands first; give the rest of the sign-in a moment.
+                delay(4000)
+                // SIGTERM: both browsers treat it as a normal quit and flush their cookie store.
+                process.destroy()
+                withTimeoutOrNull(15_000) { while (process.isAlive) delay(250) }
+                if (process.isAlive) process.destroyForcibly()
+                break
+            }
         }
 
         if (process.isAlive) {
@@ -328,6 +378,9 @@ object BrowserLoginHelper {
             "--disable-default-apps",
             // Linux: keep cookies out of the desktop keyring, under the fixed v10 key instead.
             "--password-store=basic".takeIf { Platform.isLinux },
+            // macOS: the same idea. A fixed key instead of the login Keychain's "Chrome Safe
+            // Storage" entry, so reading the cookies needs no Keychain prompt.
+            "--use-mock-keychain".takeIf { Platform.isMac },
             // Device Bound Session Credentials (Chrome 146+ on Windows, Edge with it) tie Google's
             // session cookies to a TPM key only this browser holds, and keep them short-lived so
             // the binding is re-proved every few minutes. Copied into credentials.json they cannot
@@ -381,8 +434,10 @@ object BrowserLoginHelper {
                 if (linkExists("lock")) return true
                 // Windows: parent.lock stays on disk, but is held exclusively while Firefox runs.
                 val parentLock = File(dir, "parent.lock")
-                Platform.isWindows && parentLock.exists() &&
+                if (Platform.isWindows) parentLock.exists() &&
                     runCatching { RandomAccessFile(parentLock, "rw").close() }.isFailure
+                // macOS: .parentlock stays on disk too, holding an fcntl lock while Firefox runs.
+                else fcntlHeld(File(dir, ".parentlock"))
             }
         }
     }
@@ -405,6 +460,24 @@ object BrowserLoginHelper {
         val target = runCatching { Files.readSymbolicLink(link).toString() }.getOrNull() ?: return true
         val pid = Regex("""(\d+)$""").find(target)?.groupValues?.get(1)?.toLongOrNull() ?: return true
         return ProcessHandle.of(pid).map { it.isAlive }.orElse(false)
+    }
+
+    /** A POSIX record lock some other process holds on [file]; Java's tryLock is the same fcntl call. */
+    private fun fcntlHeld(file: File): Boolean = !Platform.isWindows && file.exists() && runCatching {
+        RandomAccessFile(file, "rw").use { raf -> raf.channel.tryLock().also { it?.release() } == null }
+    }.getOrDefault(false)
+
+    /**
+     * Whether the profile's cookie store already holds a YouTube session. Only looks for the
+     * cookie by name and domain, so nothing is decrypted and no Keychain is asked.
+     */
+    internal fun hasYouTubeSession(browser: LoginBrowser): Boolean {
+        val db = when (browser.kind) {
+            BrowserKind.FIREFOX -> File(browser.profileDir, "cookies.sqlite")
+            BrowserKind.CHROMIUM -> File(browser.profileDir, "Default/Network/Cookies").takeIf { it.exists() }
+                ?: File(browser.profileDir, "Default/Cookies")
+        }
+        return db.exists() && BrowserCookieExtractor.hasYouTubeSession(db, browser.kind)
     }
 
     private fun readCookiesFromProfile(browser: LoginBrowser): CookieExtractResult {

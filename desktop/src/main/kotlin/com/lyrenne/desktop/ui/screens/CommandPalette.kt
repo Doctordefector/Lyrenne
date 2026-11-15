@@ -51,6 +51,10 @@ sealed class PaletteAction(val label: String, val icon: ImageVector, val categor
     data object ToggleShuffle : PaletteAction("Toggle Shuffle", PlayerIcons.Shuffle, "Playback")
     data object ToggleRepeat : PaletteAction("Toggle Repeat", Icons.Default.Repeat, "Playback")
 
+    // --- Sound and scrobbling ---
+    data object ToggleSponsorBlock : PaletteAction("Turn SponsorBlock skipping on or off", Icons.Default.ContentCut, "Playback")
+    data object HeadphoneEq : PaletteAction("Correct my headphones (AutoEQ)", Icons.Default.Headphones, "Navigate")
+
     // Songs from library
     data class PlaySong(val song: SongInfo) : PaletteAction("Play: ${song.title}", Icons.Default.MusicNote, "Songs")
 }
@@ -84,6 +88,8 @@ fun CommandPalette(
             PaletteAction.PrevTrack,
             PaletteAction.ToggleShuffle,
             PaletteAction.ToggleRepeat,
+            PaletteAction.ToggleSponsorBlock,
+            PaletteAction.HeadphoneEq,
         )
     }
 
@@ -253,6 +259,16 @@ private fun executeAction(
         is PaletteAction.PrevTrack -> { /* handled via onNavigate */ }
         is PaletteAction.ToggleShuffle -> player.toggleShuffle()
         is PaletteAction.ToggleRepeat -> player.toggleRepeat()
+        is PaletteAction.ToggleSponsorBlock -> com.lyrenne.desktop.settings.PreferencesManager.let {
+            it.setSponsorBlockEnabled(!it.preferences.value.sponsorBlockEnabled)
+        }
+        is PaletteAction.HeadphoneEq -> {
+            // Opens the equalizer with the headphone search already up
+            AutoEqLauncher.request()
+            onNavigate(PaletteAction.GoEqualizer)
+            onDismiss()
+            return
+        }
         else -> {}
     }
     onNavigate(action)

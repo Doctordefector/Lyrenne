@@ -48,7 +48,7 @@ import javax.swing.JFileChooser
 const val SETTINGS_SECTION_UPDATES = "section:Updates"
 
 /** Text typed into the Settings filter; [SettingsItem] rows that do not match it hide. */
-private val LocalSettingsFilter = compositionLocalOf { "" }
+internal val LocalSettingsFilter = compositionLocalOf { "" }
 
 @Composable
 fun SettingsScreen(
@@ -492,6 +492,8 @@ fun SettingsScreen(
                         }
                     )
                 }
+
+                sponsorBlockSettings(preferences)
 
                 item(key = "group:Lyrics") {
                     SettingsGroupHeader("Lyrics")
@@ -944,6 +946,8 @@ fun SettingsScreen(
                         Spacer(Modifier.height(8.dp))
                     }
                 }
+
+                listenBrainzSettings(preferences)
 
                 if (com.lyrenne.desktop.Platform.isWindows) item(key = "section:Windows") {
                     SettingsSectionHeader("Windows")
@@ -1494,7 +1498,7 @@ private fun SettingsGroupHeader(title: String) {
 
 /** A heading inside a group (Privacy, Last.fm, Updates). */
 @Composable
-private fun SettingsSectionHeader(title: String) {
+internal fun SettingsSectionHeader(title: String) {
     if (LocalSettingsFilter.current.isNotBlank()) return
     Text(
         text = title,
@@ -1505,7 +1509,7 @@ private fun SettingsSectionHeader(title: String) {
 }
 
 @Composable
-private fun SettingsItem(
+internal fun SettingsItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
     subtitle: String,

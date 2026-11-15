@@ -1468,6 +1468,97 @@ in upstream's own schema JSON (`metrolist13-schema35.sql`, `metrolist14-schema65
 `-data.sql` files beside them. `MoveInSnapshot` and `MoveInEndToEnd` (both `-Psnapshots`) render
 the windows in both themes and run a fixture import through the real App and database, then
 the Library and Stats.
+## Sound and scrobbling (ListenBrainz, SponsorBlock, AutoEQ)
+
+Three features under `sound/`, each with its own settings and tests. All their network calls go
+through `sound/HttpTransport.kt` (OkHttp, honours the Settings proxy), an interface so the tests answer
+with fixtures from `desktop/src/test/resources/sound/`. `SoundEndpointsSmokeTest` checks the real
+SponsorBlock and AutoEq endpoints and skips offline.
+
+### ListenBrainz (`sound/listenbrainz/`)
+
+- **On while a token is saved.** Settings > Integrations > ListenBrainz: the pasted token is checked
+  live against `/1/validate-token`, and the button says whose it is before anything is saved.
+- **Counting is by time heard, not a timer.** `ScrobbleTracker` adds up position that advanced by
+  playing (steps of 3 s at most), so a seek forward counts nothing and a pause just stops the count.
+  The Last.fm path waits on a timer from the start, which a single pause cancels for good; it is
+  unchanged here. Threshold: half the track or 4 minutes, tracks under 30 s never count, an unknown
+  length counts after 4 minutes. `listened_at` is when the listen started. Repeat One is a second listen.
+- **No listen is lost to the network.** A listen goes into `data/listenbrainz-queue.json` before the
+  first attempt and leaves only on HTTP 200 (ListenBrainz dedupes a resend). Retries back off from
+  15 s, doubling, to 30 min, and honour `X-RateLimit-Reset-In`. A 400 on a batch is retried one by one
+  so one bad listen cannot block the rest; a single refused listen is dropped. A 401 keeps everything
+  and stops sending until a new token is pasted. `playing_now` is best effort and never queued.
+- **Not sent:** podcast episodes (marked in `PodcastEpisodes` where episodes become queue entries,
+  in memory only, so a restored queue loses the mark) and anything while "Pause listen history" is
+  on. ListenBrainz is a music record, and MusicBrainz has no podcast entities to match against.
+
+### SponsorBlock (`sound/sponsorblock/`)
+
+- **Off by default** (it asks a third party about what plays). When on it sends only the first four
+  hex digits of the video id's SHA-256 to `/api/skipSegments/<prefix>`, and picks the song's segments
+  out of the answer locally. No "viewed" reports go back, for the same reason.
+- **Default categories** once on: `music_offtopic`, `sponsor`, `selfpromo`, the ones that are never
+  music. Intro and outro stay off: on a song, "intro" can mean the song's own opening.
+- **Not skipping real music** rests on `Segment.trustedFor`: segments timed on a video of another
+  length (more than 2 s off from what VLC reports) are ignored, because the timings then belong to a
+  different cut; downvoted ones are ignored unless locked; one covering over 60% of the track is
+  ignored unless locked. Every skip shows Undo. That is why it can stay safe with music_offtopic on,
+  but the feature as a whole is still off by default under the third-party rule.
+- **The skip runs on DesktopPlayer's position tick** (`SponsorBlock.onPositionTick`), decided by the
+  pure `SegmentSkipper`: playing into a segment jumps to the end of it and of every segment that
+  overlaps or touches it; a seek into one (`DesktopPlayer.seekTo` reports it) plays it until playback
+  leaves it; a seek to under 1 s is starting over, so the intro goes again; Undo (`keep`) holds for the
+  rest of that play; a skip VLC did not carry out is retried once after a second, then never.
+  The player's own jumps use `skipSegmentTo`, not `seekTo`, or they would count as the user's.
+- **End of track:** a jump that would land in the last 2 s or inside the crossfade window ends the
+  track instead (`endTrackEarly`), so the next song starts and fades in. With nothing queued after it,
+  or the sleep timer set to end of track, it jumps to the last moment and VLC's own finished event
+  takes over, so autoplay and the timer behave as always. Ending is never retried: the next song's
+  stream can take seconds to resolve, and a second "end" in that time would skip it too.
+- **Listen Together guests do not skip** (`autoplayAllowed()` is the same "may this client choose"
+  switch): the host's skip reaches them as a seek.
+- Ticks in the first 0.7 s after a song change are ignored: VLC can still report the old media's time.
+- UI: `SegmentSkipSnackbar` ("Skipped non-music part" with Undo, 6 s, placed in App.kt) and marks on
+  the seek bar (`PlayerSlider(marks = ...)` in the dock and the tray panel), pale olive in dark and
+  the flag olive in light, distinct from both the played and the unplayed track.
+
+### AutoEQ and the equalizer (`sound/eq/`, `ui/screens/EqualizerTools.kt`)
+
+- **Data:** `results/INDEX.md` of github.com/jaakkopasanen/AutoEq (one line per model, about
+  850 KB, cached in `data/cache/autoeq/` for two weeks and used stale when offline) and each model's
+  `<name> GraphicEQ.txt`. The model's folder name is its name, which the profile URL relies on.
+- **VLC's equalizer, modelled from its source** (`VlcEqModel`): `out = preamp * (0.25 x + sum amp_j
+  * bandpass_j(x))`, `amp_j = 0.25 (10^(dB_j/20) - 1)`, one-octave bandpasses. So **preamp 12.04 dB is
+  unity**, which is why VLC's Flat preset and this app's default say 12. The screen now says so.
+- **Bands come from vlcj, never a table in the code.** libvlc's API reports the ISO octaves
+  (31.25 Hz to 16 kHz), not the 60 Hz to 16 kHz table VLC's own player shows. The fit, presets and
+  import all take the band list as a parameter, and a preset saved against other bands is refitted.
+- **The fit is least squares, not the curve read off at each centre.** The correction is normalised
+  to 0 dB at 1 kHz, then the bands are solved together (damped Gauss-Newton over 20 Hz to 20 kHz,
+  weighted down above 16 kHz, light ridge regularisation) against `VlcEqModel`, so overlapping bands
+  are accounted for and a narrow notch does not drag a whole octave down. On oratory1990's HD 600 it
+  follows the correction to 0.89 dB RMS, against 1.24 dB for reading at the centres (pinned in
+  `AutoEqTest`). The preamp then takes off the highest boost the model finds anywhere, rounded down.
+- Applying a profile turns the equalizer on, saves it as "<model> (AutoEQ, <source>)" in
+  `data/eq-presets.json`, and logs what VLC's equalizer then holds ("Equalizer: applied ...").
+- Bands and preamp take typed values (`DbField`: a click selects the number, Enter applies, Escape
+  reverts, comma or dot both work). Presets save by name and export or import as text
+  (`EqPresetText`): Lyrenne's own `<freq> Hz: <dB> dB` lines with the preamp relative to unity, and
+  also AutoEq or Equalizer APO text (`GraphicEQ:`, or `Filter N: ON PK|LSC|HSC ...`), fitted to the bands.
+- The command palette has "Correct my headphones (AutoEQ)" (opens the equalizer with the search up,
+  through `AutoEqLauncher`) and "Turn SponsorBlock skipping on or off".
+
+### Testing it live
+
+`SoundLiveRun` (test sources) plays a music video id through real VLC, muted, with the real App
+rendered headless, and writes PNGs to `build/snapshots/`. It runs only with `-Psnapshots` and a
+`build/snapshots/sound-live` file (first line: the video id; a line `undo X Y` clicks the snackbar's
+Undo there). YouTube bot-checks signed-out requests from a busy IP, so a `build/snapshots/sound-live.m4a`
+of the video's exact length, when present, plays in its place under the video's id (make one with
+`ffmpeg -f lavfi -i "sine=duration=308.381" -c:a aac sound-live.m4a` for `qrO4YZeyl0I`). The segments,
+VLC, the skip, Undo and the UI are all real; only the audio is not the song. UiSnapshot's `vlc` step
+loads libvlc so the equalizer renders with real bands.
 
 ## Version Management
 - **Current version**: v2.20.5

@@ -61,6 +61,9 @@ sealed class PaletteAction(val label: String, val icon: ImageVector, val categor
     // Move in
     data object ImportMetroList : PaletteAction("Import from MetroList", Icons.Default.MoveToInbox, "Library")
     data object ImportPlaylist : PaletteAction("Import a playlist from Spotify, Apple Music, a link or text", Icons.Default.PlaylistAdd, "Library")
+    // --- Sound and scrobbling ---
+    data object ToggleSponsorBlock : PaletteAction("Turn SponsorBlock skipping on or off", Icons.Default.ContentCut, "Playback")
+    data object HeadphoneEq : PaletteAction("Correct my headphones (AutoEQ)", Icons.Default.Headphones, "Navigate")
 
     // Songs from library
     data class PlaySong(val song: SongInfo) : PaletteAction("Play: ${song.title}", Icons.Default.MusicNote, "Songs")
@@ -102,6 +105,8 @@ fun CommandPalette(
             PaletteAction.CopyOverlayUrl,
             PaletteAction.ImportMetroList,
             PaletteAction.ImportPlaylist,
+            PaletteAction.ToggleSponsorBlock,
+            PaletteAction.HeadphoneEq,
         )
     }
 
@@ -277,6 +282,16 @@ private fun executeAction(
         is PaletteAction.CopyOverlayUrl -> com.lyrenne.desktop.link.LyrenneLink.copyOverlayUrl()
         is PaletteAction.ImportMetroList -> com.lyrenne.desktop.movein.MoveInController.openBackup()
         is PaletteAction.ImportPlaylist -> com.lyrenne.desktop.movein.MoveInController.openPlaylist()
+        is PaletteAction.ToggleSponsorBlock -> com.lyrenne.desktop.settings.PreferencesManager.let {
+            it.setSponsorBlockEnabled(!it.preferences.value.sponsorBlockEnabled)
+        }
+        is PaletteAction.HeadphoneEq -> {
+            // Opens the equalizer with the headphone search already up
+            AutoEqLauncher.request()
+            onNavigate(PaletteAction.GoEqualizer)
+            onDismiss()
+            return
+        }
         else -> {}
     }
     onNavigate(action)

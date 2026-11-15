@@ -133,6 +133,7 @@ fun SearchScreen(
             is PlaylistItem -> onPlaylistClick(item.id)
             is PodcastItem -> onPodcastClick(item.id)
             is EpisodeItem -> scope.launch {
+                com.lyrenne.desktop.sound.listenbrainz.PodcastEpisodes.mark(item.id)
                 val songInfo = item.asSongItem()?.toDesktopSongInfo()
                 if (songInfo != null) player.playSong(songInfo)
             }
@@ -394,7 +395,7 @@ private fun SearchResultItem(
     val songInfo = remember(item) {
         when (item) {
             is SongItem -> item.toDesktopSongInfo()
-            is EpisodeItem -> item.asSongItem()?.toDesktopSongInfo()
+            is EpisodeItem -> item.also { com.lyrenne.desktop.sound.listenbrainz.PodcastEpisodes.mark(it.id) }.asSongItem()?.toDesktopSongInfo()
             else -> null
         }
     }

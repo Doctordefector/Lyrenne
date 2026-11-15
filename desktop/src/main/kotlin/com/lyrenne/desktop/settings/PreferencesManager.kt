@@ -104,6 +104,14 @@ data class AppPreferences(
     val syncPruneBackupDone: Boolean = false,
     // First-run setup wizard. See the note in loadPreferences() about existing installs.
     val onboardingCompleted: Boolean = false,
+    // --- Sound and scrobbling ---
+    /** ListenBrainz user token; scrobbling is on while one is saved. */
+    val listenBrainzToken: String? = null,
+    val listenBrainzUsername: String? = null,
+    /** Off by default: it asks a third party (sponsor.ajay.app) about what is playing. */
+    val sponsorBlockEnabled: Boolean = false,
+    /** SponsorBlock category names to skip. */
+    val sponsorBlockCategories: Set<String> = setOf("music_offtopic", "sponsor", "selfpromo"),
 )
 
 object PreferencesManager {
@@ -211,6 +219,13 @@ object PreferencesManager {
                     // first-run wizard. A genuinely fresh install has no file, skips this block
                     // entirely, and gets the data class default of false.
                     onboardingCompleted = props.getProperty("onboardingCompleted")?.toBoolean() ?: true,
+                    // --- Sound and scrobbling ---
+                    listenBrainzToken = props.getProperty("listenBrainzToken")?.takeIf { it.isNotBlank() },
+                    listenBrainzUsername = props.getProperty("listenBrainzUsername"),
+                    sponsorBlockEnabled = props.getProperty("sponsorBlockEnabled")?.toBoolean() ?: false,
+                    sponsorBlockCategories = props.getProperty("sponsorBlockCategories")
+                        ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet()
+                        ?: setOf("music_offtopic", "sponsor", "selfpromo"),
                 )
             }
         } catch (e: Exception) {
@@ -281,6 +296,11 @@ object PreferencesManager {
             props.setProperty("carExportDualMono", prefs.carExportDualMono.toString())
             props.setProperty("syncPruneBackupDone", prefs.syncPruneBackupDone.toString())
             props.setProperty("onboardingCompleted", prefs.onboardingCompleted.toString())
+            // --- Sound and scrobbling ---
+            prefs.listenBrainzToken?.let { props.setProperty("listenBrainzToken", it) }
+            prefs.listenBrainzUsername?.let { props.setProperty("listenBrainzUsername", it) }
+            props.setProperty("sponsorBlockEnabled", prefs.sponsorBlockEnabled.toString())
+            props.setProperty("sponsorBlockCategories", prefs.sponsorBlockCategories.sorted().joinToString(","))
 
             // Write a sibling temp file and rename over the real one, so a crash mid-write
             // can never leave a truncated file (which would load as all defaults).
@@ -559,6 +579,23 @@ object PreferencesManager {
 
     fun setLyricsRomanize(enabled: Boolean) {
         _preferences.value = _preferences.value.copy(lyricsRomanize = enabled)
+        savePreferences()
+    }
+
+    // --- Sound and scrobbling ---
+    fun setListenBrainz(token: String?, username: String?) {
+        _preferences.value = _preferences.value.copy(listenBrainzToken = token?.trim()?.takeIf { it.isNotEmpty() }, listenBrainzUsername = username)
+        savePreferences()
+    }
+
+    fun setSponsorBlockEnabled(enabled: Boolean) {
+        _preferences.value = _preferences.value.copy(sponsorBlockEnabled = enabled)
+        savePreferences()
+    }
+
+    fun setSponsorBlockCategory(category: String, enabled: Boolean) {
+        val current = _preferences.value.sponsorBlockCategories
+        _preferences.value = _preferences.value.copy(sponsorBlockCategories = if (enabled) current + category else current - category)
         savePreferences()
     }
 

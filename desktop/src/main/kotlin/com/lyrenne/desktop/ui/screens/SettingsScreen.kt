@@ -493,6 +493,8 @@ fun SettingsScreen(
                     )
                 }
 
+                sponsorBlockSettings(preferences)
+
                 item(key = "group:Lyrics") {
                     SettingsGroupHeader("Lyrics")
                 }
@@ -948,6 +950,8 @@ fun SettingsScreen(
                         Spacer(Modifier.height(8.dp))
                     }
                 }
+
+                listenBrainzSettings(preferences)
 
                 if (com.lyrenne.desktop.Platform.isWindows) item(key = "section:Windows") {
                     SettingsSectionHeader("Windows")

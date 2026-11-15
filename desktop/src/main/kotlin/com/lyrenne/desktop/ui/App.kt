@@ -531,6 +531,10 @@ fun App(player: DesktopPlayer) {
                                         .padding(LyrenneTokens.contentPadding)
                                 )
                             }
+                            com.lyrenne.desktop.ui.components.SegmentSkipSnackbar(
+                                player,
+                                Modifier.align(Alignment.BottomCenter).padding(LyrenneTokens.contentPadding)
+                            )
                         }
 
                         // Right-side panel: lyrics or the queue, never both, and never a

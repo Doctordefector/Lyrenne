@@ -31,7 +31,7 @@ import java.io.File
  *   ./gradlew :desktop:test --tests '*UiSnapshot*' -Psnapshots
  *
  * Output: build/snapshots/<name>.png. Steps come from build/snapshots/steps.txt, one per line:
- * `size W H`, `theme dark|light`, `tray` (the tray panel alone), `wait MS`, `click X Y`, `rclick X Y`, `scroll X Y DY`, `shot NAME`.
+ * `size W H`, `theme dark|light`, `tray` (the tray panel alone), `vlc` (load libvlc), `wait MS`, `click X Y`, `rclick X Y`, `scroll X Y DY`, `shot NAME`.
  */
 @OptIn(ExperimentalComposeUiApi::class, androidx.compose.ui.InternalComposeUiApi::class)
 class UiSnapshot {
@@ -91,6 +91,8 @@ class UiSnapshot {
                     frame()
                 }
                 "wait" -> pump(p[1].toLong())
+                // Loads libvlc, for screens that read it (the equalizer's band table)
+                "vlc" -> player.ensureVlcInitialized()
                 "click", "rclick" -> {
                     val at = Offset(p[1].toFloat(), p[2].toFloat())
                     val button = if (p[0] == "rclick") PointerButton.Secondary else PointerButton.Primary

@@ -132,6 +132,7 @@ fun PodcastScreen(
 }
 
 private fun EpisodeItem.toSongInfo(): SongInfo {
+    com.lyrenne.desktop.sound.listenbrainz.PodcastEpisodes.mark(id)
     return SongInfo(
         id = id,
         title = title,

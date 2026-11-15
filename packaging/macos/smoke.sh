@@ -16,6 +16,7 @@ WORK=$(mktemp -d)
 MNT="$WORK/mnt"; mkdir -p "$MNT"
 hdiutil attach -nobrowse -readonly -mountpoint "$MNT" "$DMG" >/dev/null
 test -L "$MNT/Applications"
+test -f "$MNT/If Lyrenne won't open.txt"
 ditto "$MNT/Lyrenne.app" "$WORK/Lyrenne.app"
 hdiutil detach "$MNT" >/dev/null
 APP="$WORK/Lyrenne.app"
@@ -38,9 +39,11 @@ EOF
 afconvert -f m4af -d aac "$WORK/tone.wav" "$WORK/tone.m4a"
 mkdir -p "$DATA"
 echo "onboardingCompleted=true" > "$DATA/preferences.properties"
-"$APP/Contents/MacOS/Lyrenne" --smoke-test --require-bundled-vlc "$WORK/tone.wav" "$WORK/tone.m4a" | tee "$DIAG/smoke.txt"
+"$APP/Contents/MacOS/Lyrenne" --smoke-test --require-bundled-vlc "$WORK/tone.wav" "$WORK/tone.m4a" 2>&1 | tee "$DIAG/smoke.txt"
 cp "$DATA/lyrenne.log" "$DIAG/smoke-lyrenne.log" || true
 grep -q "SMOKE OK" "$DIAG/smoke.txt"
+# libvlc says so on stderr when plugins.dat does not match the plugins (see package.sh, signing).
+if grep -q "stale plugins cache" "$DIAG/smoke.txt"; then echo "VLC plugin cache is stale"; exit 1; fi
 
 # 3. The real app, windowed. Onboarding needs a sign-in a runner cannot do, so it is skipped.
 rm -f "$DATA/lyrenne.log"

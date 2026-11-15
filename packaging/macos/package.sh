@@ -65,8 +65,12 @@ fi
 # 3. Ad-hoc signature. There is no Apple Developer ID, so Gatekeeper reports an unidentified
 # developer (Open Anyway in System Settings) rather than "damaged", which is what an unsigned or
 # half-signed bundle downloaded from the web gets. Every Mach-O first, then the bundle as a whole.
-find "$APP" -type f \( -name '*.dylib' -o -name '*.jnilib' -o -name '*.so' \) -print0 |
+# Except VLC's: VideoLAN already signed them, and re-signing rewrites each file, which makes every
+# plugins.dat entry stale (libvlc then probes all plugins on every launch, measured 5 to 6 s here).
+# Without the hardened runtime there is no library validation, so their signature need not be ours.
+find "$APP" -type f \( -name '*.dylib' -o -name '*.jnilib' -o -name '*.so' \) -not -path "$RES/vlc/*" -print0 |
   xargs -0 codesign --force --sign - --timestamp=none
+codesign --verify --strict "$RES/vlc/lib/libvlc.dylib"
 codesign --force --deep --sign - --timestamp=none "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
 
@@ -74,6 +78,8 @@ codesign --verify --deep --strict --verbose=2 "$APP"
 STAGE=$(mktemp -d)
 ditto "$APP" "$STAGE/Lyrenne.app"
 ln -s /Applications "$STAGE/Applications"
+# Gatekeeper stops an app without a paid Developer ID; this says how to get past it, once.
+cp "$ROOT/packaging/macos/first-open.txt" "$STAGE/If Lyrenne won't open.txt"
 mkdir -p "$DIST"
 OUT="$DIST/Lyrenne-$VERSION-macos-$ARCH.dmg"
 rm -f "$OUT"

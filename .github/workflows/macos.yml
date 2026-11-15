@@ -40,12 +40,13 @@ jobs:
           LYRENNE_MAC_E2E: "1"
         run: ./gradlew -Pci :desktop:test :desktop:createDistributable
 
-      - name: Browser sign-in tests ran, not skipped
+      - name: Browser sign-in and Now Playing tests ran, not skipped
         run: |
           R=desktop/build/test-results/test/TEST-com.lyrenne.desktop.auth.MacBrowserE2ETest.xml
-          cat "$R" | head -5
-          grep -q 'failures="0" errors="0"' "$R"
-          grep -q 'tests="3" skipped="0"' "$R"
+          grep -q 'tests="3" skipped="0" failures="0" errors="0"' "$R"
+          R=desktop/build/test-results/test/TEST-com.lyrenne.desktop.mac.MacNowPlayingE2ETest.xml
+          grep -A3 'system-out' "$R" || true
+          grep -q 'tests="1" skipped="0" failures="0" errors="0"' "$R"
 
       - name: Package DMG
         run: |

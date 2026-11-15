@@ -1,0 +1,23 @@
+Opening Lyrenne for the first time
+
+Lyrenne is free and open source, and it is not signed with a paid Apple developer
+certificate. So the first time you open it, macOS stops it and says it can't check
+the developer. You only have to get past this once.
+
+1. Drag Lyrenne onto the Applications folder.
+2. Open Lyrenne from Applications. When macOS says it can't verify it, click Done.
+3. Open System Settings, then Privacy & Security. Scroll down to the line about
+   Lyrenne and click Open Anyway. Confirm with your password or Touch ID.
+
+On macOS 14 (Sonoma) or older you can skip step 3: Control-click Lyrenne in
+Applications, choose Open, then click Open again.
+
+If you prefer Terminal, this does the same thing:
+    xattr -dr com.apple.quarantine /Applications/Lyrenne.app
+
+Where things go:
+  Library, settings and sign-in: ~/Library/Application Support/Lyrenne
+  Downloads: ~/Music/Lyrenne (you can change this in Settings)
+
+Updates: when a new version is out, Lyrenne tells you and links the download.
+Drag the new Lyrenne into Applications and choose Replace. Your library stays.

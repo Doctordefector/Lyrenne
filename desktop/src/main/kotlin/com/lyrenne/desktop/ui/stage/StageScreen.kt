@@ -129,6 +129,10 @@ internal fun rememberStageClock(player: DesktopPlayer, running: Boolean, speed: 
                 val ahead = ((System.nanoTime() - anchorNanos) / 1_000_000.0 * speed).toLong()
                 clock.position.longValue = anchorPos + ahead.coerceIn(0L, 1_000L)
             }
+            // Paced, not every vsync. Compose Desktop redraws the whole window on each frame, and
+            // on a 144 Hz screen an unpaced Stage measured close to half a core. Slow drifting
+            // light and a soft-edged word fill look the same at this rate.
+            delay(STAGE_FRAME_MS)
         }
     }
     return clock
@@ -308,6 +312,9 @@ internal fun StageView(
 }
 
 private const val CONTROLS_IDLE_MS = 2_800L
+
+/** Time between Stage's animation frames: about 30 a second (see rememberStageClock). */
+private const val STAGE_FRAME_MS = 30L
 
 /** An invisible pointer, so a still mouse does not sit in the middle of the lyrics on a TV. */
 private val BlankPointer: PointerIcon by lazy {

@@ -509,6 +509,9 @@ is a far smaller loss than the echo.
 | Ctrl+F | Focus search | No |
 | Ctrl+Q | Toggle queue | No |
 | Ctrl+L | Toggle lyrics | No |
+| Ctrl+Shift+F | Open or close Stage | No |
+| F11 | Full screen (while Stage is open) | Yes |
+| Left / Right, Space | Step through Rewind cards (while Rewind is open) | No |
 | Escape | Close overlay / go back | Yes |
 | Media keys | Play/Pause/Next/Prev/Stop | Yes (always work) |
 
@@ -1241,6 +1244,76 @@ reached any other way, the Downloaded auto playlist included, was streamed, whic
 
 `DownloadedPlaybackTest` pins it offline, with the lookup (`DesktopPlayer.downloadedFileFor`) and
 the stream (`DesktopPlayer.streamFor`) both stubbed.
+
+## Stage and Rewind
+
+Two full-window views drawn over the app by `ui/stage/StageRewindHost.kt`, which App.kt places once
+after its main Row (it lands in Main's Surface Box, so it overlays everything without any screen
+knowing). Open/closed state is app-wide (`StageMode`, `RewindMode` in `StageMode.kt`) because the
+player bar, Command Palette, Stats screen, Settings and the window key handler all open them.
+`handleStageRewindKey` runs first in `AppShortcuts.preview`, so Esc closes Stage or Rewind before
+it closes panels or pops the detail stack.
+
+### Stage (`ui/stage/StageScreen.kt`, `StagePalette.kt`)
+
+- **One frame loop, read in draw.** `rememberStageClock` keeps the animation time and a smoothed
+  playback position (extrapolated between the player's ~200 ms reports, capped 1 s ahead, as
+  LyricsPanel does). The background, the word fill, the art's breath and the progress bar read it
+  inside draw lambdas or `graphicsLayer`, so a frame redraws and recomposes nothing. Lines change by
+  recomposition once per line (`derivedStateOf` on the line index). The elapsed time recomposes once
+  a second. A moving mouse does not recompose either: the last-movement time is a plain field.
+- **Paced at about 30 fps** (`STAGE_FRAME_MS`). Compose Desktop redraws the whole window on every
+  frame, and an unpaced Stage on this machine's monitor measured 45 to 58% of one core while
+  playing (normal UI while playing: 1.6%). The loop only runs while playing and not minimised;
+  paused, Stage measured 1.6% of one core, the same as any still window.
+- **Karaoke fill is two draws of one layout**, not an AnnotatedString per frame: the line is drawn
+  dim, then drawn again in full colour clipped to the sung part, with a soft gradient edge inside
+  the word being sung (`fillPoint`, `wordSpans`; RTL fills from the right). No glow: a text shadow
+  under a clip rect drew a visible band. Lines without word timing light up whole.
+- **Lyrics come from `LyricsManager.state`**, which LyricsPanel keeps fetching for the current song
+  even while hidden, and the per-song timing offset from `LyricsOffsets`. Romanization follows the
+  same preference as the panel. Plain (unsynced) lyrics count as none: Stage then shows the cover as
+  a slowly turning record with rings breathing out, the title and Up next.
+- **Colours are hues only, brightness is Stage's.** `StagePalette` takes up to three hues from the
+  cover (12-bin hue histogram, 64 px through the shared loader, cached). `StageColors` sets their
+  brightness per theme so text stays legible over any cover: dark caps blobs at HSV value 0.36,
+  light makes them pastel under near-black text. `StageRewindRenderTest` checks 4.5:1 for text and
+  the dimmed next line against every blob, as if it were opaque.
+- **Full screen** is `WindowPlacement.Fullscreen` on the main window's state, which Main.kt provides
+  as `LocalMainWindowState` (null in UiSnapshot and tests, and then the button is not shown).
+  `FullscreenKeeper` restores the previous placement however Stage closes.
+- Controls fade after 2.8 s of a still mouse while playing, and the pointer is hidden with them.
+- The player bar shows a Stage button only when the volume slider can give up 40 dp; on a narrow
+  dock it moves into the overflow menu instead, so `dockLayout`'s budget is unchanged.
+
+### Rewind (`rewind/`, `ui/rewind/`)
+
+- **All local.** `RewindRepository` reads the Event table (two queries at the end of Lyrenne.sq) and
+  `RewindCalculator` does the rest. Nothing is fetched; artist pictures are whatever the library
+  already has, with an initial as the fallback.
+- **A play belongs to when it started** (`endedAt - playTime`; the Event timestamp is written when
+  a song stops). Periods are calendar dates in the system zone, start inclusive, end exclusive.
+  The listening clock splits each play over the hours it ran through.
+- **Ties** rank by plays, then listening time, then whichever was first played earlier in the
+  period, then name. Streak ties go to the most recent run.
+- **Discovery needs earlier history**: an artist first played in the period, at least twice, most
+  listening time. With no plays before the period (All time, or a new user) there is no discovery
+  card, because every artist would be "new" and it would just repeat the top artist.
+- Cards with nothing to say are skipped (`RewindText.cards`); an empty period gets a friendly
+  empty state that says what to do, and mentions paused listen history if that is why.
+- **Cards are their own artwork**: dark, saturated, the same in both app themes, laid out in units
+  of a 360 dp wide card so one composable is the on-screen card, the 1080x1920 story PNG and the
+  1080x1080 square (density 3, `compact` trims lists on the square). Pictures are preloaded into
+  bitmaps (`rememberRewindImages`), never AsyncImage, so `RewindExport.render` (an
+  ImageComposeScene) is complete in one frame. White text and each accent are contrast-tested
+  against the gradients and the cover glow.
+- **The offer** (`RewindPrompt`, tested): Dec 1 to Jan 15 offers the year; the first week of other
+  months offers last month if it had 5 hours of listening (a year needs 1 hour). Each offer's key
+  is stored in `rewindPromptsSeen` the moment it shows, so it appears once ever, and the Settings
+  switch turns them off. Not called "Wrapped", on purpose.
+
+Look at both with `./gradlew :desktop:test --tests '*StageRewindSnapshot*' -Psnapshots`
+(fixture data, writes `build/snapshots/stage-rewind/`).
 
 ## Version Management
 - **Current version**: v2.20.5

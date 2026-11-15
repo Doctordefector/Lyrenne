@@ -492,7 +492,11 @@ class DesktopPlayer {
         Timber.i("Stream for ${song.id} failed at ${atMs}ms, retrying on a fresh one")
         lastVlcError = null
         val options = buildMediaOptions() + if (atMs > 0) listOf(":start-time=${atMs / 1000.0}") else emptyList()
-        audioPlayer?.mediaPlayer()?.media()?.play(media, *options.toTypedArray())
+        synchronized(vlcLock) {
+            // Re-checked under the lock: a skip may have started another song while this resolved.
+            if (_state.value.currentSong?.id != song.id) return
+            audioPlayer?.mediaPlayer()?.media()?.play(media, *options.toTypedArray())
+        }
         applyEqualizer()
     }
 
@@ -578,7 +582,10 @@ class DesktopPlayer {
     suspend fun playSong(song: SongInfo): Boolean = playSingle(song, radio = false)
 
     private suspend fun playSingle(song: SongInfo, radio: Boolean): Boolean {
+        val request = startRequests.incrementAndGet()
         val media = mediaFor(song) ?: return false
+        // A newer start (another click, a hotkey, the remote) arrived while this one resolved.
+        if (request != startRequests.get()) return true
         resetAutoplay(radio)
         playedAlone = true
         queue.clear()
@@ -605,8 +612,9 @@ class DesktopPlayer {
         currentIndex = startIndex
 
         val song = songs[startIndex]
+        val request = startRequests.incrementAndGet()
         val media = mediaFor(song)
-        if (media != null) playMedia(media, song)
+        if (media != null && request == startRequests.get()) playMedia(media, song)
 
         _state.value = _state.value.copy(
             queue = queue.toList(),
@@ -640,6 +648,27 @@ class DesktopPlayer {
      * any other way (an album, a playlist, Next, a restored queue) was streamed anyway, which
      * fails offline.
      */
+    /**
+     * Every start of a song counts here. Resolving a stream takes a network round trip, so pressing
+     * Next three times quickly (a hotkey, the phone remote, the button) used to start three
+     * resolves that each played when it finished: in whatever order the network answered, and from
+     * whatever thread the caller was on. Two of them landing together called
+     * libvlc_media_player_set_media from two threads at once, which crashes the JVM with
+     * "Invalid memory access" (seen in 2.21.0 testing with the Game Mode hotkeys). Now only the
+     * newest request plays, and the native media change itself is serialised by [vlcLock].
+     */
+    private val startRequests = java.util.concurrent.atomic.AtomicLong()
+    private val vlcLock = Any()
+
+    /** Resolves [song] and plays it, unless a newer start has been asked for meanwhile. */
+    private suspend fun startSong(song: SongInfo): Boolean {
+        val request = startRequests.incrementAndGet()
+        val media = mediaFor(song) ?: return false
+        if (request != startRequests.get()) return false
+        playMedia(media, song)
+        return true
+    }
+
     private suspend fun mediaFor(song: SongInfo): String? {
         val file = downloadedFileFor(song.id) ?: return streamFor(song.id)
         Timber.d("Playing ${song.id} from its download")
@@ -766,10 +795,12 @@ class DesktopPlayer {
         _state.value = _state.value.copy(error = null)
 
         val options = buildMediaOptions()
-        if (options.isNotEmpty()) {
-            audioPlayer?.mediaPlayer()?.media()?.play(media, *options.toTypedArray())
-        } else {
-            audioPlayer?.mediaPlayer()?.media()?.play(media)
+        synchronized(vlcLock) {
+            if (options.isNotEmpty()) {
+                audioPlayer?.mediaPlayer()?.media()?.play(media, *options.toTypedArray())
+            } else {
+                audioPlayer?.mediaPlayer()?.media()?.play(media)
+            }
         }
         _state.value = _state.value.copy(
             currentSong = song,
@@ -856,7 +887,7 @@ class DesktopPlayer {
                 // No media loaded (e.g. restored queue): start it from its download or a stream
                 val song = queue[currentIndex]
                 scope.launch {
-                    mediaFor(song)?.let { playMedia(it, song) }
+                    startSong(song)
                 }
             }
         }
@@ -906,7 +937,7 @@ class DesktopPlayer {
                     // Loop back to start
                     currentIndex = 0
                     val song = queue[0]
-                    mediaFor(song)?.let { playMedia(it, song) }
+                    startSong(song)
                 }
             }
             RepeatMode.OFF -> {
@@ -929,12 +960,12 @@ class DesktopPlayer {
         if (currentIndex < queue.size - 1) {
             currentIndex++
             val song = queue[currentIndex]
-            mediaFor(song)?.let { playMedia(it, song) }
+            startSong(song)
             updateQueueState()
         } else if (repeatMode == RepeatMode.ALL && queue.isNotEmpty()) {
             currentIndex = 0
             val song = queue[0]
-            mediaFor(song)?.let { playMedia(it, song) }
+            startSong(song)
             updateQueueState()
         } else {
             // Nothing to skip to. Report what VLC is doing instead of claiming a stop: this is
@@ -950,7 +981,7 @@ class DesktopPlayer {
         if (currentIndex > 0) {
             currentIndex--
             val song = queue[currentIndex]
-            mediaFor(song)?.let { playMedia(it, song) }
+            startSong(song)
             updateQueueState()
         } else {
             // Restart current song
@@ -962,7 +993,7 @@ class DesktopPlayer {
         if (index in 0 until queue.size) {
             currentIndex = index
             val song = queue[index]
-            mediaFor(song)?.let { playMedia(it, song) }
+            startSong(song)
             updateQueueState()
         }
     }

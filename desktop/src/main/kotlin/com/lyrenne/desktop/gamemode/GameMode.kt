@@ -129,7 +129,16 @@ object GameMode {
         flash(if (shown) OverlayFlash.Kind.OVERLAY_ON else OverlayFlash.Kind.OVERLAY_OFF, if (shown) "Overlay on" else "Overlay hidden")
     }
 
+    /**
+     * Runs a hotkey's action on the UI thread, like the window's own buttons and Lyrenne Link.
+     * Hotkeys arrive on the hotkey thread; acting from there raced the UI and other hotkeys inside
+     * the player (two quick Nexts once crashed VLC from two threads at once).
+     */
     fun perform(action: HotkeyAction) {
+        scope.launch(Dispatchers.Main) { performNow(action) }
+    }
+
+    private fun performNow(action: HotkeyAction) {
         val player = player ?: return
         Timber.i("Hotkey: ${action.id}")
         when (action) {
@@ -142,11 +151,11 @@ object GameMode {
             }
             HotkeyAction.NEXT -> {
                 flash(OverlayFlash.Kind.NEXT, "Next")
-                scope.launch { player.playNext() }
+                scope.launch(Dispatchers.Main) { player.playNext() }
             }
             HotkeyAction.PREVIOUS -> {
                 flash(OverlayFlash.Kind.PREVIOUS, "Previous")
-                scope.launch { player.playPrevious() }
+                scope.launch(Dispatchers.Main) { player.playPrevious() }
             }
             HotkeyAction.LIKE -> scope.launch { toggleLike(player) }
             HotkeyAction.VOLUME_UP -> changeVolume(player, +VOLUME_STEP)

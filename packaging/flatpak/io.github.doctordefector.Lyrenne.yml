@@ -52,7 +52,20 @@ cleanup-commands:
   - /app/lib/vlc/vlc-cache-gen /app/lib/vlc/plugins
 
 modules:
-  # Matroska/WebM, which YouTube's Opus audio comes in: VLC's mkv demuxer needs both.
+  # Matroska/WebM, which YouTube's Opus audio comes in: VLC's mkv demuxer needs libebml and
+  # libmatroska, and libebml needs utfcpp's headers (it would git-clone them, with no network).
+  - name: utfcpp
+    buildsystem: cmake-ninja
+    builddir: true
+    config-opts:
+      - -DUTF8CPP_ENABLE_TESTS=OFF
+    cleanup:
+      - '*'
+    sources:
+      - type: archive
+        url: https://github.com/nemtrif/utfcpp/archive/refs/tags/v4.0.9.tar.gz
+        sha256: 397a9a2a6ed5238f854f490b0177b840abc6b62571ec3e07baa0bb94d3f14d5a
+
   - name: libebml
     buildsystem: cmake-ninja
     builddir: true

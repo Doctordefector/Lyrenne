@@ -52,6 +52,8 @@ keep misc gnutls logger xml
 keep keystore memory_keystore
 # Small and self-contained, so whole categories: parsing, filters (EQ, normalize, speed), output.
 for dir in packetizer audio_filter audio_mixer stream_filter; do cp -a "$SRC/$dir" "$DST/"; done
+# Except the one packetizer built on libavcodec, which would bring the 60 libraries back.
+rm -f "$DST/packetizer/libpacketizer_avparser_plugin.so"
 keep audio_output pulse alsa adummy amem afile
 
 # Every library those link, with rpaths pointing inside the AppDir. linuxdeploy leaves out the

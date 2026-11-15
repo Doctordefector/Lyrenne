@@ -26,14 +26,9 @@ finish-args:
   - --filesystem=xdg-run/discord-ipc-0
   - --filesystem=xdg-run/app/com.discordapp.Discord:create
 
-# AAC streams decode through the runtime's full FFmpeg; Opus needs nothing extra.
-add-extensions:
-  org.freedesktop.Platform.ffmpeg-full:
-    directory: lib/ffmpeg
-    version: '26.08'
-    add-ld-path: .
-    autodownload: true
-    autodelete: false
+# AAC decodes through libavcodec. Since 25.08 the runtime brings the full FFmpeg itself (its
+# codecs-extra extension, downloaded with the runtime), so there is no ffmpeg-full extension to add
+# here any more. Opus, Vorbis, FLAC and MP3 have their own decoders and need nothing extra.
 
 cleanup:
   - /include
@@ -43,7 +38,6 @@ cleanup:
   - '*.la'
   - '*.a'
 cleanup-commands:
-  - mkdir -p /app/lib/ffmpeg
   # libVLC's plugin cache, so it does not scan every plugin on each start. Generated here, after
   # flatpak-builder strips the binaries: a cache made before that records the unstripped sizes and
   # libVLC throws all of it away as stale. The patch on the vlc module makes it ignore mtimes, which

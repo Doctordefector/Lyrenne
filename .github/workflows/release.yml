@@ -334,8 +334,8 @@ jobs:
           flatpak-builder --user --install-deps-from=flathub --install --force-clean --repo=repo \
             --mirror-screenshots-url=https://dl.flathub.org/media/ \
             build packaging/flatpak/io.github.doctordefector.Lyrenne.yml
-          # What Flathub users get automatically (autodownload); a local install does not pull it.
-          flatpak install --user -y --noninteractive flathub org.freedesktop.Platform.ffmpeg-full//26.08
+          # The runtime's codecs-extra extension (full FFmpeg, for AAC) should have come with it.
+          flatpak list --user --runtime --columns=application,branch
       - name: Lint (Flathub's linter)
         continue-on-error: true
         run: |

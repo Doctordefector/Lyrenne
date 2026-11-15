@@ -2,7 +2,7 @@ name: release
 
 # Ask for a release by pushing a tag that matches lyrenneVersion (git tag v2.16.1 && git push origin v2.16.1),
 # or with "Run workflow" on the Actions tab, which tags the current commit. Builds the Windows portable
-# ZIP and the Linux .deb/.rpm and attaches them to a DRAFT release: write the notes and publish there.
+# ZIP, the Linux .deb/.rpm and the macOS DMGs and attaches them to a DRAFT release: write the notes and publish there.
 # Drafts are invisible to /releases/latest, so the updater never sees a release before it is published.
 on:
   push:
@@ -99,8 +99,16 @@ jobs:
           name: linux
           path: dist/
 
+  # The DMGs for Apple Silicon and Intel, built, signed ad hoc and smoke-tested by macos.yml.
+  # No .sig: the macOS app never updates itself, it links the release page.
+  macos:
+    needs: version
+    uses: ./.github/workflows/macos.yml
+    with:
+      release: true
+
   release:
-    needs: [version, windows, linux]
+    needs: [version, windows, linux, macos]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

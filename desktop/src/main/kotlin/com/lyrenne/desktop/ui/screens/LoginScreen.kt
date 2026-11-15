@@ -156,7 +156,8 @@ fun LoginScreen(
                                             color = MaterialTheme.colorScheme.onPrimaryContainer
                                         )
                                         Text(
-                                            "Opens ${browser?.name ?: "a browser"}. Sign in, then close it.",
+                                            if (BrowserLoginHelper.closesBrowserItself) "Opens ${browser?.name ?: "a browser"}. Sign in, and Lyrenne closes it for you."
+                                            else "Opens ${browser?.name ?: "a browser"}. Sign in, then close it.",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                                         )
@@ -200,7 +201,8 @@ fun LoginScreen(
                         )
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            "Sign in to YouTube Music in the browser window,\nthen close the browser when done.",
+                            if (BrowserLoginHelper.closesBrowserItself) "Sign in to YouTube Music in the browser window.\nLyrenne closes the browser once you're in."
+                            else "Sign in to YouTube Music in the browser window,\nthen close the browser when done.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center

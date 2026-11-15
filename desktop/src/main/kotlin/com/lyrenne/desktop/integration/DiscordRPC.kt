@@ -511,6 +511,8 @@ object DiscordRPC {
                     runtime?.let { "$it/app/com.discordapp.Discord" }, // Flatpak Discord
                     runtime?.let { "$it/snap.discord" },               // Snap Discord
                     System.getenv("TMPDIR"),
+                    // macOS: Discord's socket is in the per-user $TMPDIR, which is also the JVM's.
+                    System.getProperty("java.io.tmpdir"),
                     "/tmp"
                 )
                 val socket = dirs.map { File(it, "discord-ipc-$i") }.firstOrNull { it.exists() } ?: return null

@@ -335,6 +335,7 @@ class DesktopPlayer {
             val found = NativeDiscovery().discover()
 
             if (found) {
+                bundledVlcPath = bundledPath
                 audioPlayer = AudioPlayerComponent(LoggingMediaPlayerFactory())
                 setupEventListener()
                 Timber.i("VLC initialized successfully")
@@ -358,11 +359,27 @@ class DesktopPlayer {
         Platform.isLinux -> "Lyrenne needs VLC. Install it with your package manager, e.g. " +
             "sudo apt install vlc / sudo dnf install vlc / sudo pacman -S vlc. " +
             "The Snap and Flatpak versions of VLC can't be used."
+        Platform.isMac && bundled -> "VLC failed to load from inside Lyrenne.app. Download Lyrenne again."
+        Platform.isMac -> "VLC not found. Install VLC from videolan.org, or use the Lyrenne download, which includes it."
         bundled -> "VLC failed to load from the app folder. Re-extract the ZIP."
         else -> "VLC not found. Please install VLC media player (64-bit)."
     }
 
+    /** Where libvlc was loaded from when it came out of the app bundle; the smoke test checks it. */
+    @Volatile var bundledVlcPath: String? = null
+        private set
+
     private fun findBundledVlc(): File? {
+        // macOS: packaging/macos/package.sh copies VLC.app's lib/ and plugins/ into the bundle's
+        // resources/vlc. Only lib/ goes on the library path: vlcj's macOS discovery preloads
+        // libvlccore from there and points VLC_PLUGIN_PATH at lib/../plugins by itself.
+        if (Platform.isMac) {
+            return listOfNotNull(
+                System.getProperty("compose.application.resources.dir")?.let { File(it, "vlc/lib") },
+                // Lyrenne.app/Contents/app/resources, should the launcher not pass the property.
+                File(com.lyrenne.desktop.AppPaths.appDir, "app/resources/vlc/lib"),
+            ).firstOrNull { File(it, "libvlc.dylib").exists() }
+        }
         if (!Platform.isWindows) return null
         // Check for bundled VLC in app resources (Compose Desktop native distribution)
         val candidates = listOf(

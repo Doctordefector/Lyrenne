@@ -85,7 +85,10 @@ object DesktopNotification {
                     override fun mouseReleased(e: java.awt.event.MouseEvent) = maybePopup(e)
                     private fun maybePopup(e: java.awt.event.MouseEvent) {
                         // isPopupTrigger fires on press or release depending on platform.
-                        if (e.isPopupTrigger) onTrayMenu?.invoke(e.xOnScreen, e.yOnScreen)
+                        // A Mac menu bar item opens its menu on any click, the left one included.
+                        val macClick = Platform.isMac && e.id == java.awt.event.MouseEvent.MOUSE_PRESSED &&
+                            e.button == java.awt.event.MouseEvent.BUTTON1
+                        if (e.isPopupTrigger || macClick) onTrayMenu?.invoke(e.xOnScreen, e.yOnScreen)
                     }
                 })
             }

@@ -156,9 +156,9 @@ fun MiniPlayer(
                         icon = PlayerIcons.Shuffle,
                         contentDescription = if (state.shuffleEnabled) "Disable shuffle" else "Enable shuffle",
                         selected = state.shuffleEnabled,
-                        shortcut = "Ctrl+S"
+                        shortcut = com.lyrenne.desktop.ui.ShortcutKeys.label("S")
                     )
-                    Tip("Previous (Ctrl+Left)") {
+                    Tip("Previous (${com.lyrenne.desktop.ui.ShortcutKeys.label("Left")})") {
                         IconButton(onClick = { scope.launch { player.playPrevious() } }, modifier = Modifier.size(40.dp)) {
                             Icon(Icons.Default.SkipPrevious, "Previous")
                         }
@@ -175,7 +175,7 @@ fun MiniPlayer(
                             )
                         }
                     }
-                    Tip("Next (Ctrl+Right)") {
+                    Tip("Next (${com.lyrenne.desktop.ui.ShortcutKeys.label("Right")})") {
                         IconButton(onClick = { scope.launch { player.playNext() } }, modifier = Modifier.size(40.dp)) {
                             Icon(Icons.Default.SkipNext, "Next")
                         }
@@ -192,7 +192,7 @@ fun MiniPlayer(
                             RepeatMode.ONE -> "Repeat one enabled"
                         },
                         selected = state.repeatMode != RepeatMode.OFF,
-                        shortcut = "Ctrl+R"
+                        shortcut = com.lyrenne.desktop.ui.ShortcutKeys.label("R")
                     )
                 }
                 SeekRow(player, state.duration)
@@ -222,7 +222,7 @@ fun MiniPlayer(
                     label = "Lyrics",
                     contentDescription = if (lyricsActive) "Close lyrics" else "Open lyrics",
                     selected = lyricsActive,
-                    shortcut = "Ctrl+L"
+                    shortcut = com.lyrenne.desktop.ui.ShortcutKeys.label("L")
                 )
                 LabeledPlayerButton(
                     onClick = onQueueClick,
@@ -230,7 +230,7 @@ fun MiniPlayer(
                     label = "Queue",
                     contentDescription = if (queueActive) "Close queue" else "Open queue",
                     selected = queueActive,
-                    shortcut = "Ctrl+Q"
+                    shortcut = com.lyrenne.desktop.ui.ShortcutKeys.queueLabel
                 )
 
                 // Speed and the sleep timer are rare, so they live in the overflow at every width.

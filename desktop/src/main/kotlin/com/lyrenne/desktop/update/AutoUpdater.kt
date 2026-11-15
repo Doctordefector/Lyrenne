@@ -40,6 +40,8 @@ object AutoUpdater {
      * Windows replaces itself. On Linux the install belongs to the package manager under a
      * root-owned /opt, so an update downloads the signed .rpm/.deb and hands it to dnf/apt through
      * pkexec. Anything else on Linux (a dev run, an unpacked tree) only points at the release page.
+     * macOS never self-updates: replacing a signed .app in place breaks its seal, and the
+     * PowerShell path must never run there. It only links the release page ("Download").
      */
     val canSelfUpdate: Boolean get() = Platform.isWindows || linuxPackage != null
 
@@ -322,6 +324,7 @@ object AutoUpdater {
     fun applyUpdate() {
         val current = _state.value
         if (current !is UpdateState.ReadyToInstall) return
+        if (Platform.isMac) return // never the PowerShell or package path; see canSelfUpdate
 
         try {
             if (linuxPackage != null) {

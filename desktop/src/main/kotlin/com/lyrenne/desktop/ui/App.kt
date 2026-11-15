@@ -175,6 +175,13 @@ fun App(player: DesktopPlayer) {
             // Shortcuts are installed on the window (see AppShortcuts), not on this Row: a
             // node's handler only sees keys while something inside it has focus, and a click on
             // a list row or empty space leaves nothing focused.
+            // The macOS app menu's Settings item (Cmd+,).
+            LaunchedEffect(Unit) {
+                com.lyrenne.desktop.mac.AppRequests.openSettings.collect {
+                    currentScreen = Screen.Settings
+                    detailStack.clear()
+                }
+            }
             DisposableEffect(Unit) {
                 // TUNNEL phase (before the focused node): Escape + Ctrl shortcuts only.
                 // These use modifier keys so they don't conflict with text input.
@@ -191,10 +198,10 @@ fun App(player: DesktopPlayer) {
                             detailStack.isNotEmpty() -> { navigateBack(); true }
                             else -> false
                         }
-                        event.isCtrlPressed -> when (event.key) {
+                        ShortcutKeys.primary(event) -> when (event.key) {
                             // Navigation shortcuts stay global.
                             Key.F -> { currentScreen = Screen.Search; detailStack.clear(); true }
-                            Key.Q -> { showQueueScreen = !showQueueScreen; if (showQueueScreen) showLyricsPanel = false; true }
+                            ShortcutKeys.queueKey -> { showQueueScreen = !showQueueScreen; if (showQueueScreen) showLyricsPanel = false; true }
                             Key.L -> { showLyricsPanel = !showLyricsPanel; if (showLyricsPanel) showQueueScreen = false; true }
                             Key.K -> { showCommandPalette = !showCommandPalette; true }
                             // Player shortcuts must not steal Ctrl+Left/Right (word jump),
@@ -230,7 +237,7 @@ fun App(player: DesktopPlayer) {
                 // Only reaches here if NO text field handled the event.
                 AppShortcuts.bubble = bubble@{ event ->
                     if (event.type != KeyEventType.KeyDown) return@bubble false
-                    if (event.isCtrlPressed) return@bubble false // already handled in preview
+                    if (ShortcutKeys.primary(event)) return@bubble false // already handled in preview
                     if (MediaKeyHandler.textInputActive) return@bubble false
                     when (event.key) {
                         Key.Spacebar -> { player.togglePlayPause(); true }

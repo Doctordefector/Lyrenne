@@ -97,7 +97,8 @@ dependencies {
     implementation("dev.toastbits:mediasession:0.1.1") {
         // The D-Bus runtime (dbus-java + jnr) is only used for MPRIS. Compose packages for the
         // host OS, so a Windows build has no use for it and the portable ZIP stays lean.
-        if (isWindowsHost) exclude(group = "com.github.hypfvieh")
+        // macOS has no MPRIS either.
+        if (isWindowsHost || hostOs.startsWith("Mac")) exclude(group = "com.github.hypfvieh")
     }
 
     // JSON
@@ -181,6 +182,20 @@ compose.desktop {
             }
             linux {
                 iconFile.set(project.file("src/main/resources/icon.png"))
+            }
+            // macOS: packaging/macos/package.sh adds VLC to this .app, signs it and builds the DMG.
+            macOS {
+                iconFile.set(project.file("../packaging/macos/icon.icns"))
+                bundleID = "com.lyrenne.desktop"
+                dockName = "Lyrenne"
+                infoPlist {
+                    // Song recognition records from the microphone. Without a usage string macOS
+                    // kills the app the moment it asks, instead of showing the permission prompt.
+                    extraKeysRawXml = """
+                        <key>NSMicrophoneUsageDescription</key>
+                        <string>Lyrenne listens for a few seconds to recognize the song that is playing.</string>
+                    """.trimIndent()
+                }
             }
         }
 

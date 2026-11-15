@@ -21,7 +21,7 @@ import com.lyrenne.desktop.rewind.RewindPeriod
 val LocalMainWindowState = staticCompositionLocalOf<WindowState?> { null }
 
 /** Keyboard shortcut that opens and closes Stage. Listed in CLAUDE.md "Keyboard Shortcuts". */
-const val STAGE_SHORTCUT_LABEL = "Ctrl+Shift+F"
+val STAGE_SHORTCUT_LABEL: String get() = if (com.lyrenne.desktop.Platform.isMac) "⇧⌘F" else "Ctrl+Shift+F"
 
 /**
  * Whether Stage or Rewind is up, as app-wide state: the player bar, the Command Palette, the
@@ -63,7 +63,7 @@ object RewindMode {
  */
 fun handleStageRewindKey(event: KeyEvent): Boolean {
     val typing = MediaKeyHandler.textInputActive
-    if (event.isCtrlPressed && event.isShiftPressed && event.key == Key.F && !typing) {
+    if (com.lyrenne.desktop.ui.ShortcutKeys.primary(event) && event.isShiftPressed && event.key == Key.F && !typing) {
         RewindMode.close()
         StageMode.toggle()
         return true

@@ -1631,6 +1631,68 @@ it closes panels or pops the detail stack.
 
 Look at both with `./gradlew :desktop:test --tests '*StageRewindSnapshot*' -Psnapshots`
 (fixture data, writes `build/snapshots/stage-rewind/`).
+## macOS
+
+Lyrenne ships as `Lyrenne-X.Y.Z-macos-arm64.dmg` (Apple Silicon) and `-macos-x64.dmg` (Intel).
+**Nobody on the project has a Mac**, so CI is the test bench: `.github/workflows/macos.yml` builds
+both on GitHub's `macos-15` and `macos-15-intel` runners, and `release.yml` calls it to put the DMGs
+in the draft. Its diagnostics artifact (`diag-macos-*`: logs, `codesign`/`spctl` output and a
+screenshot of the running app) is how to look at a Mac build. Release runs skip it, because the
+release job attaches every artifact of the run.
+
+- **Packaging is a script, not Gradle**: `packaging/macos/package.sh` runs after
+  `createDistributable`, like nfpm for Linux. It copies VLC.app's `lib/` and `plugins/` (VideoLAN's
+  official 3.0.23 DMG, pinned by sha256) into `Lyrenne.app/Contents/app/resources/vlc`, ad-hoc signs
+  every dylib and then the bundle, and builds the DMG with an Applications link and the first-open
+  note (`packaging/macos/first-open.txt`). The architecture comes from the launcher (`lipo`), not
+  `uname`: an x64 JDK under Rosetta builds an Intel app. Copy with `ditto`, never something that
+  resets mtimes: `plugins.dat` records each plugin's mtime and size, and a mismatch means a full
+  plugin probe on every launch.
+- **VLC lookup**: `DesktopPlayer.findBundledVlc()` puts only `vlc/lib` on `jna.library.path`. vlcj's
+  macOS discovery preloads libvlccore from there and sets `VLC_PLUGIN_PATH` to `lib/../plugins`
+  itself. A dev run (`gradlew run`) has no bundle and falls back to an installed VLC.app.
+- **Ad-hoc signed, no Developer ID.** Gatekeeper says it cannot verify the developer (Open Anyway in
+  Privacy & Security; Control-click Open on macOS 14 and older), not "damaged", which is what an
+  unsigned or half-signed download gets. Anything that writes inside the bundle after signing breaks
+  the seal and brings "damaged" back, which is why data is never portable on macOS.
+- **Data**: `~/Library/Application Support/Lyrenne`, downloads `~/Music/Lyrenne` (`AppPaths`).
+- **Sign-in**: Firefox first, then Chrome, Edge, Brave, Chromium, Vivaldi, launched with
+  `--use-mock-keychain`. Mac Chromium encrypts cookies (`v10`, AES-128-CBC, PBKDF2-SHA1 with 1003
+  rounds) under a password from the login Keychain ("Chrome Safe Storage"), and reading that makes
+  macOS ask the user. With the flag the password is the fixed `mock_password`, so no prompt. The real
+  Keychain entry (`security find-generic-password`) is only the fallback when the mock key does not
+  open a cookie. Closing a Mac browser's window does not quit it, so on macOS Lyrenne watches the
+  profile for a `.youtube.com` session cookie (by name, nothing decrypted) and closes the browser
+  itself with SIGTERM (`BrowserLoginHelper.closesBrowserItself`). Firefox's profile lock on macOS is
+  an fcntl lock on `.parentlock`, not the `lock` symlink Linux has. `MacBrowserE2ETest` runs both
+  browsers on the runner.
+- **App menu and Dock** (`mac/MacIntegration.kt`): About, Settings (Cmd+,) and Quit handlers. Without
+  a quit handler Cmd+Q calls System.exit and skips `quit()`, queue save included. The quit handler
+  never calls `performQuit`/`cancelQuit`: `quit()` exits within 3 s and macOS waits for that. Clicking
+  the Dock icon reopens a hidden window.
+- **Shortcuts**: Cmd instead of Ctrl (`ui/ShortcutKeys.kt`), labels too. Cmd+Q is Quit on every Mac,
+  so the queue is Cmd+U there. Cmd+W closes the window like its close button.
+- **Menu bar item**: the AWT tray works as one. Any click opens the panel (the Mac convention), the
+  panel opens below the click when the click is in the top half of the screen, and
+  `MacIntegration.activate()` brings the app forward first: an inactive app's window never gets
+  focus, so it would never lose it and the panel would never close.
+- **Now Playing and media keys** (`mac/MacNowPlaying.kt`): mediasession-kt has no macOS backend, so
+  this drives `MPNowPlayingInfoCenter` and `MPRemoteCommandCenter` through the Objective-C runtime
+  over JNA, with a runtime-made class whose methods are JNA callbacks. `objc_msgSend` is called with
+  fixed arguments: a variadic call on Apple Silicon passes them on the stack, where the method does
+  not look. Published on song change, play/pause and seeks only; the system extrapolates the rest.
+  The cover goes in as `MPMediaItemArtwork`, which takes an Objective-C block: a global block literal
+  is laid out by hand in JNA memory (`_NSConcreteGlobalBlock`, `BLOCK_IS_GLOBAL`, a JNA callback as
+  its function). Its `CGSize` argument is two doubles, which both ABIs pass like two double
+  arguments. `MacNowPlayingE2ETest` and the smoke test read all of it back.
+- **Updater**: never self-updates (`canSelfUpdate` is false; replacing the app in place would break
+  the signature) and never reaches the PowerShell path. The update card's button reads Download and
+  opens the release page.
+- **Not on macOS**: bundled ffmpeg (car export looks on PATH and in Homebrew's two prefixes), the
+  Windows media identity, SleepGuard, MPRIS.
+- **`--smoke-test <files>`** (`SmokeTest.kt`): plays local files through libvlc with no window and
+  exits 0 only if each passed one second. `--require-bundled-vlc` fails if libvlc came from outside
+  the bundle. It uses the normal data folder; CI and dev only.
 
 ## Version Management
 - **Current version**: v2.20.5

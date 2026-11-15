@@ -352,7 +352,9 @@ private fun SignInStep() {
             }
             Spacer(Modifier.height(16.dp))
             Text(
-                "Accepted the cookie prompt and signed in? Close $browserName completely to " +
+                if (BrowserLoginHelper.closesBrowserItself)
+                    "Accept the cookie prompt and sign in. Lyrenne notices and closes $browserName for you."
+                else "Accepted the cookie prompt and signed in? Close $browserName completely to " +
                     "finish. That means every window of it.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -387,7 +389,7 @@ private fun SignInStep() {
                     )
                     InstructionLine(
                         "4",
-                        "Close $browserName completely. Lyrenne picks it up from there."
+                        BrowserLoginHelper.finishStep(browserName)
                     )
                 }
             }
@@ -831,19 +833,22 @@ private fun IntegrationsStep() {
     }
 }
 
-private val SHORTCUTS = listOf(
-    "Space  ·  Ctrl+P" to "Play / pause",
-    "Ctrl+←  ·  Ctrl+→" to "Previous / next track",
-    "Ctrl+↑  ·  Ctrl+↓" to "Volume up / down",
-    "Ctrl+S" to "Shuffle",
-    "Ctrl+R" to "Repeat",
-    "Ctrl+F" to "Jump to search",
-    "Ctrl+Q" to "Show the queue",
-    "Ctrl+L" to "Show lyrics",
-    "Ctrl+K" to "Command palette",
-    "Esc" to "Close an overlay, or go back",
-    "Media keys" to "Always work, even in another app"
-)
+private val SHORTCUTS = with(com.lyrenne.desktop.ui.ShortcutKeys) {
+    listOfNotNull(
+        "Space  ·  ${label("P")}" to "Play / pause",
+        "${label("←")}  ·  ${label("→")}" to "Previous / next track",
+        "${label("↑")}  ·  ${label("↓")}" to "Volume up / down",
+        label("S") to "Shuffle",
+        label("R") to "Repeat",
+        label("F") to "Jump to search",
+        queueLabel to "Show the queue",
+        label("L") to "Show lyrics",
+        label("K") to "Command palette",
+        "Esc" to "Close an overlay, or go back",
+        // macOS has no Now Playing integration yet, so media keys only reach a focused window.
+        ("Media keys" to "Always work, even in another app").takeUnless { com.lyrenne.desktop.Platform.isMac }
+    )
+}
 
 @Composable
 private fun DoneStep() {

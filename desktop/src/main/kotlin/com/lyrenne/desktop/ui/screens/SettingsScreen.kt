@@ -1310,11 +1310,7 @@ fun SettingsScreen(
                                     }
                                     if (state.releaseNotes != null) {
                                         Spacer(Modifier.height(8.dp))
-                                        Text(
-                                            state.releaseNotes.take(200) + if (state.releaseNotes.length > 200) "..." else "",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
+                                        com.lyrenne.desktop.ui.components.ReleaseNotesText(state.releaseNotes)
                                     }
                                     Spacer(Modifier.height(12.dp))
                                     Row {

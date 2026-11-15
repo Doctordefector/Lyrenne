@@ -1,0 +1,16 @@
+# A small listening history for RewindCalculatorTest. Times are UTC instants the play ENDED
+# (the Event table stores the end), followed by how many seconds actually played.
+# songId,title,artists (id:name, separated by |),albumId,albumTitle,endedAtUtc,playSeconds
+s1,Old Favourite,a1:Aurora Lane,al1,First Light,2025-11-20T20:04:00Z,240
+s1,Old Favourite,a1:Aurora Lane,al1,First Light,2025-12-31T23:30:00Z,240
+s2,Neon Rain,a2:Kite Theory,al2,City Static,2026-01-01T00:04:00Z,240
+s2,Neon Rain,a2:Kite Theory,al2,City Static,2026-01-01T10:04:00Z,240
+s2,Neon Rain,a2:Kite Theory,al2,City Static,2026-01-01T12:04:00Z,240
+s2,Neon Rain,a2:Kite Theory,al2,City Static,2026-01-01T18:04:00Z,240
+s3,Paper Boats,a2:Kite Theory|a3:Mira Sol,al2,City Static,2026-01-02T09:03:00Z,180
+s1,Old Favourite,a1:Aurora Lane,al1,First Light,2026-01-03T21:04:00Z,240
+s4,Slow Tide,a3:Mira Sol,,,2026-01-04T22:05:00Z,300
+s4,Slow Tide,a3:Mira Sol,,,2026-01-06T08:05:00Z,300
+s5,One Listen,a4:Single Visit,al3,Somewhere,2026-02-10T14:02:00Z,120
+s6,Last Song,a1:Aurora Lane,al1,First Light,2027-01-01T00:02:00Z,240
+s1,Old Favourite,a1:Aurora Lane,al1,First Light,2027-01-01T00:30:00Z,240

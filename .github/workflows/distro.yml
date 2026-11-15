@@ -60,12 +60,15 @@ jobs:
           }
           winget --version
           winget settings --enable LocalManifestFiles
+          # Runner images ship with Defender switched off, and winget reads the failed archive scan as
+          # "malware detected". On a real PC the scan runs; here it is skipped.
+          winget settings --enable LocalArchiveMalwareScanOverride
           Remove-Item -Recurse -Force "$env:LOCALAPPDATA\Lyrenne" -ErrorAction SilentlyContinue
           $v = (Select-String -Path desktop/build.gradle.kts -Pattern 'val lyrenneVersion = "([^"]+)"').Matches[0].Groups[1].Value
           # Rehearsal against the last published release: it exists, so the URL and hash resolve.
           $rel = (Invoke-RestMethod https://api.github.com/repos/Doctordefector/Lyrenne/releases/latest).tag_name.TrimStart('v')
           ./packaging/winget/New-WingetManifest.ps1 -Version $rel -SkipZipCheck -OutDir "$env:RUNNER_TEMP/wg"
-          winget install --manifest "$env:RUNNER_TEMP/wg/manifests/d/Doctordefector/Lyrenne/$rel" --accept-package-agreements --accept-source-agreements --disable-interactivity
+          winget install --manifest "$env:RUNNER_TEMP/wg/manifests/d/Doctordefector/Lyrenne/$rel" --accept-package-agreements --accept-source-agreements --disable-interactivity --ignore-local-archive-malware-scan
           if ($LASTEXITCODE -ne 0) { throw "winget install failed ($LASTEXITCODE)" }
           $pkg = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" -Directory | Where-Object Name -like 'Doctordefector.Lyrenne_*' | Where-Object Name -ne 'Doctordefector.Lyrenne_CI' | Select-Object -First 1
           Write-Host "Package folder: $($pkg.FullName)"

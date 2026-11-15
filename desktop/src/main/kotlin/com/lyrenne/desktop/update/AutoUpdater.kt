@@ -166,7 +166,8 @@ object AutoUpdater {
                 Timber.i("Install mode: ${linuxPackage ?: if (portable) "portable" else "installed"}")
 
                 val asset = if (linuxPackage != null) {
-                    release.assets.find { it.name.endsWith(".$linuxPackage") }
+                    linuxAssetName(release.assets.map { it.name }, linuxPackage!!, System.getProperty("os.arch"))
+                        ?.let { name -> release.assets.first { it.name == name } }
                 } else if (portable) {
                     // Portable: need the ZIP
                     release.assets.find {
@@ -666,6 +667,21 @@ object AutoUpdater {
     }
 
     // ==================== Helpers ====================
+
+    /**
+     * The .deb or .rpm for this machine's architecture. Releases carry both x86_64 and arm64
+     * packages, and an arm64 machine handed the amd64 one gets an install failure from dnf/apt.
+     * nfpm names them `lyrenne_X_amd64.deb` / `lyrenne_X_arm64.deb` and
+     * `lyrenne-X-1.x86_64.rpm` / `lyrenne-X-1.aarch64.rpm`.
+     */
+    internal fun linuxAssetName(names: List<String>, pkg: String, osArch: String?): String? {
+        val arm = osArch == "aarch64" || osArch == "arm64"
+        val tag = when (pkg) {
+            "deb" -> if (arm) "_arm64.deb" else "_amd64.deb"
+            else -> if (arm) ".aarch64.rpm" else ".x86_64.rpm"
+        }
+        return names.firstOrNull { it.endsWith(tag) }
+    }
 
     internal fun isNewerVersion(latest: String, current: String): Boolean {
         val lParts = latest.split(".").mapNotNull { it.toIntOrNull() }

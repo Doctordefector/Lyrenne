@@ -1283,21 +1283,25 @@ still work if CI is down.
    ```
    gh release create vX.Y.Z Lyrenne-X.Y.Z-portable.zip --title "Lyrenne vX.Y.Z" --notes "..."
    ```
-6. **Package managers: nothing to do.** The Scoop bucket at Doctordefector/scoop-lyrenne runs
-   Excavator on a daily cron and bumps its own version, URL and hash. There is deliberately no
-   winget listing — winget would delete the user's library on upgrade, because this app stores
-   data next to the exe and winget has no `persist` equivalent. See `packaging/README.md` before
-   reconsidering that.
+6. **Package managers.** Scoop: nothing to do (the bucket's Excavator bumps itself daily). winget and
+   Flathub live in someone else's repo, so each release is a PR there: `packaging/README.md` has the
+   exact steps (`New-WingetManifest.ps1`, `update-sources.sh`). CI already rendered the winget manifests
+   from the attached ZIP (`winget-manifests` artifact) and test-built the Flatpak.
 
 ## Distribution Strategy
-- **PORTABLE ONLY** — no EXE installers, no MSI packages. Just the portable ZIP.
-- Each release has exactly ONE artifact: `Lyrenne-X.Y.Z-portable.zip`
-- Users extract and run — no installation needed
-- Downloads, updates, preferences, and database all live next to the app (not in %APPDATA%/Roaming)
-- Do NOT build `packageExe` or `packageMsi` — only `createDistributable`. No installer formats are configured, on purpose
+Install anywhere, from one build per OS and arch. The full table, per-channel rules and the
+submission steps are in `packaging/README.md`; the design is under "Install anywhere" below.
+- **Windows**: the portable ZIP (also what Scoop and winget install). Still no EXE/MSI installer: do not
+  build `packageExe`/`packageMsi`, only `createDistributable`. winget is a listing of the same ZIP.
+- **Linux**: .deb/.rpm (distro VLC as a dependency), an AppImage that bundles libVLC, a Flatpak
+  (libVLC built as a module), and the tarball for the Steam Deck plugin. x86_64 and arm64 each.
+- **Release assets**: ZIP + .sig; per arch .deb/.rpm + .sig, `.AppImage`, `linux-<arch>.tar.gz`.
+- **Data placement is decided per install** (`InstallLocation`): next to the app when portable,
+  `%LOCALAPPDATA%\Lyrenne` when a package manager or admin owns the folder, XDG dirs on Linux.
 
 ## File Storage Paths
-All data is fully portable — stored next to the executable via centralized `AppPaths.kt`:
+`AppPaths.kt` resolves everything; `InstallLocation.kt` decides the root once (table in
+`packaging/README.md`). A portable copy (unzipped ZIP, Scoop) stores everything next to the executable:
 - **Preferences**: `<app-dir>/data/preferences.properties`
 - **Database**: `<app-dir>/data/lyrenne.db` (SQLDelight)
 - **Credentials**: `<app-dir>/data/credentials.json` (plaintext, intentional)
@@ -1305,9 +1309,14 @@ All data is fully portable — stored next to the executable via centralized `Ap
 - **Downloads**: `<app-dir>/Downloads/` (configurable via Settings folder picker)
 - **Updates staging**: `<app-dir>/updates/` (with fallbacks to user.dir then temp)
 - **No migration** from old `%APPDATA%` paths (removed in 2.9.4, see the rename section)
-- **Linux**: data in `$XDG_DATA_HOME/lyrenne` (`~/.local/share/lyrenne`), downloads in `~/Music/Lyrenne`, unless a `portable` marker file sits next to the app
-- **CRITICAL**: nothing goes to %APPDATA% or %LOCALAPPDATA% except the Start Menu shortcut
-  described under Windows media identity. Everything else lives next to the app for full portability.
+- **Windows, managed** (winget package folder, Program Files, any folder the user cannot write):
+  data in `%LOCALAPPDATA%\Lyrenne` (same files, no `data/` level), downloads in `~\Music\Lyrenne`.
+  winget deletes its package folder on upgrade and uninstall; data inside it would go with it
+- **Linux**: data in `$XDG_DATA_HOME/lyrenne` (`~/.local/share/lyrenne`), downloads in `~/Music/Lyrenne`, unless a `portable` marker file sits next to the app.
+  The Flatpak's XDG_DATA_HOME is `~/.var/app/io.github.doctordefector.Lyrenne/data`
+- **CRITICAL**: a portable copy writes nothing to %APPDATA% or %LOCALAPPDATA% except the Start Menu
+  shortcut described under Windows media identity. Never move a portable copy's data out of its folder:
+  USB-stick users and Scoop's `persist: data, Downloads` depend on it.
 
 ## GitHub & Release
 - **PUBLIC repo**: https://github.com/Doctordefector/Lyrenne — anything pushed or
@@ -1347,6 +1356,9 @@ hand-roll the 7z command.
 
 ### Key file
 - `desktop/.../update/AutoUpdater.kt` — entire update lifecycle (check, download, extract, install script generation)
+- `desktop/.../update/UpdateRoute.kt` — whether this copy may update itself at all. Only a portable
+  Windows copy and a /opt .deb/.rpm do; winget, Program Files, Flatpak and AppImage copies show what to
+  run instead ("Update with: winget upgrade Lyrenne") in Settings and the launch notification
 
 ### Telling the user, in the app
 
@@ -1408,8 +1420,9 @@ Plan and rationale: `AUDIT_AND_LINUX_PLAN.md`. What is in place:
 - **Data**: XDG dirs (see File Storage Paths). Credentials and preferences are written atomically
   (temp file + rename); on POSIX `AppPaths.writeAtomic` makes them `rw-------`. A permission, not
   encryption: the plaintext rule stands.
-- **VLC**: never bundled on Linux; vlcj `NativeDiscovery` finds the distro `libvlc`. Snap/Flatpak VLC
-  cannot be used. Streaming prefers Opus there (Fedora's stock VLC may lack AAC).
+- **VLC**: the .deb/.rpm use the distro `libvlc`, found by vlcj `NativeDiscovery`. The AppImage and the
+  Flatpak bundle their own and name its folder in `LYRENNE_VLC_DIR` (`DesktopPlayer.findBundledVlc`).
+  The Snap/Flatpak VLC *apps* cannot be used by a native install. Streaming prefers Opus there (Fedora's stock VLC may lack AAC).
 - **Sign-in**: Firefox first (plaintext cookies), then the Chromium family with `--password-store=basic`,
   then Flatpak browsers (SteamOS has only those), then "Advanced: paste a cookie" (`PasteCookieSection`).
   A Flatpak browser can only see its own `~/.var/app/<id>`, so its login profile lives there; the
@@ -1426,8 +1439,8 @@ Plan and rationale: `AUDIT_AND_LINUX_PLAN.md`. What is in place:
   dbus-java is excluded only from Windows-host builds; `jdk.security.auth` is in the runtime for it.
 - **Discord**: Unix sockets go through `SocketChannel` (RandomAccessFile cannot open them), searching
   `$XDG_RUNTIME_DIR` incl. Flatpak/Snap Discord subdirs.
-- **Updater**: a copy the `lyrenne` package installed in /opt downloads the release's `.rpm`/`.deb`, checks its
-  `.sig`, installs it with `pkexec dnf|rpm -U|apt-get`, and restarts once the old process is gone (SingleInstance
+- **Updater**: a copy the `lyrenne` package installed in /opt downloads the release's `.rpm`/`.deb` for its
+  arch (`linuxAssetName`), checks its `.sig`, installs it with `pkexec dnf|rpm -U|apt-get`, and restarts once the old process is gone (SingleInstance
   would hand an earlier launch back to it). Anything else on Linux only links the release page. CI signs both packages.
   `-Djdk.lang.Process.launchMechanism=FORK` (build.gradle.kts jvmArgs) is load-bearing: the default spawn
   runs `/opt/lyrenne/lib/runtime/lib/jspawnhelper`, and once a package swaps /opt under a running copy the

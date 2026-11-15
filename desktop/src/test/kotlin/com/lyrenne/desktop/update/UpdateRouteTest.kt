@@ -39,3 +39,26 @@ class UpdateRouteTest {
         assertEquals(UpdateRoute(false, UpdateRoute.PACKAGE_HINT), linux(env = mapOf("APPIMAGE" to "")))
     }
 }
+
+/** Releases carry packages for two architectures; the updater must take this machine's. */
+class LinuxAssetPickTest {
+    private val assets = listOf(
+        "Lyrenne-2.21.0-portable.zip", "lyrenne_2.21.0_amd64.deb", "lyrenne_2.21.0_amd64.deb.sig",
+        "lyrenne_2.21.0_arm64.deb", "lyrenne-2.21.0-1.x86_64.rpm", "lyrenne-2.21.0-1.aarch64.rpm",
+        "Lyrenne-2.21.0-x86_64.AppImage",
+    )
+
+    @Test fun `x86_64 gets amd64 packages`() {
+        assertEquals("lyrenne_2.21.0_amd64.deb", AutoUpdater.linuxAssetName(assets, "deb", "amd64"))
+        assertEquals("lyrenne-2.21.0-1.x86_64.rpm", AutoUpdater.linuxAssetName(assets, "rpm", "amd64"))
+    }
+
+    @Test fun `arm64 gets arm64 packages`() {
+        assertEquals("lyrenne_2.21.0_arm64.deb", AutoUpdater.linuxAssetName(assets, "deb", "aarch64"))
+        assertEquals("lyrenne-2.21.0-1.aarch64.rpm", AutoUpdater.linuxAssetName(assets, "rpm", "aarch64"))
+    }
+
+    @Test fun `a release without this arch offers nothing rather than the wrong one`() {
+        assertEquals(null, AutoUpdater.linuxAssetName(listOf("lyrenne_2.20.5_amd64.deb"), "deb", "aarch64"))
+    }
+}

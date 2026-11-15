@@ -176,24 +176,25 @@ data class KeyCombo(val mods: Set<HotkeyMod>, val key: HotkeyKey) {
 /**
  * What a hotkey can do. [id] is the stored name, so the enum names may change but these may not.
  *
- * Defaults sit around Space and the arrows with Ctrl+Alt held, so one hand finds all of them
- * without looking: Space plays or pauses, Left and Right skip, Up and Down set the volume, Enter
- * likes, Backspace peeks, and Shift on the arrows seeks. Games rarely bind Ctrl+Alt, and none of
+ * Defaults sit around the arrows with Ctrl+Alt held, so one hand finds them without looking: Enter
+ * plays or pauses, Left and Right skip, Up and Down set the volume, Home peeks, Insert likes, End
+ * shows or hides the overlay, and Shift on the arrows seeks. Games rarely bind Ctrl+Alt, and none of
  * these keys types a character, so AltGr (which Windows reports as Ctrl+Alt) cannot swallow one on a
- * European layout. 2.21.0's first defaults (Home, Page Up, Page Down) were scattered and missing on
- * many laptops, which testing called awkward. See CLAUDE.md.
+ * European layout. Space and Backspace were tried and dropped: launchers commonly own Ctrl+Alt+Space,
+ * and on the test PC both were taken. The first defaults (Home, Page Up, Page Down) were scattered.
+ * See CLAUDE.md.
  */
 enum class HotkeyAction(val id: String, val label: String, val defaultCombo: KeyCombo, val defaultOn: Boolean) {
-    PLAY_PAUSE("playPause", "Play or pause", KeyCombo.of("Space", HotkeyMod.CTRL, HotkeyMod.ALT), true),
+    PLAY_PAUSE("playPause", "Play or pause", KeyCombo.of("Enter", HotkeyMod.CTRL, HotkeyMod.ALT), true),
     NEXT("next", "Next song", KeyCombo.of("Right", HotkeyMod.CTRL, HotkeyMod.ALT), true),
     PREVIOUS("previous", "Previous song", KeyCombo.of("Left", HotkeyMod.CTRL, HotkeyMod.ALT), true),
-    LIKE("like", "Like or unlike the song", KeyCombo.of("Enter", HotkeyMod.CTRL, HotkeyMod.ALT), false),
+    LIKE("like", "Like or unlike the song", KeyCombo.of("Insert", HotkeyMod.CTRL, HotkeyMod.ALT), false),
     VOLUME_UP("volumeUp", "Volume up", KeyCombo.of("Up", HotkeyMod.CTRL, HotkeyMod.ALT), true),
     VOLUME_DOWN("volumeDown", "Volume down", KeyCombo.of("Down", HotkeyMod.CTRL, HotkeyMod.ALT), true),
     SEEK_FORWARD("seekForward", "Skip ahead 10 seconds", KeyCombo.of("Right", HotkeyMod.CTRL, HotkeyMod.ALT, HotkeyMod.SHIFT), false),
     SEEK_BACK("seekBack", "Go back 10 seconds", KeyCombo.of("Left", HotkeyMod.CTRL, HotkeyMod.ALT, HotkeyMod.SHIFT), false),
-    PEEK("peek", "Peek at the song and lyrics", KeyCombo.of("Backspace", HotkeyMod.CTRL, HotkeyMod.ALT), true),
-    TOGGLE_OVERLAY("toggleOverlay", "Show or hide the overlay", KeyCombo.of("Backspace", HotkeyMod.CTRL, HotkeyMod.ALT, HotkeyMod.SHIFT), false);
+    PEEK("peek", "Peek at the song and lyrics", KeyCombo.of("Home", HotkeyMod.CTRL, HotkeyMod.ALT), true),
+    TOGGLE_OVERLAY("toggleOverlay", "Show or hide the overlay", KeyCombo.of("End", HotkeyMod.CTRL, HotkeyMod.ALT), false);
 
     /** The id handed to RegisterHotKey. Any value in 0..0xBFFF is the app's to use. */
     val nativeId: Int get() = ordinal + 1

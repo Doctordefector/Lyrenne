@@ -1271,10 +1271,12 @@ command palette entries.
   play or pause. The recorder listens through an AWT `KeyEventDispatcher`, not a Compose handler: the
   window's own shortcuts run first in Compose and Ctrl+K would open the palette. A combo another app
   owns never reaches the recorder at all; the hint under the row says so.
-- **Defaults: Ctrl+Alt around Space and the arrows**, so one hand finds them without looking:
-  Space play/pause, Left/Right previous/next, Up/Down volume, Backspace peek (all on), Enter like,
-  Shift+Left/Right seek, Shift+Backspace show/hide (off). The first 2.21.0 test build used
-  Home / Page Down / Page Up, which testing found awkward (scattered, and missing on many laptops).
+- **Defaults: Ctrl+Alt around the arrows**, so one hand finds them without looking: Enter
+  play/pause, Left/Right previous/next, Up/Down volume, Home peek (all on), Insert like, End show/hide,
+  Shift+Left/Right seek (off). History, so nobody re-tries them: the first 2.21.0 test build used
+  Home / Page Down / Page Up, which testing found scattered; the next used Ctrl+Alt+Space and
+  Ctrl+Alt+Backspace, both already registered by other apps on the test PC (launchers commonly own
+  Ctrl+Alt+Space). Probe a candidate with `RegisterHotKey` from PowerShell before choosing one.
   Games rarely bind Ctrl+Alt, and none of these keys types a character, which matters because AltGr
   arrives as Ctrl+Alt: Ctrl+Alt+E would eat the euro sign on a German layout, Ctrl+Alt+L the Polish
   l-stroke. Some old Intel graphics drivers own Ctrl+Alt+arrows for screen rotation; the row then

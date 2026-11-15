@@ -51,6 +51,10 @@ sealed class PaletteAction(val label: String, val icon: ImageVector, val categor
     data object ToggleShuffle : PaletteAction("Toggle Shuffle", PlayerIcons.Shuffle, "Playback")
     data object ToggleRepeat : PaletteAction("Toggle Repeat", Icons.Default.Repeat, "Playback")
 
+    // Lyrenne Link
+    data object ShowRemoteQr : PaletteAction("Show phone remote QR", Icons.Default.QrCode2, "Lyrenne Link")
+    data object CopyOverlayUrl : PaletteAction("Copy OBS overlay URL", Icons.Default.Videocam, "Lyrenne Link")
+
     // Songs from library
     data class PlaySong(val song: SongInfo) : PaletteAction("Play: ${song.title}", Icons.Default.MusicNote, "Songs")
 }
@@ -84,6 +88,8 @@ fun CommandPalette(
             PaletteAction.PrevTrack,
             PaletteAction.ToggleShuffle,
             PaletteAction.ToggleRepeat,
+            PaletteAction.ShowRemoteQr,
+            PaletteAction.CopyOverlayUrl,
         )
     }
 
@@ -253,6 +259,8 @@ private fun executeAction(
         is PaletteAction.PrevTrack -> { /* handled via onNavigate */ }
         is PaletteAction.ToggleShuffle -> player.toggleShuffle()
         is PaletteAction.ToggleRepeat -> player.toggleRepeat()
+        is PaletteAction.ShowRemoteQr -> com.lyrenne.desktop.link.LyrenneLink.pairingRequested.value = true
+        is PaletteAction.CopyOverlayUrl -> com.lyrenne.desktop.link.LyrenneLink.copyOverlayUrl()
         else -> {}
     }
     onNavigate(action)

@@ -787,6 +787,10 @@ fun SettingsScreen(
                     )
                 }
 
+                item(key = "section:Lyrenne Link") {
+                    com.lyrenne.desktop.ui.link.LyrenneLinkSettings(filter)
+                }
+
                 item(key = "section:Last.fm") {
                     SettingsSectionHeader("Last.fm")
                 }

@@ -328,6 +328,8 @@ private fun runApp() {
             DiscordRPC.initialize(player)
             LastFmManager.initialize(player)
             DesktopNotification.initialize(player)
+            // Lyrenne Link: stream overlay and phone remote. Starts nothing unless switched on.
+            com.lyrenne.desktop.link.LyrenneLink.initialize(player)
 
             // Set up tray callbacks for minimize-to-tray
             DesktopNotification.onShowWindow = {

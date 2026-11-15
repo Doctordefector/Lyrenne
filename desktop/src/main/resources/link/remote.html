@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#121110">
+<meta name="color-scheme" content="dark">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Lyrenne">
+<link rel="apple-touch-icon" href="/assets/icon-192.png">
+<link rel="icon" href="/assets/icon-192.png">
+<title>Lyrenne Remote</title>
+<link rel="stylesheet" href="/assets/remote.css">
+</head>
+<body>
+<div id="wash"></div>
+
+<header>
+  <span class="brand">Lyrenne</span>
+  <span id="conn" class="pill" hidden></span>
+</header>
+
+<main>
+  <!-- Now playing -->
+  <section id="v-now" class="view on">
+    <div class="art"><div class="noart"></div><img alt=""><img alt=""></div>
+    <div class="meta">
+      <div class="text">
+        <div id="title" class="title">Nothing playing</div>
+        <div id="artist" class="artist">Pick something in Search</div>
+      </div>
+      <button id="like" class="icon" aria-label="Add to liked songs"></button>
+    </div>
+    <div class="seek">
+      <input id="seek" type="range" min="0" max="1000" value="0" aria-label="Seek">
+      <div class="times"><span id="cur">0:00</span><span id="dur">0:00</span></div>
+    </div>
+    <div class="controls">
+      <button id="shuffle" class="icon small" aria-label="Shuffle"></button>
+      <button id="prev" class="icon" aria-label="Previous"></button>
+      <button id="toggle" class="play" aria-label="Play"></button>
+      <button id="next" class="icon" aria-label="Next"></button>
+      <button id="repeat" class="icon small" aria-label="Repeat"></button>
+    </div>
+    <div class="volume">
+      <span id="volicon" class="vicon"></span>
+      <input id="volume" type="range" min="0" max="100" value="100" aria-label="Volume">
+    </div>
+  </section>
+
+  <!-- Lyrics -->
+  <section id="v-lyrics" class="view">
+    <div id="lyrics" class="lyrics"></div>
+  </section>
+
+  <!-- Queue -->
+  <section id="v-queue" class="view">
+    <h2>Up next</h2>
+    <div id="queue" class="list"></div>
+  </section>
+
+  <!-- Search -->
+  <section id="v-search" class="view">
+    <form id="sform" autocomplete="off">
+      <input id="sq" type="search" placeholder="Search songs" enterkeyhint="search">
+    </form>
+    <div id="results" class="list"></div>
+  </section>
+</main>
+
+<div id="mini" hidden>
+  <img alt="">
+  <div class="mtext"><div class="mt"></div><div class="ma"></div></div>
+  <button id="mtoggle" class="icon" aria-label="Play"></button>
+  <div class="mbar"><div></div></div>
+</div>
+
+<nav>
+  <button data-v="now" class="on"><span class="ni" data-i="disc"></span>Playing</button>
+  <button data-v="lyrics"><span class="ni" data-i="lyrics"></span>Lyrics</button>
+  <button data-v="queue"><span class="ni" data-i="queue"></span>Queue</button>
+  <button data-v="search"><span class="ni" data-i="search"></span>Search</button>
+</nav>
+
+<div id="toast" role="status"></div>
+
+<div id="blocker" hidden>
+  <div class="card">
+    <h1 id="btitle">Not paired</h1>
+    <p id="btext">Open Lyrenne on your PC, go to Settings, Lyrenne Link, and scan the QR code again.</p>
+    <button id="bretry" class="primary">Try again</button>
+  </div>
+</div>
+
+<script src="/assets/link-common.js"></script>
+<script src="/assets/remote.js"></script>
+</body>
+</html>

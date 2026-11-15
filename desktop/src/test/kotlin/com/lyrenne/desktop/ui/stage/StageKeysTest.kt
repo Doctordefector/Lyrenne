@@ -17,14 +17,17 @@ import java.awt.event.KeyEvent as AwtKeyEvent
 class StageKeysTest {
     private val source = javax.swing.JPanel()
 
-    private fun key(code: Int, ctrl: Boolean = false, shift: Boolean = false): KeyEvent {
+    /** [primary] is the platform's shortcut modifier: Cmd on a Mac, Ctrl elsewhere (ShortcutKeys). */
+    private fun key(code: Int, primary: Boolean = false, shift: Boolean = false): KeyEvent {
+        val mac = com.lyrenne.desktop.Platform.isMac
         var mods = 0
-        if (ctrl) mods = mods or AwtKeyEvent.CTRL_DOWN_MASK
+        if (primary) mods = mods or (if (mac) AwtKeyEvent.META_DOWN_MASK else AwtKeyEvent.CTRL_DOWN_MASK)
         if (shift) mods = mods or AwtKeyEvent.SHIFT_DOWN_MASK
         return KeyEvent(
             key = androidx.compose.ui.input.key.Key(code),
             type = androidx.compose.ui.input.key.KeyEventType.KeyDown,
-            isCtrlPressed = ctrl,
+            isCtrlPressed = primary && !mac,
+            isMetaPressed = primary && mac,
             isShiftPressed = shift,
             nativeEvent = AwtKeyEvent(source, AwtKeyEvent.KEY_PRESSED, 0L, mods, code, AwtKeyEvent.CHAR_UNDEFINED),
         )
@@ -34,12 +37,12 @@ class StageKeysTest {
 
     @Test
     fun shortcutOpensAndClosesStage() {
-        assertTrue(handleStageRewindKey(key(AwtKeyEvent.VK_F, ctrl = true, shift = true)))
+        assertTrue(handleStageRewindKey(key(AwtKeyEvent.VK_F, primary = true, shift = true)))
         assertTrue(StageMode.isOpen)
-        assertTrue(handleStageRewindKey(key(AwtKeyEvent.VK_F, ctrl = true, shift = true)))
+        assertTrue(handleStageRewindKey(key(AwtKeyEvent.VK_F, primary = true, shift = true)))
         assertFalse(StageMode.isOpen)
-        // Plain Ctrl+F is the app's search, not Stage.
-        assertFalse(handleStageRewindKey(key(AwtKeyEvent.VK_F, ctrl = true)))
+        // Plain Ctrl+F (Cmd+F on a Mac) is the app's search, not Stage.
+        assertFalse(handleStageRewindKey(key(AwtKeyEvent.VK_F, primary = true)))
     }
 
     @Test

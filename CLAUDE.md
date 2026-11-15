@@ -1764,7 +1764,7 @@ It runs before crash reporting takes stderr and never opens a window or claims t
   window opened, linted with `flatpak-builder-lint`.
 
 ## Version Management
-- **Current version**: v2.20.5
+- **Current version**: v2.21.0
 - **One place**: `desktop/build.gradle.kts` → `lyrenneVersion = "X.Y.Z"`. `processResources` expands it into
   `version.properties`, which `AutoUpdater.CURRENT_VERSION` reads. `UpdateSignatureTest` pins that they agree
 

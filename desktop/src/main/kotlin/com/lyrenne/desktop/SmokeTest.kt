@@ -44,6 +44,10 @@ object SmokeTest {
         report("SMOKE vlc loaded in $initMs ms from ${from ?: "the system"}")
         if (requireBundled && from == null) fail("libvlc did not come from the app bundle")
 
+        // macOS: publish to Now Playing like the app does, and check the system holds it.
+        val nowPlaying = Platform.isMac && com.lyrenne.desktop.mac.MacNowPlaying.initialize(player)
+        if (Platform.isMac && !nowPlaying) fail("Now Playing setup failed: ${com.lyrenne.desktop.mac.MacNowPlaying.lastFailure}")
+
         var failed = 0
         for ((i, file) in files.withIndex()) {
             current = file
@@ -60,6 +64,12 @@ object SmokeTest {
             val played = ok && s.error == null && s.isPlaying && s.position > 1_000
             report("SMOKE ${if (played) "PLAYED" else "FAILED"} ${file.name}: position=${s.position} ms, duration=${s.duration} ms, error=${s.error}")
             if (!played) failed++
+            if (nowPlaying && played) {
+                Thread.sleep(1_500) // the observer publishes once a second
+                val info = com.lyrenne.desktop.mac.MacNowPlaying.readBack()
+                report("SMOKE nowplaying $info")
+                if (info["title"] != file.name || info["state"] != "1") failed++
+            }
             player.pause()
         }
         runCatching { player.release() }

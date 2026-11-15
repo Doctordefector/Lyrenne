@@ -226,7 +226,7 @@ object SystemMediaSession {
         null
     }
 
-    private suspend fun cacheArtwork(url: String): File? = withContext(Dispatchers.IO) {
+    internal suspend fun cacheArtwork(url: String): File? = withContext(Dispatchers.IO) {
         var partial: File? = null
         try {
             val key = MessageDigest.getInstance("SHA-256")

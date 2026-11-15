@@ -265,6 +265,7 @@ private fun runApp() {
                     LastFmManager::release,
                     DiscordRPC::release,
                     SystemMediaSession::release,
+                    com.lyrenne.desktop.mac.MacNowPlaying::release,
                     MediaKeyHandler::release
                 ).forEach { runCatching { it() }.onFailure { e -> Timber.e("Release failed on quit: ${e.message}") } }
                 exitProcess(0)
@@ -287,7 +288,7 @@ private fun runApp() {
                 // Keeps the Start Menu shortcut in step with the setting, and repoints it when the
                 // portable folder has moved. Without it Windows has no name for the app id.
                 WindowsStartMenuShortcut.apply(PreferencesManager.preferences.value.windowsMediaAppName)
-                SystemMediaSession.initialize(player)
+                SystemMediaSession.initialize(player) || com.lyrenne.desktop.mac.MacNowPlaying.initialize(player)
             }
             MediaKeyHandler.initialize(player, handleHardwareMediaKeys = !systemMediaSessionAvailable)
             // Auth needs network — run after window is visible

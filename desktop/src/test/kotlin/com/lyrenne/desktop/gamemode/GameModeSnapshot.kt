@@ -37,8 +37,8 @@ import java.io.File
 class GameModeSnapshot {
     private val out = File("build/snapshots/gamemode").apply { mkdirs() }
 
-    private fun shoot(name: String, w: Int, h: Int, theme: ThemeMode = ThemeMode.DARK, content: @Composable () -> Unit) {
-        val scene = ImageComposeScene(w, h, Density(1f)) { LyrenneTheme(themeMode = theme) { content() } }
+    private fun shoot(name: String, w: Int, h: Int, theme: ThemeMode = ThemeMode.DARK, density: Float = 1f, content: @Composable () -> Unit) {
+        val scene = ImageComposeScene(w, h, Density(density)) { LyrenneTheme(themeMode = theme) { content() } }
         val start = System.nanoTime()
         repeat(40) { scene.render(System.nanoTime() - start); Thread.sleep(25) }
         File(out, "$name.png").writeBytes(scene.render(System.nanoTime() - start).encodeToData(EncodedImageFormat.PNG)!!.bytes)
@@ -54,12 +54,12 @@ class GameModeSnapshot {
         val player = DesktopPlayer().apply {
             downloadedFileFor = { null }; streamFor = { "https://stream.invalid/$it" }; autoplayAllowed = { false }
         }
-        val song = SongInfo("s1", "Midnight City", "M83", null, album = "Hurry Up, We're Dreaming")
+        val song = SongInfo("s1", "Neon Rain", "Kite Theory", null, album = "City Static")
         player.playQueue(listOf(song), 0)
-        val words = listOf(LyricWord("Waiting", 0, 600), LyricWord(" in", 600, 900), LyricWord(" a", 900, 1000), LyricWord(" car", 1000, 1600))
+        val words = listOf(LyricWord("Every", 0, 600), LyricWord(" light", 600, 900), LyricWord(" is", 900, 1000), LyricWord(" humming", 1000, 1600))
         val lines = listOf(
-            LyricLine(0, "Waiting in a car", words = words),
-            LyricLine(4000, "Waiting for a ride in the dark"),
+            LyricLine(0, "Every light is humming", words = words),
+            LyricLine(4000, "Hold the night a little longer"),
         )
         @Suppress("UNCHECKED_CAST")
         val f = LyricsManager::class.java.getDeclaredField("_state").apply { isAccessible = true }
@@ -77,6 +77,17 @@ class GameModeSnapshot {
                 Box(Modifier.fillMaxSize().background(gameBackground)) {
                     OverlayContent(player, view, corner, Modifier.fillMaxSize())
                 }
+            }
+        }
+        // Site hero: the panel over a dusk game scene, lyrics part sung (words timed before "now").
+        val sung = listOf(LyricWord("Every", -2000, -1200), LyricWord(" light", -1200, -700), LyricWord(" is", -700, 300), LyricWord(" humming", 300, 1200))
+        (f.get(LyricsManager) as MutableStateFlow<LyricsState>).value =
+            LyricsState(songId = "s1", lyrics = "x", lines = listOf(LyricLine(-2000, "Every light is humming", words = sung), LyricLine(4000, "Hold the night a little longer")))
+        val scene = Brush.verticalGradient(listOf(Color(0xFF1B2440), Color(0xFF4A3A6B), Color(0xFFC9725A), Color(0xFF2B1A22)))
+        shoot("site-game-mode", 1200, 675, density = 1.6f) {
+            Box(Modifier.fillMaxSize().background(scene)) {
+                Box(Modifier.fillMaxSize().background(Brush.radialGradient(listOf(Color(0x66FFD39A), Color.Transparent), radius = 1100f)))
+                OverlayContent(player, OverlayView(card = true, lyrics = true, flash = OverlayFlash(OverlayFlash.Kind.NEXT, "Next", 9)), OverlayCorner.TOP_RIGHT, Modifier.fillMaxSize().padding(24.dp))
             }
         }
         for (theme in listOf(ThemeMode.DARK, ThemeMode.LIGHT)) {

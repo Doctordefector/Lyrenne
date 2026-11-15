@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Game Mode | Control YouTube Music while gaming, lyrics over your game | Lyrenne Music Player</title>
+<meta name="description" content="Control YouTube Music without alt-tabbing out of your game. Lyrenne Music Player's Game Mode adds global hotkeys and a click-through overlay with the song and word-by-word lyrics over borderless and windowed games. Free and open source.">
+<link rel="canonical" href="https://doctordefector.github.io/Lyrenne/game-mode/">
+<link rel="icon" type="image/svg+xml" href="../images/logo.svg">
+<link rel="alternate icon" type="image/png" href="../images/logo.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Lyrenne Music Player">
+<meta property="og:title" content="Game Mode | YouTube Music hotkeys and lyrics over your game">
+<meta property="og:description" content="Global hotkeys and a click-through overlay with the song and word-by-word lyrics, over borderless and windowed games. Free and open source.">
+<meta property="og:url" content="https://doctordefector.github.io/Lyrenne/game-mode/">
+<meta property="og:image" content="https://doctordefector.github.io/Lyrenne/images/game-mode.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Game Mode | YouTube Music hotkeys and lyrics over your game">
+<meta name="twitter:description" content="Global hotkeys and a click-through overlay with the song and word-by-word lyrics, over borderless and windowed games.">
+<meta name="twitter:image" content="https://doctordefector.github.io/Lyrenne/images/game-mode.png">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    { "@type": "Question", "name": "How do I control YouTube Music while playing a game?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Lyrenne Music Player's Game Mode registers global hotkeys that work while the game has focus: Ctrl+Alt+Enter plays or pauses, Ctrl+Alt+Left and Right skip, Ctrl+Alt+Up and Down change the volume. Every hotkey can be changed by pressing the keys you want." } },
+    { "@type": "Question", "name": "Can I see song lyrics over my game?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. The in-game overlay shows the current line with word-by-word fill and the next line under it. Press Ctrl+Alt+Home to pin it on screen until you press it again, or set the overlay to Always on." } },
+    { "@type": "Question", "name": "Will the overlay take focus or block my clicks?",
+      "acceptedAnswer": { "@type": "Answer", "text": "No. Clicks go straight through it and it never becomes the active window, so the game keeps focus." } },
+    { "@type": "Question", "name": "Does it work in fullscreen games?",
+      "acceptedAnswer": { "@type": "Answer", "text": "The overlay draws over borderless and windowed games. Games in exclusive fullscreen hide it. The hotkeys work in either." } }
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    { "@type": "ListItem", "position": 1, "name": "Lyrenne Music Player", "item": "https://doctordefector.github.io/Lyrenne/" },
+    { "@type": "ListItem", "position": 2, "name": "Game Mode", "item": "https://doctordefector.github.io/Lyrenne/game-mode/" }
+  ]
+}
+</script>
+
+<link rel="stylesheet" href="../site.css?v=1">
+</head>
+<body>
+
+<header class="sticky-nav">
+    <nav>
+        <a href="../">Lyrenne</a>
+        <a href="#features">Features</a>
+        <a href="#hotkeys">Hotkeys</a>
+        <a href="#faq">FAQ</a>
+        <a href="https://github.com/Doctordefector/Lyrenne/releases/latest">Download</a>
+    </nav>
+</header>
+
+<main>
+
+<section id="hero">
+    <img class="mark" src="../images/logo.svg" width="88" height="88" alt="Lyrenne app icon">
+    <h1><span>Game Mode</span><span class="sub">YouTube Music without alt-tabbing</span></h1>
+    <p class="lede">Skip, pause and turn it down from inside your game, and keep the lyrics on
+        screen while you play. Part of Lyrenne Music Player for Windows. Free, open source, no ads.</p>
+    <a class="lux-frame" href="https://github.com/Doctordefector/Lyrenne/releases/latest">
+        <span class="lux-frame-content">Download Lyrenne</span>
+    </a>
+    <div class="hero-meta">Windows 10 / 11 &middot; Settings &gt; Game Mode &middot; GPL-3.0</div>
+</section>
+
+<section id="what" class="fade-in">
+    <div class="shot-frame fade-in">
+        <img src="../images/game-mode.png" width="1200" height="675" loading="lazy"
+             alt="The Lyrenne Music Player in-game overlay: a dark glass panel with the song, the current lyric line filling word by word, and a Next confirmation">
+    </div>
+    <p class="prose" style="margin-top:2.5rem">Changing the song mid-match usually means alt-tabbing out
+        and hoping the game survives it. Game Mode keeps your hands on the keyboard: global hotkeys
+        work while the game has focus, and a small overlay shows what is playing and the line being
+        sung, right on top of the game.</p>
+</section>
+
+<section id="features" class="fade-in">
+    <h2>What It Does</h2>
+    <div class="cards">
+        <div class="card fade-in">
+            <span class="card-context">Hotkeys</span>
+            <h3>Works while the game has focus</h3>
+            <p>Play, pause, skip, volume, like and seek from anywhere. Rebind any of them by pressing
+                the keys you want; a combo another app already owns is flagged so it never fights.</p>
+        </div>
+        <div class="card fade-in">
+            <span class="card-context">Overlay</span>
+            <h3>Lyrics over your game</h3>
+            <p>The current line fills word by word in the colour of the album cover, with the next
+                line dimmed under it. Pin it with Ctrl+Alt+Home, or set it to Always on.</p>
+        </div>
+        <div class="card fade-in">
+            <span class="card-context">Click-through</span>
+            <h3>Never steals focus</h3>
+            <p>Clicks go straight through the overlay and it never becomes the active window, so
+                your game keeps every input. It stays off the taskbar and out of Alt+Tab.</p>
+        </div>
+        <div class="card fade-in">
+            <span class="card-context">Feedback</span>
+            <h3>You know it worked</h3>
+            <p>Every hotkey flashes a small confirmation, and volume changes show the level, so you
+                never wonder whether a key press landed.</p>
+        </div>
+        <div class="card fade-in">
+            <span class="card-context">Modes</span>
+            <h3>As much as you want</h3>
+            <p>Off, a song toast on every change, a lyrics strip while you play, or Always on. Pick
+                the corner, the size, the opacity and the screen.</p>
+        </div>
+        <div class="card fade-in">
+            <span class="card-context">Multi-monitor</span>
+            <h3>Follows your game</h3>
+            <p>The overlay appears on the screen the game is on, or stays on one screen you choose.</p>
+        </div>
+    </div>
+</section>
+
+<section id="hotkeys" class="fade-in">
+    <h2>Default Hotkeys</h2>
+    <p class="prose">All under one hand, around the arrow keys. Every one can be changed in
+        Settings &gt; Game Mode.</p>
+    <div class="faq">
+        <details open><summary>On out of the box</summary>
+            <p><code>Ctrl+Alt+Enter</code> play or pause &middot; <code>Ctrl+Alt+Right</code> next &middot;
+               <code>Ctrl+Alt+Left</code> previous &middot; <code>Ctrl+Alt+Up</code> / <code>Down</code> volume &middot;
+               <code>Ctrl+Alt+Home</code> pin the song and lyrics on screen</p></details>
+        <details><summary>One switch away</summary>
+            <p><code>Ctrl+Alt+Insert</code> like &middot; <code>Ctrl+Alt+Shift+Right</code> / <code>Left</code>
+               seek 10 seconds &middot; <code>Ctrl+Alt+Page Down</code> peek for a few seconds &middot;
+               <code>Ctrl+Alt+End</code> show or hide the overlay</p></details>
+    </div>
+</section>
+
+<section id="faq" class="fade-in">
+    <h2>Questions</h2>
+    <div class="faq">
+        <details><summary>Does the overlay work in fullscreen games?</summary>
+            <p>It draws over borderless and windowed games. Exclusive fullscreen hides every overlay
+               that is not part of the game itself, so switch the game to borderless to see it. The
+               hotkeys work either way.</p></details>
+        <details><summary>Will it cost me frames?</summary>
+            <p>The overlay window is hidden whenever it has nothing to show, and nothing on it
+               animates continuously except the lyric fill while it is up.</p></details>
+        <details><summary>Does it work on Linux and macOS?</summary>
+            <p>The overlay is Windows only for now. Global hotkeys also work on Linux under X11; on
+               Wayland, bind <code>playerctl play-pause</code> in your desktop's own shortcuts, since
+               Lyrenne publishes MPRIS.</p></details>
+        <details><summary>What about VR and the Steam Deck?</summary>
+            <p><a href="../vr/">Lyrenne VR</a> puts the player on your wrist in PC VR games, and
+               <a href="../steam-deck/">Lyrenne for Decky</a> puts it in the Steam Deck's Quick Access
+               Menu.</p></details>
+    </div>
+</section>
+
+</main>
+
+<footer>
+    <div class="footer-content">
+        <span>Built by <a class="author" href="https://andrevich.netlify.app" rel="noopener">Andrei Chapliuk</a>.
+            Free and open source, GPL-3.0.
+            Not affiliated with YouTube or Google.</span>
+        <span class="footer-right">
+            <a href="../">Lyrenne Music Player</a>
+            <a href="https://github.com/Doctordefector/Lyrenne">Source</a>
+            <a href="https://github.com/Doctordefector/Lyrenne/issues">Report a bug</a>
+        </span>
+    </div>
+</footer>
+
+<script>
+const fadeInObserver = new IntersectionObserver((entries, observer) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) { entry.target.classList.add('visible'); observer.unobserve(entry.target); }
+    });
+}, { root: null, rootMargin: '0px', threshold: 0.1 });
+document.querySelectorAll('.fade-in').forEach(el => fadeInObserver.observe(el));
+</script>
+
+</body>
+</html>

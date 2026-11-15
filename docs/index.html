@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Lyrenne | YouTube Music Player for Windows and Linux</title>
-<meta name="description" content="Lyrenne is a free, open source YouTube Music player for Windows 10, 11 and Linux. Portable on Windows, .deb and .rpm on Linux, no ads. Plays your real library, playlists and synced lyrics.">
+<title>Lyrenne Music Player | Free YouTube Music app for Windows, macOS and Linux</title>
+<meta name="description" content="Lyrenne Music Player is a free, open source YouTube Music app for Windows, macOS and Linux, built for gamers and streamers: hotkeys and lyrics over your game, an OBS overlay, a phone remote, synced lyrics and offline downloads. No ads.">
 <link rel="canonical" href="https://doctordefector.github.io/Lyrenne/">
 <link rel="icon" type="image/svg+xml" href="images/logo.svg">
 <link rel="alternate icon" type="image/png" href="images/logo.png">
@@ -14,31 +14,32 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="Lyrenne">
-<meta property="og:title" content="Lyrenne | YouTube Music Player for Windows and Linux">
-<meta property="og:description" content="A free, open source YouTube Music player for Windows and Linux. Synced lyrics, offline downloads, no ads.">
+<meta property="og:site_name" content="Lyrenne Music Player">
+<meta property="og:title" content="Lyrenne Music Player | YouTube Music for Windows, macOS and Linux">
+<meta property="og:description" content="A free, open source YouTube Music app for Windows, macOS and Linux, built for gamers and streamers. Synced lyrics, offline downloads, no ads.">
 <meta property="og:url" content="https://doctordefector.github.io/Lyrenne/">
 <meta property="og:image" content="https://doctordefector.github.io/Lyrenne/images/social-preview.png">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Lyrenne | YouTube Music Player for Windows and Linux">
-<meta name="twitter:description" content="A free, open source YouTube Music player for Windows and Linux. Synced lyrics, offline downloads, no ads.">
+<meta name="twitter:title" content="Lyrenne Music Player | YouTube Music for Windows, macOS and Linux">
+<meta name="twitter:description" content="A free, open source YouTube Music app for Windows, macOS and Linux, built for gamers and streamers. Synced lyrics, offline downloads, no ads.">
 <meta name="twitter:image" content="https://doctordefector.github.io/Lyrenne/images/social-preview.png">
 
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
-  "name": "Lyrenne",
-  "alternateName": "Lyrenne YouTube Music Player for Windows and Linux",
+  "name": "Lyrenne Music Player",
+  "alternateName": ["Lyrenne", "Lyrenne YouTube Music Player for Windows, macOS and Linux"],
   "applicationCategory": "MultimediaApplication",
   "applicationSubCategory": "Music Player",
-  "operatingSystem": "Windows 10, Windows 11, Linux",
+  "operatingSystem": "Windows 10, Windows 11, macOS, Linux",
+  "featureList": ["Two-way YouTube Music library sync", "Synced lyrics with word-by-word highlighting", "Global hotkeys and an in-game lyrics overlay", "OBS stream overlay with synced lyrics", "Phone remote in the browser", "Import from MetroList backups", "Offline downloads", "Listening recap (Rewind)"],
   "downloadUrl": "https://github.com/Doctordefector/Lyrenne/releases/latest",
   "installUrl": "https://github.com/Doctordefector/Lyrenne/releases/latest",
   "license": "https://www.gnu.org/licenses/gpl-3.0.html",
   "isAccessibleForFree": true,
   "screenshot": "https://doctordefector.github.io/Lyrenne/images/screenshot.jpg",
-  "description": "A free, open source YouTube Music player for Windows and Linux. Synced lyrics, offline downloads, no ads.",
+  "description": "A free, open source YouTube Music app for Windows, macOS and Linux, built for gamers and streamers. Synced lyrics, offline downloads, no ads.",
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
   "author": {
     "@type": "Person",
@@ -54,7 +55,11 @@
   "@type": "FAQPage",
   "mainEntity": [
     {"@type":"Question","name":"Is there a YouTube Music desktop app for Windows?","acceptedAnswer":{"@type":"Answer","text":"YouTube does not ship an official desktop app. Lyrenne is a free, open source native player for Windows 10 and 11 that signs in to your own YouTube Music account and plays your real library."}},
-    {"@type":"Question","name":"Is there a YouTube Music app for Linux?","acceptedAnswer":{"@type":"Answer","text":"Lyrenne runs on Linux. Every release ships a .deb for Debian and Ubuntu and an .rpm for Fedora, with one-click updates from inside the app."}},
+    {"@type":"Question","name":"Is there a YouTube Music app for Linux?","acceptedAnswer":{"@type":"Answer","text":"Lyrenne runs on Linux. Every release ships an AppImage that runs on any distro, a .deb for Debian and Ubuntu and an .rpm for Fedora, for x86_64 and ARM."}},
+    {"@type":"Question","name":"Is there a YouTube Music app for Mac?","acceptedAnswer":{"@type":"Answer","text":"Yes. Lyrenne Music Player ships a DMG for Apple Silicon and one for Intel Macs, with Now Playing, media keys and AirPods controls."}},
+    {"@type":"Question","name":"Can I control YouTube Music while gaming?","acceptedAnswer":{"@type":"Answer","text":"Yes. Lyrenne's Game Mode adds global hotkeys that work while a game has focus, and an overlay that shows the song and word-by-word lyrics over borderless and windowed games."}},
+    {"@type":"Question","name":"How do I show YouTube Music now playing in OBS?","acceptedAnswer":{"@type":"Answer","text":"Lyrenne has a built-in OBS Browser Source overlay with the song and live lyrics. Copy its URL from Settings, Integrations, Lyrenne Link and add it as a Browser Source."}},
+    {"@type":"Question","name":"Can I move my MetroList library to my computer?","acceptedAnswer":{"@type":"Answer","text":"Yes. Lyrenne imports MetroList 13 and 14 backups: liked songs, playlists, saved albums, followed artists and play history."}},
     {"@type":"Question","name":"Is Lyrenne free?","acceptedAnswer":{"@type":"Answer","text":"Yes. It is free and open source under GPL-3.0. There is no paid tier, no account of its own and no telemetry."}},
     {"@type":"Question","name":"Does it need an installer?","acceptedAnswer":{"@type":"Answer","text":"Not on Windows. It ships as a portable ZIP. Extract it anywhere and run Lyrenne.exe. Everything it writes stays in its own folder, so deleting that folder removes it completely. On Linux it installs as a .deb or .rpm package."}},
     {"@type":"Question","name":"Do I need VLC or Java installed?","acceptedAnswer":{"@type":"Answer","text":"No. The download bundles its own Java runtime, and on Windows the VLC playback engine and ffmpeg too. The Linux packages pull VLC in from your distribution."}},
@@ -71,6 +76,7 @@
     <nav>
         <a href="#hero">Home</a>
         <a href="#what">What</a>
+        <a href="#gamers">Gamers &amp; streamers</a>
         <a href="#features">Features</a>
         <a href="#install">Install</a>
         <a href="#faq">FAQ</a>
@@ -82,27 +88,79 @@
 <main>
 
 <section id="hero">
-    <img class="mark" src="images/logo.svg" width="88" height="88" alt="Lyrenne app icon">
-    <h1><span class="scramble-text">Lyrenne</span><span class="sub">YouTube Music for Windows &amp; Linux</span></h1>
-    <p class="lede">A free, open source YouTube Music client for Windows 10, 11 and Linux. Your
-        real library, your real playlists, synced lyrics and offline downloads. No ads, no
-        telemetry.</p>
+    <img class="mark" src="images/logo.svg" width="88" height="88" alt="Lyrenne Music Player app icon">
+    <h1><span class="scramble-text">Lyrenne</span><span class="sub">Music Player for Windows, macOS &amp; Linux</span></h1>
+    <p class="lede">A free, open source YouTube Music app for the desktop, built for people who play
+        music while they game and stream. Your real library and playlists, synced lyrics, hotkeys and
+        lyrics over your game, an OBS overlay and a phone remote. No ads, no telemetry.</p>
     <a class="lux-frame" href="https://github.com/Doctordefector/Lyrenne/releases/latest">
         <span class="lux-frame-content">Download</span>
     </a>
-    <div class="hero-meta">Portable ZIP &middot; .deb &middot; .rpm &middot; 64-bit &middot; GPL-3.0</div>
+    <div class="hero-meta">Windows ZIP &middot; macOS DMG &middot; AppImage &middot; .deb &middot; .rpm &middot; GPL-3.0</div>
 </section>
 
 <section id="what" class="fade-in">
     <h2>What It Is</h2>
     <p class="prose">YouTube ships no desktop app for YouTube Music, and a browser tab is not a
-        music player. Lyrenne is a native desktop application for Windows and Linux that
+        music player. Lyrenne Music Player is a native desktop application for Windows, macOS and Linux that
         signs in to your own account and talks to the same API the mobile app uses.</p>
     <p class="prose">It is <strong>not a wrapper around the website</strong> and not a repackaged
         Android build. It has its own player, database and sync layer, written for the desktop.</p>
     <div class="shot-frame fade-in" style="margin-top:3rem">
         <img src="images/screenshot.jpg" width="1600" height="979" loading="lazy"
              alt="Lyrenne running on Windows 11, showing the YouTube Music home feed with quick picks and the player bar">
+    </div>
+</section>
+
+<section id="gamers" class="fade-in">
+    <h2>For Gamers &amp; Streamers</h2>
+    <div class="shot-frame fade-in">
+        <img src="images/game-mode.png" width="1200" height="675" loading="lazy"
+             alt="Lyrenne Music Player's in-game overlay: the song and the lyric line filling word by word over a game">
+    </div>
+    <div class="cards" style="margin-top:2.5rem">
+        <a class="card fade-in" href="game-mode/">
+            <span class="card-context">Game Mode</span>
+            <h3>Hotkeys and lyrics over your game</h3>
+            <p>Skip, pause and change the volume while the game has focus, and pin the song and
+                word-by-word lyrics on screen in a click-through overlay that never steals focus.</p>
+            <span class="card-tag">Ctrl+Alt + arrows</span>
+        </a>
+        <a class="card fade-in" href="obs-overlay/">
+            <span class="card-context">Streaming</span>
+            <h3>OBS overlay with lyrics</h3>
+            <p>A Browser Source with the song, the cover and live lyrics, plus now-playing files for
+                Streamer.bot. No plugin needed.</p>
+            <span class="card-tag">OBS / Streamlabs</span>
+        </a>
+        <a class="card fade-in" href="obs-overlay/#features">
+            <span class="card-context">Remote</span>
+            <h3>Your phone is the remote</h3>
+            <p>Scan a QR code and control playback, search, the queue and lyrics from your phone's
+                browser. No app to install, off until you turn it on.</p>
+            <span class="card-tag">Any phone browser</span>
+        </a>
+        <div class="card fade-in">
+            <span class="card-context">Stage</span>
+            <h3>Karaoke on the big screen</h3>
+            <p>Full-window lyrics that light up word by word over a background that moves with the
+                cover's colours. Ctrl+Shift+F, then F11.</p>
+            <span class="card-tag">Parties / second screen</span>
+        </div>
+        <div class="card fade-in">
+            <span class="card-context">Rewind</span>
+            <h3>Your listening recap</h3>
+            <p>Top songs, artists and albums, your listening clock and longest streak, for any week,
+                month or year. Save any card as an image to share.</p>
+            <span class="card-tag">Built from your own history</span>
+        </div>
+        <a class="card fade-in" href="metrolist/">
+            <span class="card-context">Move in</span>
+            <h3>Coming from MetroList?</h3>
+            <p>Import your MetroList backup in one click, or a playlist from Spotify, Apple Music,
+                Deezer, TIDAL or SoundCloud.</p>
+            <span class="card-tag">MetroList 13 &amp; 14</span>
+        </a>
     </div>
 </section>
 
@@ -120,8 +178,9 @@
         <div class="card fade-in">
             <span class="card-context">Playback</span>
             <h3>A real player</h3>
-            <p>VLC engine with gapless playback, crossfade, Smart Shuffle, a 10-band equalizer
-                with presets, playback speed, sleep timer, skip silence and volume normalization.</p>
+            <p>VLC engine with gapless playback, crossfade, Smart Shuffle, a 10-band equalizer with
+                AutoEQ headphone correction, SponsorBlock skipping, playback speed, sleep timer and
+                volume normalization.</p>
             <span class="card-tag">VLC / vlcj</span>
         </div>
         <div class="card fade-in">
@@ -149,8 +208,8 @@
         <div class="card fade-in">
             <span class="card-context">Desktop</span>
             <h3>Native extras</h3>
-            <p>Media keys, a floating mini player, Discord Rich Presence, Last.fm scrobbling,
-                Listen Together rooms, Shazam recognition and listening stats.</p>
+            <p>Media keys, a floating mini player, Discord Rich Presence, Last.fm and ListenBrainz
+                scrobbling, Listen Together rooms, Shazam recognition and listening stats.</p>
             <span class="card-tag">Windows Now Playing / MPRIS</span>
         </div>
     </div>
@@ -190,6 +249,12 @@ scoop install lyrenne</code></pre>
         It pulls VLC in from your distro, and later updates are one click from Settings.</p>
     <pre class="cmd"><code>sudo apt install ./lyrenne_*_amd64.deb
 sudo dnf install ./lyrenne-*.x86_64.rpm</code></pre>
+    <p class="prose" style="margin-top:1.5rem">Any other distro: the <code>.AppImage</code> brings its
+        own VLC, so you make it executable and run it. ARM builds of all three are in every release.</p>
+    <p class="prose" style="margin-top:2.5rem"><strong>On macOS</strong>, take the DMG for Apple Silicon
+        (<code>macos-arm64</code>) or Intel (<code>macos-x64</code>) and drag Lyrenne into Applications.
+        VLC is included. The first time, open <strong>System Settings &gt; Privacy &amp; Security</strong>
+        and click <strong>Open Anyway</strong>, since the app is not notarized by Apple.</p>
 </section>
 
 <section id="versions" class="fade-in">
@@ -230,9 +295,17 @@ sudo dnf install ./lyrenne-*.x86_64.rpm</code></pre>
         <details><summary>Does it need VLC or Java installed?</summary>
             <p>No. Both are bundled in the download, along with ffmpeg for exporting.</p></details>
         <details><summary>Does it work on Linux or macOS?</summary>
-            <p>Linux, yes: every release ships a <code>.deb</code> and an <code>.rpm</code>, and
-               the app updates itself through your package manager. macOS builds are not
-               published yet.</p></details>
+            <p>Both. Linux gets an AppImage, a <code>.deb</code> and an <code>.rpm</code> for x86_64
+               and ARM; macOS gets a DMG for Apple Silicon and one for Intel.</p></details>
+        <details><summary>Can I control the music while I'm in a game?</summary>
+            <p>Yes, with <a href="game-mode/">Game Mode</a>: global hotkeys that work while the game
+               has focus, and an overlay with the song and lyrics over borderless and windowed games.</p></details>
+        <details><summary>How do I put YouTube Music on my stream?</summary>
+            <p>Use the built-in <a href="obs-overlay/">OBS overlay</a>: copy its URL from Settings and
+               add it to OBS as a Browser Source.</p></details>
+        <details><summary>I use MetroList on my phone. Can I bring my library?</summary>
+            <p>Yes. <a href="metrolist/">Import a MetroList backup</a> and your likes, playlists, albums,
+               artists and play history come over.</p></details>
         <details><summary>How do I uninstall it?</summary>
             <p>On Windows, delete the folder; everything it wrote lives inside it. On Linux,
                remove the <code>lyrenne</code> package, and <code>~/.local/share/lyrenne</code>

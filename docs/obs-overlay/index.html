@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YouTube Music OBS overlay with synced lyrics | Lyrenne Music Player</title>
+<meta name="description" content="Show what you are playing on YouTube Music on stream, with live word-by-word lyrics. Lyrenne Music Player has a built-in OBS Browser Source overlay, now-playing.txt files for Streamer.bot, and a phone remote. Free, no plugin needed.">
+<link rel="canonical" href="https://doctordefector.github.io/Lyrenne/obs-overlay/">
+<link rel="icon" type="image/svg+xml" href="../images/logo.svg">
+<link rel="alternate icon" type="image/png" href="../images/logo.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Lyrenne Music Player">
+<meta property="og:title" content="YouTube Music OBS overlay with synced lyrics">
+<meta property="og:description" content="A built-in OBS Browser Source with the song and live word-by-word lyrics, plus now-playing files and a phone remote. Free and open source.">
+<meta property="og:url" content="https://doctordefector.github.io/Lyrenne/obs-overlay/">
+<meta property="og:image" content="https://doctordefector.github.io/Lyrenne/images/social-preview.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="YouTube Music OBS overlay with synced lyrics">
+<meta name="twitter:description" content="A built-in OBS Browser Source with the song and live word-by-word lyrics, plus now-playing files and a phone remote.">
+<meta name="twitter:image" content="https://doctordefector.github.io/Lyrenne/images/social-preview.png">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    { "@type": "Question", "name": "How do I show YouTube Music now playing in OBS?",
+      "acceptedAnswer": { "@type": "Answer", "text": "In Lyrenne Music Player open Settings, Integrations, Lyrenne Link, switch on the stream overlay, pick a layout and press Copy OBS URL. In OBS add a Browser Source with that URL at 1920 by 1080." } },
+    { "@type": "Question", "name": "Can the OBS overlay show synced lyrics?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. The lyrics layout shows the current line with word-by-word fill when the lyrics carry word timing, and the card layout can show the current line under the song." } },
+    { "@type": "Question", "name": "Does it work with Streamer.bot or a text source?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. Lyrenne can write now-playing.txt, now-playing.json and cover.jpg to a folder you choose whenever the song changes." } },
+    { "@type": "Question", "name": "Do I need an OBS plugin?",
+      "acceptedAnswer": { "@type": "Answer", "text": "No. The overlay is a page Lyrenne serves on your own PC, added to OBS as an ordinary Browser Source." } }
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    { "@type": "ListItem", "position": 1, "name": "Lyrenne Music Player", "item": "https://doctordefector.github.io/Lyrenne/" },
+    { "@type": "ListItem", "position": 2, "name": "OBS overlay", "item": "https://doctordefector.github.io/Lyrenne/obs-overlay/" }
+  ]
+}
+</script>
+
+<link rel="stylesheet" href="../site.css?v=1">
+</head>
+<body>
+
+<header class="sticky-nav">
+    <nav>
+        <a href="../">Lyrenne</a>
+        <a href="#setup">Set up</a>
+        <a href="#features">Features</a>
+        <a href="#faq">FAQ</a>
+        <a href="https://github.com/Doctordefector/Lyrenne/releases/latest">Download</a>
+    </nav>
+</header>
+
+<main>
+
+<section id="hero">
+    <img class="mark" src="../images/logo.svg" width="88" height="88" alt="Lyrenne app icon">
+    <h1><span>Stream Overlay</span><span class="sub">YouTube Music now playing, with lyrics</span></h1>
+    <p class="lede">Put the song, the cover and live word-by-word lyrics on your stream with an
+        ordinary OBS Browser Source. Built into Lyrenne Music Player, no plugin, no account,
+        nothing sent anywhere.</p>
+    <a class="lux-frame" href="https://github.com/Doctordefector/Lyrenne/releases/latest">
+        <span class="lux-frame-content">Download Lyrenne</span>
+    </a>
+    <div class="hero-meta">OBS &middot; Streamlabs &middot; Streamer.bot &middot; Windows, macOS, Linux &middot; GPL-3.0</div>
+</section>
+
+<section id="setup" class="fade-in">
+    <h2>Set It Up</h2>
+    <div class="steps">
+        <div class="step fade-in">
+            <span class="step-number">01</span>
+            <p>In Lyrenne open <strong>Settings &gt; Integrations &gt; Lyrenne Link</strong> and switch
+                on the stream overlay.</p>
+        </div>
+        <div class="step fade-in">
+            <span class="step-number">02</span>
+            <p>Pick a layout (card, lyrics or ticker), a position and a size. The preview shows your
+                current song.</p>
+        </div>
+        <div class="step fade-in">
+            <span class="step-number">03</span>
+            <p>Press <strong>Copy OBS URL</strong>, then in OBS add a <strong>Browser Source</strong>
+                with that URL at 1920 &times; 1080.</p>
+        </div>
+    </div>
+</section>
+
+<section id="features" class="fade-in">
+    <h2>What You Get</h2>
+    <div class="cards">
+        <div class="card fade-in">
+            <span class="card-context">Layouts</span>
+            <h3>Card, lyrics or ticker</h3>
+            <p>A now-playing card with cover and progress, a karaoke block of lyrics, or a slim bar
+                across the top or bottom. Colour from the album art or your own.</p>
+        </div>
+        <div class="card fade-in">
+            <span class="card-context">Lyrics</span>
+            <h3>Word by word</h3>
+            <p>Lyrics from five providers, filled word by word where the timing exists, with your own
+                edits and timing fixes from Lyrenne carried over.</p>
+        </div>
+        <div class="card fade-in">
+            <span class="card-context">Files</span>
+            <h3>For Streamer.bot and text sources</h3>
+            <p>Optional <code>now-playing.txt</code>, <code>now-playing.json</code> and
+                <code>cover.jpg</code>, rewritten in a folder you choose on every song change.</p>
+        </div>
+        <div class="card fade-in">
+            <span class="card-context">Remote</span>
+            <h3>Control it from your phone</h3>
+            <p>Scan a QR code and your phone's browser becomes a remote: play, skip, search, the queue
+                and live lyrics, without leaving the stream. No app to install.</p>
+        </div>
+        <div class="card fade-in">
+            <span class="card-context">Private</span>
+            <h3>Stays on your PC</h3>
+            <p>The overlay is served from your own machine and only to it. The phone remote is off
+                until you turn it on, and pairs with a private code you can reset.</p>
+        </div>
+        <div class="card fade-in">
+            <span class="card-context">Gaming</span>
+            <h3>Hotkeys mid-game</h3>
+            <p>Skip a song without leaving the game with <a href="../game-mode/">Game Mode</a>'s global
+                hotkeys, and see what is playing in its in-game overlay.</p>
+        </div>
+    </div>
+</section>
+
+<section id="faq" class="fade-in">
+    <h2>Questions</h2>
+    <div class="faq">
+        <details><summary>Does it work with Streamlabs or other streaming apps?</summary>
+            <p>Anything that can show a web page as a source can use it. For text-only sources, use the
+               now-playing files.</p></details>
+        <details><summary>Will my pairing code end up in my OBS scene?</summary>
+            <p>No. The overlay URL carries no code on your own PC, so it is safe in scene collections
+               and screen shares. Only the phone remote needs pairing.</p></details>
+        <details><summary>Is it free?</summary>
+            <p>Yes. Lyrenne Music Player is free and open source under GPL-3.0, with no paid tier and no
+               telemetry.</p></details>
+    </div>
+</section>
+
+</main>
+
+<footer>
+    <div class="footer-content">
+        <span>Built by <a class="author" href="https://andrevich.netlify.app" rel="noopener">Andrei Chapliuk</a>.
+            Free and open source, GPL-3.0.
+            Not affiliated with YouTube, Google or OBS Project.</span>
+        <span class="footer-right">
+            <a href="../">Lyrenne Music Player</a>
+            <a href="https://github.com/Doctordefector/Lyrenne">Source</a>
+            <a href="https://github.com/Doctordefector/Lyrenne/issues">Report a bug</a>
+        </span>
+    </div>
+</footer>
+
+<script>
+const fadeInObserver = new IntersectionObserver((entries, observer) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) { entry.target.classList.add('visible'); observer.unobserve(entry.target); }
+    });
+}, { root: null, rootMargin: '0px', threshold: 0.1 });
+document.querySelectorAll('.fade-in').forEach(el => fadeInObserver.observe(el));
+</script>
+
+</body>
+</html>

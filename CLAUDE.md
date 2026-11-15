@@ -1271,13 +1271,15 @@ command palette entries.
   play or pause. The recorder listens through an AWT `KeyEventDispatcher`, not a Compose handler: the
   window's own shortcuts run first in Compose and Ctrl+K would open the palette. A combo another app
   owns never reaches the recorder at all; the hint under the row says so.
-- **Defaults: Ctrl+Alt plus a navigation key, and only play/pause, next and previous on.**
-  Ctrl+Alt+Home / Page Down / Page Up. Games rarely bind Ctrl+Alt, and the navigation cluster types
-  nothing, which matters because AltGr arrives as Ctrl+Alt: Ctrl+Alt+E would eat the euro sign on a
-  German layout, Ctrl+Alt+L the Polish l-stroke. On by default because media control is the whole
-  point and these three cost nothing; any that collide show as taken instead of fighting. Like,
-  volume, seek, peek and show/hide stay suggestions a switch away: they are less universal, and the
-  arrow combos clash with some Intel graphics drivers' screen rotation.
+- **Defaults: Ctrl+Alt around Space and the arrows**, so one hand finds them without looking:
+  Space play/pause, Left/Right previous/next, Up/Down volume, Backspace peek (all on), Enter like,
+  Shift+Left/Right seek, Shift+Backspace show/hide (off). The first 2.21.0 test build used
+  Home / Page Down / Page Up, which testing found awkward (scattered, and missing on many laptops).
+  Games rarely bind Ctrl+Alt, and none of these keys types a character, which matters because AltGr
+  arrives as Ctrl+Alt: Ctrl+Alt+E would eat the euro sign on a German layout, Ctrl+Alt+L the Polish
+  l-stroke. Some old Intel graphics drivers own Ctrl+Alt+arrows for screen rotation; the row then
+  says "Taken" and the user rebinds. Stored under `gameMode.hotkey2.*`: the first build wrote its
+  defaults under `gameMode.hotkey.*` on every save, and reading those back would have kept them.
 - **Linux: X11 `XGrabKey` on the root window**, own display connection, polled on its own thread.
   Every combo is grabbed four times (Caps Lock and Num Lock states), or a lit Num Lock kills them all.
   A grab someone else holds fails asynchronously with BadAccess, whose default handler exits the

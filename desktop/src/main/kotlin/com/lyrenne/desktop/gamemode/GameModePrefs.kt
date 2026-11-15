@@ -46,7 +46,7 @@ data class GameModePrefs(
 
     fun store(props: Properties) {
         props.setProperty("gameMode.hotkeysEnabled", hotkeysEnabled.toString())
-        for (action in HotkeyAction.entries) props.setProperty("gameMode.hotkey.${action.id}", binding(action).encode())
+        for (action in HotkeyAction.entries) props.setProperty("gameMode.hotkey2.${action.id}", binding(action).encode())
         props.setProperty("gameMode.overlayMode", overlayMode.name)
         props.setProperty("gameMode.overlayCorner", overlayCorner.name)
         props.setProperty("gameMode.overlaySize", overlaySize.name)
@@ -63,7 +63,7 @@ data class GameModePrefs(
             return GameModePrefs(
                 hotkeysEnabled = props.getProperty("gameMode.hotkeysEnabled")?.toBoolean() ?: d.hotkeysEnabled,
                 hotkeys = HotkeyAction.entries.associateWith {
-                    HotkeyBinding.decode(props.getProperty("gameMode.hotkey.${it.id}"), HotkeyDefaults.bindings.getValue(it))
+                    HotkeyBinding.decode(props.getProperty("gameMode.hotkey2.${it.id}"), HotkeyDefaults.bindings.getValue(it))
                 },
                 overlayMode = enumOr(props.getProperty("gameMode.overlayMode"), d.overlayMode),
                 overlayCorner = enumOr(props.getProperty("gameMode.overlayCorner"), d.overlayCorner),

@@ -109,12 +109,15 @@ class HotkeysTest {
     }
 
     @Test
-    fun `defaults are all valid, all different, and only transport is on`() {
+    fun `defaults are all valid, all different, and transport, volume and peek are on`() {
         val combos = HotkeyAction.entries.map { it.defaultCombo }
         assertEquals(combos.size, combos.toSet().size)
         combos.forEach { assertNull(it.format(), KeyCombo.problem(it)) }
         assertEquals(
-            setOf(HotkeyAction.PLAY_PAUSE, HotkeyAction.NEXT, HotkeyAction.PREVIOUS),
+            setOf(
+                HotkeyAction.PLAY_PAUSE, HotkeyAction.NEXT, HotkeyAction.PREVIOUS,
+                HotkeyAction.VOLUME_UP, HotkeyAction.VOLUME_DOWN, HotkeyAction.PEEK
+            ),
             HotkeyAction.entries.filter { it.defaultOn }.toSet()
         )
         // Defaults type nothing, so AltGr on a European layout cannot collide with a character.
@@ -156,12 +159,15 @@ class HotkeysTest {
             HotkeyAction.VOLUME_UP to HotkeyBinding(KeyCombo.of("U"), true),
         )
         val (register, status) = HotkeyPlan.plan(bindings)
-        assertEquals(setOf(HotkeyAction.PLAY_PAUSE, HotkeyAction.NEXT, HotkeyAction.PREVIOUS), register.keys)
+        assertEquals(
+            setOf(HotkeyAction.PLAY_PAUSE, HotkeyAction.NEXT, HotkeyAction.PREVIOUS, HotkeyAction.VOLUME_DOWN, HotkeyAction.PEEK),
+            register.keys
+        )
         assertEquals(same, register[HotkeyAction.PLAY_PAUSE])
         // The action listed first keeps a shared combo.
         assertEquals(HotkeyStatus.Duplicate(HotkeyAction.PLAY_PAUSE), status[HotkeyAction.LIKE])
         assertTrue(status[HotkeyAction.VOLUME_UP] is HotkeyStatus.Invalid)
-        assertEquals(HotkeyStatus.Off, status[HotkeyAction.PEEK])
+        assertEquals(HotkeyStatus.Off, status[HotkeyAction.SEEK_FORWARD])
         // Every action ends up with exactly one of the two.
         assertEquals(HotkeyAction.entries.toSet(), register.keys + status.keys)
         assertTrue((register.keys intersect status.keys).isEmpty())

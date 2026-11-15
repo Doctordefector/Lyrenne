@@ -20,7 +20,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.ComposeWindow
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -148,116 +150,160 @@ internal fun OverlayContent(player: DesktopPlayer, view: OverlayView, corner: Ov
         0 -> Alignment.CenterHorizontally
         else -> Alignment.End
     }
-    val fromEdge: (Int) -> Int = { h -> if (corner.top) -h else h }
-    val enter = slideInVertically(tween(260)) { fromEdge(it) } + fadeIn(tween(200))
+    val fromEdge: (Int) -> Int = { h -> if (corner.top) -h / 3 else h / 3 }
+    val enter = slideInVertically(tween(240)) { fromEdge(it) } + fadeIn(tween(200))
     val exit = slideOutVertically(tween(EXIT_MS)) { fromEdge(it) } + fadeOut(tween(EXIT_MS))
+    val accent = rememberOverlayAccent(song?.thumbnailUrl)
 
-    Box(modifier.padding(6.dp), contentAlignment = if (corner.top) Alignment.TopCenter else Alignment.BottomCenter) {
+    Box(modifier.padding(8.dp), contentAlignment = if (corner.top) Alignment.TopCenter else Alignment.BottomCenter) {
         Column(
             Modifier.fillMaxWidth(),
             horizontalAlignment = horizontal,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Lyrics sit nearest the screen edge, the card next to them, the flash furthest in.
             val flash: @Composable () -> Unit = {
-                AnimatedVisibility(view.flash != null, enter = fadeIn(tween(120)), exit = fadeOut(tween(EXIT_MS))) {
+                AnimatedVisibility(
+                    view.flash != null,
+                    enter = fadeIn(tween(120)) + slideInVertically(tween(160)) { fromEdge(it) },
+                    exit = fadeOut(tween(EXIT_MS))
+                ) {
                     var last by remember { mutableStateOf(view.flash) }
                     if (view.flash != null) last = view.flash
-                    last?.let { FlashPill(it) }
+                    last?.let { FlashChip(it, accent) }
                 }
             }
-            val card: @Composable () -> Unit = {
-                AnimatedVisibility(view.card, enter = enter, exit = exit) { SongCard(player, song) }
-            }
-            val lyrics: @Composable () -> Unit = {
-                AnimatedVisibility(view.lyrics && song != null, enter = enter, exit = exit) {
-                    song?.let { LyricsStrip(player, it) }
+            // The card and the lyrics are one panel: same width, one surface, so nothing floats loose.
+            val panel: @Composable () -> Unit = {
+                AnimatedVisibility(view.card || (view.lyrics && song != null), enter = enter, exit = exit) {
+                    NowPlayingPanel(player, song, showCard = view.card, showLyrics = view.lyrics, accent = accent)
                 }
             }
-            if (corner.top) { card(); lyrics(); flash() } else { flash(); card(); lyrics() }
+            if (corner.top) { panel(); flash() } else { flash(); panel() }
         }
     }
 }
 
-private val OverlayShape = RoundedCornerShape(16.dp)
+/** Every overlay surface is this wide, so the panel and the chip line up on the chosen edge. */
+private val PanelWidth = 360.dp
+private val PanelShape = RoundedCornerShape(18.dp)
+private val PanelBase = Color(0xFF0D0D10)
+private val TextStrong = Color(0xFFF7F5F2)
+private val TextSoft = Color(0xB3F7F5F2) // 70%
+private val TextFaint = Color(0x80F7F5F2) // 50%
+private val FallbackAccent = Color(0xFFE9C489) // the bronze, lifted for a dark surface
 
+/**
+ * The cover's colour, made bright and saturated enough to read on the dark panel over any game.
+ * Falls back to Lyrenne's bronze when the cover has no usable colour.
+ */
 @Composable
-private fun overlaySurface(): Modifier {
-    val colors = MaterialTheme.colorScheme
-    return Modifier
-        .clip(OverlayShape)
-        // Solid: the opacity setting is the one place see-through is decided. A translucent
-        // surface under it as well let a busy game read straight through the text.
-        .background(colors.surfaceContainerHigh)
-        .border(0.5.dp, colors.outlineVariant, OverlayShape)
+private fun rememberOverlayAccent(url: String?): Color {
+    val tint by rememberArtTint(url)
+    if (tint.alpha < 0.05f) return FallbackAccent
+    val hsv = FloatArray(3)
+    java.awt.Color.RGBtoHSB((tint.red * 255).toInt(), (tint.green * 255).toInt(), (tint.blue * 255).toInt(), hsv)
+    if (hsv[1] < 0.12f) return FallbackAccent // greys read as no colour
+    val rgb = java.awt.Color.HSBtoRGB(hsv[0], hsv[1].coerceIn(0.45f, 0.75f), 0.97f)
+    return Color(rgb).copy(alpha = 1f)
 }
 
+/** Dark glass with a soft glow of the cover's colour from the left, and a hairline edge. */
+private fun Modifier.glass(accent: Color): Modifier = this
+    .clip(PanelShape)
+    .background(PanelBase.copy(alpha = 0.90f))
+    .drawBehind {
+        drawRect(
+            Brush.radialGradient(
+                listOf(accent.copy(alpha = 0.22f), Color.Transparent),
+                center = Offset(0f, size.height * 0.3f),
+                radius = size.width * 0.75f
+            )
+        )
+    }
+    .border(1.dp, Color.White.copy(alpha = 0.10f), PanelShape)
+
 @Composable
-private fun SongCard(player: DesktopPlayer, song: SongInfo?) {
-    val tint by rememberArtTint(song?.thumbnailUrl)
-    val wash = LocalLyrenneExtras.current.artWashAlpha
+private fun NowPlayingPanel(player: DesktopPlayer, song: SongInfo?, showCard: Boolean, showLyrics: Boolean, accent: Color) {
     val progress by remember(player) {
         player.state.map { s -> if (s.duration > 0) (s.position.toFloat() / s.duration).coerceIn(0f, 1f) else 0f }
-            .map { (it * 200).toInt() / 200f }
+            .map { (it * 300).toInt() / 300f }
             .distinctUntilChanged()
     }.collectAsState(0f)
-    Row(
-        overlaySurface()
-            .widthIn(max = 400.dp)
-            .drawBehind { if (tint.alpha > 0f) drawRect(tint.copy(alpha = tint.alpha * wash)) }
-            .padding(10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            Modifier.size(60.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest),
-            contentAlignment = Alignment.Center
-        ) {
-            if (song?.thumbnailUrl != null) {
-                AsyncImage(song.thumbnailUrl, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-            } else {
-                Icon(Icons.Default.MusicNote, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.widthIn(max = 300.dp)) {
-            Text(
-                song?.title ?: "Nothing playing",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                song?.artist ?: "Play something in Lyrenne and it shows up here",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (song != null) {
-                Spacer(Modifier.height(8.dp))
-                LinearProgressIndicator(
-                    progress = { progress },
-                    modifier = Modifier.width(180.dp).height(3.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f),
-                    drawStopIndicator = {}
+    val isPlaying by remember(player) { player.state.map { it.isPlaying }.distinctUntilChanged() }.collectAsState(false)
+
+    Box(Modifier.width(PanelWidth).glass(accent)) {
+        Column(Modifier.padding(start = 12.dp, end = 14.dp, top = 12.dp, bottom = 14.dp)) {
+            if (showCard) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier.size(52.dp).clip(RoundedCornerShape(10.dp)).background(Color.White.copy(alpha = 0.08f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (song?.thumbnailUrl != null) {
+                            AsyncImage(song.thumbnailUrl, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                        } else {
+                            Icon(Icons.Default.MusicNote, null, tint = accent, modifier = Modifier.size(24.dp))
+                        }
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            song?.title ?: "Nothing playing",
+                            color = TextStrong, fontSize = 15.sp, lineHeight = 19.sp, fontWeight = FontWeight.SemiBold,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            song?.artist ?: "Play something in Lyrenne",
+                            color = TextSoft, fontSize = 13.sp, lineHeight = 17.sp,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    if (song != null) {
+                        Spacer(Modifier.width(10.dp))
+                        Icon(
+                            if (isPlaying) Icons.Default.GraphicEq else Icons.Default.Pause, null,
+                            tint = if (isPlaying) accent else TextFaint, modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            } else if (song != null) {
+                // Lyrics on their own still say what is playing, in one quiet line.
+                Text(
+                    song.title + "  ·  " + song.artist,
+                    color = TextFaint, fontSize = 11.sp, lineHeight = 14.sp, fontWeight = FontWeight.Medium,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis
                 )
             }
+            if (showLyrics && song != null) {
+                Spacer(Modifier.height(if (showCard) 12.dp else 6.dp))
+                LyricsLines(player, song, accent)
+            }
         }
-        Spacer(Modifier.width(6.dp))
+        if (song != null) {
+            // Progress as a hairline along the bottom edge, inside the rounded corners.
+            Box(Modifier.align(Alignment.BottomStart).padding(start = 14.dp, end = 14.dp, bottom = 6.dp).fillMaxWidth().height(3.dp)) {
+                Box(Modifier.fillMaxSize().clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.10f)))
+                Box(Modifier.fillMaxHeight().fillMaxWidth(progress).clip(RoundedCornerShape(50)).background(accent))
+            }
+        }
     }
 }
 
 /**
- * The line being sung, lit word by word when the lyrics carry word timing, and the next line
- * dimmed under it. Uses the lyrics panel's own helpers, with the song's timing offset applied.
+ * The line being sung, lit word by word in the cover's colour when the lyrics carry word timing,
+ * and the next line dimmed under it. Uses the lyrics panel's helpers, with the song's offset applied.
  */
 @Composable
-private fun LyricsStrip(player: DesktopPlayer, song: SongInfo) {
+private fun LyricsLines(player: DesktopPlayer, song: SongInfo, accent: Color) {
     val lyrics by LyricsManager.state.collectAsState()
-    val lines: List<LyricLine> = lyrics.lines?.takeIf { lyrics.songId == song.id } ?: return
+    val lines: List<LyricLine>? = lyrics.lines?.takeIf { lyrics.songId == song.id }
+    if (lines == null) {
+        Text(
+            if (lyrics.isLoading && lyrics.songId == song.id) "Finding lyrics..." else "No synced lyrics for this song",
+            color = TextFaint, fontSize = 13.sp, lineHeight = 17.sp
+        )
+        return
+    }
     val position by remember(player) { player.state.map { it.position }.distinctUntilChanged() }.collectAsState(0L)
     val isPlaying by remember(player) { player.state.map { it.isPlaying }.distinctUntilChanged() }.collectAsState(false)
     val offset = remember(song.id, lyrics) { LyricsOffsets.get(song.id) }
@@ -268,50 +314,54 @@ private fun LyricsStrip(player: DesktopPlayer, song: SongInfo) {
     val current = visibleLines.getOrNull(index)
     val next = visibleLines.getOrNull(index + 1)
 
-    val colors = MaterialTheme.colorScheme
-    Column(
-        overlaySurface().widthIn(min = 220.dp, max = 408.dp).padding(horizontal = 18.dp, vertical = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        val words = current?.words
-        val text = current?.text ?: "♪"
-        if (current != null && words != null) {
-            Text(
-                highlightWords(text, words, smooth, colors.primary, colors.onSurface.copy(alpha = 0.9f)),
-                fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
-                maxLines = 2, overflow = TextOverflow.Ellipsis
-            )
-        } else {
-            Text(
-                text, color = colors.onSurface,
-                fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
-                maxLines = 2, overflow = TextOverflow.Ellipsis
-            )
-        }
-        if (next != null) {
-            Spacer(Modifier.height(4.dp))
-            Text(
-                next.text, color = colors.onSurfaceVariant,
-                fontSize = 15.sp, lineHeight = 20.sp, textAlign = TextAlign.Center,
-                maxLines = 1, overflow = TextOverflow.Ellipsis
-            )
-        }
+    val text = current?.text ?: "♪"
+    val words = current?.words
+    if (current != null && words != null) {
+        Text(
+            highlightWords(text, words, smooth, accent, TextStrong.copy(alpha = 0.75f)),
+            fontSize = 19.sp, lineHeight = 24.sp, fontWeight = FontWeight.Bold,
+            maxLines = 2, overflow = TextOverflow.Ellipsis
+        )
+    } else {
+        Text(
+            text, color = TextStrong,
+            fontSize = 19.sp, lineHeight = 24.sp, fontWeight = FontWeight.Bold,
+            maxLines = 2, overflow = TextOverflow.Ellipsis
+        )
+    }
+    if (next != null) {
+        Spacer(Modifier.height(3.dp))
+        Text(
+            next.text, color = TextFaint,
+            fontSize = 14.sp, lineHeight = 18.sp,
+            maxLines = 1, overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
+/** What a hotkey just did: an accent dot with the icon, the words, and the level for volume. */
 @Composable
-private fun FlashPill(flash: OverlayFlash) {
-    val colors = MaterialTheme.colorScheme
+private fun FlashChip(flash: OverlayFlash, accent: Color) {
+    val volume = PreferencesManager.preferences.collectAsState().value.volume
     Row(
         Modifier
             .clip(RoundedCornerShape(50))
-            .background(colors.primaryContainer)
-            .padding(horizontal = 14.dp, vertical = 7.dp),
+            .background(PanelBase.copy(alpha = 0.92f))
+            .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(50))
+            .padding(start = 6.dp, end = 16.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(flash.kind.icon(), null, tint = colors.onPrimaryContainer, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(8.dp))
-        Text(flash.text, color = colors.onPrimaryContainer, style = MaterialTheme.typography.labelLarge)
+        Box(Modifier.size(28.dp).clip(RoundedCornerShape(50)).background(accent), contentAlignment = Alignment.Center) {
+            Icon(flash.kind.icon(), null, tint = PanelBase, modifier = Modifier.size(17.dp))
+        }
+        Spacer(Modifier.width(10.dp))
+        Text(flash.text, color = TextStrong, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        if (flash.kind == OverlayFlash.Kind.VOLUME) {
+            Spacer(Modifier.width(12.dp))
+            Box(Modifier.width(72.dp).height(4.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.14f))) {
+                Box(Modifier.fillMaxHeight().fillMaxWidth(volume.coerceIn(0f, 1f)).background(accent))
+            }
+        }
     }
 }
 

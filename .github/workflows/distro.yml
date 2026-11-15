@@ -243,7 +243,7 @@ jobs:
       - name: Install flatpak-builder
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq flatpak flatpak-builder xvfb pulseaudio dbus-x11 >/dev/null
+          sudo apt-get install -y -qq flatpak flatpak-builder xvfb pulseaudio dbus-x11 ffmpeg >/dev/null
           # Ubuntu 24.04 blocks the unprivileged user namespaces bubblewrap needs.
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
@@ -252,7 +252,10 @@ jobs:
           tar -C desktop/build/compose/binaries/main/app -czf packaging/flatpak/lyrenne-local.tar.gz Lyrenne
           echo '[{"type": "archive", "path": "lyrenne-local.tar.gz", "dest": "lyrenne"}]' > packaging/flatpak/lyrenne-sources.json
           flatpak-builder --user --install-deps-from=flathub --install --force-clean --repo=repo \
+            --mirror-screenshots-url=https://dl.flathub.org/media/ \
             build packaging/flatpak/io.github.doctordefector.Lyrenne.yml
+          # What Flathub users get automatically (autodownload); a local install does not pull it.
+          flatpak install --user -y --noninteractive flathub org.freedesktop.Platform.ffmpeg-full//26.08
           flatpak build-bundle repo lyrenne.flatpak io.github.doctordefector.Lyrenne
           ls -l lyrenne.flatpak
       - name: Lint (Flathub's linter)
@@ -266,7 +269,14 @@ jobs:
       - name: Smoke test inside the sandbox
         run: |
           export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
-          dbus-run-session -- sh -c 'pulseaudio -D --exit-idle-time=-1; flatpak run io.github.doctordefector.Lyrenne --smoke-test --smoke-url "$SMOKE_URL"' | tee smoke.log
+          # ~/Music/Lyrenne is the only home folder the sandbox sees, so the test files go there.
+          mkdir -p ~/Music/Lyrenne
+          for f in m4a:aac webm:libopus mp3:libmp3lame flac:flac; do
+            ffmpeg -loglevel error -y -f lavfi -i "sine=frequency=440:duration=8" -c:a "${f#*:}" "$HOME/Music/Lyrenne/smoke.${f%%:*}"
+          done
+          M="file://$HOME/Music/Lyrenne/smoke"
+          dbus-run-session -- sh -c "pulseaudio -D --exit-idle-time=-1; flatpak run io.github.doctordefector.Lyrenne --smoke-test --smoke-url '$SMOKE_URL' --smoke-url '$M.m4a' --smoke-url '$M.webm' --smoke-url '$M.mp3' --smoke-url '$M.flac'" 2>&1 | tee smoke.log
+          ! grep -aq "stale plugins cache" smoke.log
           grep -q "SMOKE OK" smoke.log
           grep -q "layout: XDG" smoke.log
           grep -q "data dir: $HOME/.var/app/io.github.doctordefector.Lyrenne/data/lyrenne" smoke.log

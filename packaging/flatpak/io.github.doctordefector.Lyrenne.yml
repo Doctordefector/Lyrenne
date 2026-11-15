@@ -3,7 +3,7 @@
 # Submission steps: packaging/README.md, "Flathub".
 app-id: io.github.doctordefector.Lyrenne
 runtime: org.freedesktop.Platform
-runtime-version: '25.08'
+runtime-version: '26.08'
 sdk: org.freedesktop.Sdk
 command: lyrenne
 
@@ -30,7 +30,7 @@ finish-args:
 add-extensions:
   org.freedesktop.Platform.ffmpeg-full:
     directory: lib/ffmpeg
-    version: '25.08'
+    version: '26.08'
     add-ld-path: .
     autodownload: true
     autodelete: false
@@ -44,8 +44,47 @@ cleanup:
   - '*.a'
 cleanup-commands:
   - mkdir -p /app/lib/ffmpeg
+  # libVLC's plugin cache, so it does not scan every plugin on each start. Generated here, after
+  # flatpak-builder strips the binaries: a cache made before that records the unstripped sizes and
+  # libVLC throws all of it away as stale. The patch on the vlc module makes it ignore mtimes, which
+  # ostree resets on install.
+  - rm -f /app/lib/vlc/plugins/plugins.dat
+  - /app/lib/vlc/vlc-cache-gen /app/lib/vlc/plugins
 
 modules:
+  # Matroska/WebM, which YouTube's Opus audio comes in: VLC's mkv demuxer needs both.
+  - name: libebml
+    buildsystem: cmake-ninja
+    builddir: true
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DBUILD_SHARED_LIBS=ON
+      - -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    sources:
+      - type: archive
+        url: https://dl.matroska.org/downloads/libebml/libebml-1.4.7.tar.xz
+        sha256: 5b08214f929ee54c6187c370f84235fc9d0f2a2258c4d320d68eae6e2bdfd3f7
+        x-checker-data:
+          type: anitya
+          project-id: 7879
+          url-template: https://dl.matroska.org/downloads/libebml/libebml-$version.tar.xz
+
+  - name: libmatroska
+    buildsystem: cmake-ninja
+    builddir: true
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DBUILD_SHARED_LIBS=ON
+      - -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    sources:
+      - type: archive
+        url: https://dl.matroska.org/downloads/libmatroska/libmatroska-1.7.2.tar.xz
+        sha256: f3e4d406daf7f1399962c43940e4a87de089474d5bcfbf2e6ca516e98bb87cfc
+        x-checker-data:
+          type: anitya
+          project-id: 1657
+          url-template: https://dl.matroska.org/downloads/libmatroska/libmatroska-$version.tar.xz
+
   # libVLC only: no player UI, no video output, no Lua, no D-Bus control (which would register
   # a second MPRIS player named "vlc" next to Lyrenne's own).
   - name: vlc
@@ -74,11 +113,6 @@ modules:
       - /share/macosx
       - /share/metainfo
       - /share/vlc/lua
-    post-install:
-      # The plugin cache, so libVLC does not scan every plugin on each start. The patch makes it
-      # ignore mtimes, which ostree resets when the app is installed.
-      - rm -f /app/lib/vlc/plugins/plugins.dat
-      - /app/lib/vlc/vlc-cache-gen /app/lib/vlc/plugins
     sources:
       - type: archive
         url: https://download.videolan.org/videolan/vlc/3.0.24/vlc-3.0.24.tar.xz

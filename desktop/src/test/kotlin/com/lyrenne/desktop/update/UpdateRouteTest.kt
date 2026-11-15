@@ -44,7 +44,7 @@ class UpdateRouteTest {
 class LinuxAssetPickTest {
     private val assets = listOf(
         "Lyrenne-2.21.0-portable.zip", "lyrenne_2.21.0_amd64.deb", "lyrenne_2.21.0_amd64.deb.sig",
-        "lyrenne_2.21.0_arm64.deb", "lyrenne-2.21.0-1.x86_64.rpm", "lyrenne-2.21.0-1.aarch64.rpm",
+        "lyrenne_2.21.0_arm64.deb", "lyrenne-2.21.0-1.x86_64.rpm", "lyrenne-arm64-2.21.0-1.aarch64.rpm",
         "Lyrenne-2.21.0-x86_64.AppImage",
     )
 
@@ -55,7 +55,14 @@ class LinuxAssetPickTest {
 
     @Test fun `arm64 gets arm64 packages`() {
         assertEquals("lyrenne_2.21.0_arm64.deb", AutoUpdater.linuxAssetName(assets, "deb", "aarch64"))
-        assertEquals("lyrenne-2.21.0-1.aarch64.rpm", AutoUpdater.linuxAssetName(assets, "rpm", "aarch64"))
+        assertEquals("lyrenne-arm64-2.21.0-1.aarch64.rpm", AutoUpdater.linuxAssetName(assets, "rpm", "aarch64"))
+    }
+
+    @Test fun `updaters up to 2_20_5 take the first package by name, which must be x86_64`() {
+        // GitHub lists assets sorted by name, and old builds pick the first one ending in .deb/.rpm.
+        val listed = assets.sorted()
+        assertEquals("lyrenne_2.21.0_amd64.deb", listed.first { it.endsWith(".deb") })
+        assertEquals("lyrenne-2.21.0-1.x86_64.rpm", listed.first { it.endsWith(".rpm") })
     }
 
     @Test fun `a release without this arch offers nothing rather than the wrong one`() {

@@ -391,9 +391,11 @@ jobs:
           pattern: release-*
           path: dist
           merge-multiple: true
-      # Two steps on purpose. Linux builds up to 2.20.5 update to the FIRST asset ending in .deb or
-      # .rpm, whatever its arch, so the x86_64 packages must be uploaded before the arm64 ones.
-      # Do not merge these into one `gh release create dist/*`.
+      # Linux builds up to 2.20.5 update to the FIRST asset ending in .deb or .rpm, whatever its arch,
+      # and GitHub lists assets by NAME, not upload order (seen on 2.21.0's draft). "_amd64.deb" sorts
+      # before "_arm64.deb" by luck, but ".aarch64.rpm" sorts before ".x86_64.rpm", so the arm64 rpm
+      # is renamed to start "lyrenne-arm64-", which sorts after "lyrenne-2". The new updater matches on
+      # the ".aarch64.rpm" ending and the .sig on the full name, so both still find it.
       - name: Create draft release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -402,6 +404,7 @@ jobs:
           ls -l dist
           mkdir later
           mv dist/*arm64.deb* dist/*aarch64.rpm* later/
+          for f in later/lyrenne-*.aarch64.rpm*; do mv "$f" "later/lyrenne-arm64-${f#later/lyrenne-}"; done
           gh release create "v$V" dist/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --draft --title "Lyrenne v$V" --notes "Draft: write the notes, then publish."
           gh release upload "v$V" later/* --repo "$GITHUB_REPOSITORY"

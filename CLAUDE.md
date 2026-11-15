@@ -1730,9 +1730,12 @@ AppImage says to download the new one. Linux packages pick the asset for `os.arc
 (`AutoUpdater.linuxAssetName`), since releases now carry amd64 and arm64 .deb/.rpm.
 
 **Release asset order protects old updaters.** Every Linux build up to 2.20.5 takes the first asset
-ending in `.deb`/`.rpm`, whatever its arch. `release.yml` creates the draft with the x86_64 packages
-and uploads the arm64 ones in a second step, so the x86_64 asset comes first in the API listing.
-Do not merge those two steps.
+ending in `.deb`/`.rpm`, whatever its arch, and **GitHub lists release assets by name, not by upload
+order** (2.21.0's draft listed `aarch64.rpm` before `x86_64.rpm` although it was uploaded second, so
+every Fedora 2.20.5 copy would have downloaded the arm64 package). `_amd64.deb` sorts before
+`_arm64.deb`, but the arm64 rpm has to be renamed `lyrenne-arm64-<v>-1.aarch64.rpm` (and its `.sig`)
+so it sorts after `lyrenne-<v>-1.x86_64.rpm`; `release.yml` does that. Check the order with
+`gh api repos/Doctordefector/Lyrenne/releases` before publishing any release with new asset names.
 
 ### Bundled libVLC on Linux (AppImage, Flatpak)
 The .deb/.rpm still depend on the distro VLC. The AppImage and Flatpak carry their own and pass its

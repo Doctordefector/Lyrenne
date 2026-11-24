@@ -43,7 +43,8 @@ jobs:
       - name: Browser sign-in and Now Playing tests ran, not skipped
         run: |
           R=desktop/build/test-results/test/TEST-com.lyrenne.desktop.auth.MacBrowserE2ETest.xml
-          grep -q 'tests="3" skipped="0" failures="0" errors="0"' "$R"
+          # skipped="1" is the Chrome check on a runner whose Chrome stored no cookies (see MacBrowserE2ETest)
+          grep -Eq 'tests="3" skipped="[01]" failures="0" errors="0"' "$R"
           R=desktop/build/test-results/test/TEST-com.lyrenne.desktop.mac.MacNowPlayingE2ETest.xml
           grep -A3 'system-out' "$R" || true
           grep -q 'tests="1" skipped="0" failures="0" errors="0"' "$R"

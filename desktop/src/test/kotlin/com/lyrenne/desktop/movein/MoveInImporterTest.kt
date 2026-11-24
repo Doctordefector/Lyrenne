@@ -69,6 +69,8 @@ class MoveInImporterTest {
 
         // Credits, with names
         assertEquals("Queen", q.getArtistNamesForSong("fJ9rUzIMcZQ").executeAsOne())
+        // A song with no credits yet (Spotify import, #23) gets the fallback, not a NULL that crashed
+        assertEquals("Unknown Artist", q.getArtistNamesForSong("no-such-song").executeAsOne())
 
         // Local playlist in order under a derived local id; YouTube playlist as a link
         val roadId = MoveInImporter.localPlaylistId("LPa8Kd03Jx")

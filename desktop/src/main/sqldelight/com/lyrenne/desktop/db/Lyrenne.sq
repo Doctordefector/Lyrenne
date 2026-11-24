@@ -311,7 +311,7 @@ DELETE FROM PlaylistSongMap WHERE playlistId = ?;
 
 -- Song-Artist name lookup (returns joined artist names for a song)
 getArtistNamesForSong:
-SELECT GROUP_CONCAT(Artist.name, ', ') AS artistNames
+SELECT COALESCE(GROUP_CONCAT(Artist.name, ', '), 'Unknown Artist') AS artistNames
 FROM Artist
 INNER JOIN SongArtistMap ON Artist.id = SongArtistMap.artistId
 WHERE SongArtistMap.songId = ?
